@@ -1,0 +1,14 @@
+## Interface: 120001
+## Title: Oakensoul LFG Sorter
+## Notes: Sorts LFG applicants by Role, Class, and iLvl.
+## Author: OAK
+## IconTexture: Interface\AddOns\OakLFGSorter\Media\icon.png
+## Version: 1.6.2
+## SavedVariables: OakLFGSorterDB
+
+Supporters.lua
+Init.lua
+UI_Header.lua
+UI_Filters.lua
+UI_Rows.lua
+Core.lua
