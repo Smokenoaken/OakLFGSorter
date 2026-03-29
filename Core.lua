@@ -1,6 +1,51 @@
 local addonName, addonTable = ...
 local OAK_LFG = addonTable.OAK_LFG
 
+local function ShouldMuteApplicantPing()
+    if not OakLFGSorterDB or not OakLFGSorterDB.muteApplicantPing then
+        return false
+    end
+
+    if not OAK_LFG or not OAK_LFG:IsShown() then
+        return false
+    end
+
+    return not (PVEFrame and PVEFrame:IsShown())
+end
+
+local applicantPingWrapped = false
+local originalApplicantPingOnPlay = nil
+local originalApplicantPingOnLoop = nil
+
+local function CreateApplicantPingHandler(originalHandler)
+    return function(...)
+        if ShouldMuteApplicantPing() then
+            return
+        end
+
+        if originalHandler then
+            return originalHandler(...)
+        end
+
+        if SOUNDKIT and SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION then
+            PlaySound(SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION, "master")
+        end
+    end
+end
+
+local function SetupApplicantPingMuteHook()
+    if applicantPingWrapped or not QueueStatusButton or not QueueStatusButton.EyeHighlightAnim then
+        return
+    end
+
+    applicantPingWrapped = true
+    originalApplicantPingOnPlay = QueueStatusButton.EyeHighlightAnim:GetScript("OnPlay")
+    originalApplicantPingOnLoop = QueueStatusButton.EyeHighlightAnim:GetScript("OnLoop")
+
+    QueueStatusButton.EyeHighlightAnim:SetScript("OnPlay", CreateApplicantPingHandler(originalApplicantPingOnPlay))
+    QueueStatusButton.EyeHighlightAnim:SetScript("OnLoop", CreateApplicantPingHandler(originalApplicantPingOnLoop))
+end
+
 local function FetchApplicantData()
     wipe(addonTable.ApplicantGroups)
     local applicants = C_LFGList.GetApplicants()
@@ -73,46 +118,9 @@ local function FetchApplicantData()
                 table.insert(group.members, member)
             end
             local lead = group.members[1]
-            group.leadClass = lead.class; group.leadRole = lead.role; group.leadIlvl = lead.ilvl; group.leadRating = lead.rating; group.leadKey = lead.highestKey
+            group.leadClass = lead.class; group.leadRole = lead.role; group.leadSpec = lead.specID; group.leadIlvl = lead.ilvl; group.leadRating = lead.rating; group.leadKey = lead.highestKey
             table.insert(addonTable.ApplicantGroups, group)
         end
-    end
-end
-
-local isDeclining = false
-function addonTable.ProcessAutoDecline()
-    if not OakLFGSorterDB.autoDecline or isDeclining then return end
-    if not addonTable.ApplicantGroups then return end
-    
-    local toDecline = {}
-    
-    for _, group in ipairs(addonTable.ApplicantGroups) do
-        local isValidClass = true
-        if group.leadClass and group.leadClass ~= "UNKNOWN" and addonTable.ClassFilters[group.leadClass] == false then
-            isValidClass = false
-        end
-        
-        local isValidRole = true
-        if group.leadRole and addonTable.RoleFilters[group.leadRole] == false then
-            isValidRole = false
-        end
-
-        if not (isValidClass and isValidRole) then
-            table.insert(toDecline, group.id)
-        end
-    end
-    
-    if #toDecline > 0 then
-        isDeclining = true
-        for _, id in ipairs(toDecline) do
-            C_LFGList.DeclineApplicant(id)
-        end
-        
-        C_Timer.After(0.5, function() 
-            isDeclining = false 
-            FetchApplicantData()
-            if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end 
-        end)
     end
 end
 
@@ -129,17 +137,14 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         end
     end
 
-    if not isDeclining then 
-        FetchApplicantData()
-        if addonTable.ProcessAutoDecline then addonTable.ProcessAutoDecline() end
-        if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end 
-    end
+    FetchApplicantData()
+    if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end 
 end)
 
 OAK_LFG:SetScript("OnShow", function(self) 
+    SetupApplicantPingMuteHook()
     FetchApplicantData()
     addonTable.UpdateHeaderVisuals()
-    if addonTable.ProcessAutoDecline then addonTable.ProcessAutoDecline() end
     addonTable.UpdateDisplay()
     
     if addonTable.CheckRIOHook then addonTable.CheckRIOHook() end
@@ -158,15 +163,7 @@ VarEventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
     if event == "ADDON_LOADED" then
         if loadedAddon == addonName then
-            
-            if addonTable.AutoDeclineToggle then
-                if OakLFGSorterDB.autoDecline then
-                    addonTable.AutoDeclineToggle:SetBackdropColor(1, 0.2, 0.2, 1)
-                else
-                    addonTable.AutoDeclineToggle:SetBackdropColor(0.106, 0.106, 0.129, 1)
-                end
-            end
-            
+            SetupApplicantPingMuteHook()
             if addonTable.LFGToggleBox then
                 if OakLFGSorterDB.autoOpen then
                     addonTable.LFGToggleBox:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1) 
@@ -193,6 +190,7 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             
             addonTable.SetupBlizzardLFGHook()
         elseif loadedAddon == "Blizzard_LookingForGroupUI" then
+            SetupApplicantPingMuteHook()
             addonTable.SetupBlizzardLFGHook()
         end
     elseif event == "GROUP_ROSTER_UPDATE" then
@@ -200,7 +198,7 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             -- Check if the joining player triggered a group fill/delist
             if not C_LFGList.HasActiveEntryInfo() then
                 OAK_LFG:Hide()
-            elseif not isDeclining then 
+            else
                 addonTable.UpdateDisplay() 
             end
         end

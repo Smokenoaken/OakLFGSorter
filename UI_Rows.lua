@@ -248,12 +248,7 @@ local function CreateRow(index)
         self.hoverBg:Show() 
         
         if self.applicantID and self.memberIdx then
-            local anchorFrame = OAK_LFG
-            if addonTable.FilterPanel and addonTable.FilterPanel:IsShown() then anchorFrame = addonTable.FilterPanel
-            elseif addonTable.SupportersPanel and addonTable.SupportersPanel:IsShown() then anchorFrame = addonTable.SupportersPanel end
-            
-            GameTooltip:SetOwner(self, "ANCHOR_NONE")
-            GameTooltip:SetPoint("TOPLEFT", anchorFrame, "TOPRIGHT", 2, 0)
+            GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
             GameTooltip:ClearLines()
 
             local name, class, localizedClass, level, itemLevel, honorLevel, tank, healer, damage, assignedRole, relationship, dungeonScore = C_LFGList.GetApplicantMemberInfo(self.applicantID, self.memberIdx)
@@ -459,16 +454,7 @@ function addonTable.UpdateDisplay()
 
     local activeGroups = {}
     for _, group in ipairs(addonTable.ApplicantGroups) do
-        local isValidClass = true
-        if group.leadClass and group.leadClass ~= "UNKNOWN" and addonTable.ClassFilters[group.leadClass] == false then
-            isValidClass = false
-        end
-        local isValidRole = true
-        if group.leadRole and addonTable.RoleFilters[group.leadRole] == false then
-            isValidRole = false
-        end
-
-        if isValidClass and isValidRole then
+        if addonTable.GroupPassesFilters(group) then
             table.insert(activeGroups, group)
         end
     end
@@ -518,7 +504,7 @@ function addonTable.UpdateDisplay()
             end
             
             if isMulti then
-                formattedName = (i == 1) and " " .. formattedName or "   • " .. formattedName 
+                formattedName = (i == 1) and " " .. formattedName or "   * " .. formattedName 
             end
             
             row.nameText:SetText(formattedName); row.ilvlText:SetText(member.ilvl)

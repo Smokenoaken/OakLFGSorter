@@ -5,6 +5,104 @@ addonTable.ClassFilters = {}
 for _, class in ipairs(addonTable.ValidClasses) do addonTable.ClassFilters[class] = true end
 addonTable.RoleFilters = { ["TANK"] = true, ["HEALER"] = true, ["DAMAGER"] = true }
 local classToggleBoxes = {} 
+local quickFilterButtons = {}
+
+local function SetQuickFilterButtonState(button, isActive)
+    if not button then return end
+
+    if isActive then
+        button:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    else
+        button:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
+    end
+    button:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+end
+
+local function GroupMatchesRoleFilters(group)
+    if not group.members then return false end
+    for _, member in ipairs(group.members) do
+        if member.role and addonTable.RoleFilters[member.role] then
+            return true
+        end
+    end
+    return false
+end
+
+function addonTable.GroupPassesFilters(group)
+    local isValidClass = true
+    if group.leadClass and group.leadClass ~= "UNKNOWN" and addonTable.ClassFilters[group.leadClass] == false then
+        isValidClass = false
+    end
+
+    return isValidClass and GroupMatchesRoleFilters(group)
+end
+
+local function MatchesExactClassFilter(filterMap)
+    for _, class in ipairs(addonTable.ValidClasses) do
+        local expected = filterMap[class] or false
+        if addonTable.ClassFilters[class] ~= expected then
+            return false
+        end
+    end
+    return true
+end
+
+local function AreAllClassesEnabled()
+    for _, class in ipairs(addonTable.ValidClasses) do
+        if not addonTable.ClassFilters[class] then
+            return false
+        end
+    end
+    return true
+end
+
+local function AreNoClassesEnabled()
+    for _, class in ipairs(addonTable.ValidClasses) do
+        if addonTable.ClassFilters[class] then
+            return false
+        end
+    end
+    return true
+end
+
+local classData = {
+    lust = {MAGE=true, SHAMAN=true, HUNTER=true, EVOKER=true},
+    brez = {DEATHKNIGHT=true, DRUID=true, WARLOCK=true, PALADIN=true},
+    plate = {WARRIOR=true, PALADIN=true, DEATHKNIGHT=true},
+    mail = {HUNTER=true, SHAMAN=true, EVOKER=true},
+    leather = {ROGUE=true, DRUID=true, MONK=true, DEMONHUNTER=true},
+    cloth = {MAGE=true, PRIEST=true, WARLOCK=true}
+}
+
+local function UpdateQuickFilterButtons()
+    SetQuickFilterButtonState(quickFilterButtons.all, AreAllClassesEnabled())
+    SetQuickFilterButtonState(quickFilterButtons.none, AreNoClassesEnabled())
+    SetQuickFilterButtonState(quickFilterButtons.lust, MatchesExactClassFilter(classData.lust))
+    SetQuickFilterButtonState(quickFilterButtons.brez, MatchesExactClassFilter(classData.brez))
+    SetQuickFilterButtonState(quickFilterButtons.plate, MatchesExactClassFilter(classData.plate))
+    SetQuickFilterButtonState(quickFilterButtons.mail, MatchesExactClassFilter(classData.mail))
+    SetQuickFilterButtonState(quickFilterButtons.leather, MatchesExactClassFilter(classData.leather))
+    SetQuickFilterButtonState(quickFilterButtons.cloth, MatchesExactClassFilter(classData.cloth))
+end
+
+local function SyncClassFilterBoxes()
+    for class, box in pairs(classToggleBoxes) do
+        box:SetState(addonTable.ClassFilters[class])
+    end
+end
+
+local function RefreshFilters()
+    UpdateQuickFilterButtons()
+    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+end
+
+local function SetAllClassFilters(isEnabled)
+    for class, _ in pairs(addonTable.ClassFilters) do
+        addonTable.ClassFilters[class] = isEnabled
+    end
+    SyncClassFilterBoxes()
+    RefreshFilters()
+end
 
 local function CreateOakToggleBox(parent, sortKey, globalFiltersTable)
     local box = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -26,7 +124,7 @@ local function CreateOakToggleBox(parent, sortKey, globalFiltersTable)
     box:SetScript("OnClick", function(self)
         globalFiltersTable[sortKey] = not globalFiltersTable[sortKey]
         self:SetState(globalFiltersTable[sortKey])
-        if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+        RefreshFilters()
     end)
     
     return box
@@ -88,71 +186,67 @@ local function ApplyQuickFilter(filterMap)
     for class, _ in pairs(addonTable.ClassFilters) do 
         addonTable.ClassFilters[class] = filterMap[class] or false 
     end
-    for class, box in pairs(classToggleBoxes) do 
-        box:SetState(addonTable.ClassFilters[class]) 
-    end
-    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+    SyncClassFilterBoxes()
+    RefreshFilters()
 end
-
-local classData = {
-    lust = {MAGE=true, SHAMAN=true, HUNTER=true, EVOKER=true},
-    brez = {DEATHKNIGHT=true, DRUID=true, WARLOCK=true, PALADIN=true},
-    plate = {WARRIOR=true, PALADIN=true, DEATHKNIGHT=true},
-    mail = {HUNTER=true, SHAMAN=true, EVOKER=true},
-    leather = {ROGUE=true, DRUID=true, MONK=true, DEMONHUNTER=true},
-    cloth = {MAGE=true, PRIEST=true, WARLOCK=true}
-}
 
 local btnWidth = 75
 local btnAll = addonTable.CreateFlatButton(filterPanel, "All", btnWidth)
+quickFilterButtons.all = btnAll
 btnAll:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, yOffset)
 btnAll:SetScript("OnClick", function()
-    for class, _ in pairs(addonTable.ClassFilters) do addonTable.ClassFilters[class] = true end
-    for class, box in pairs(classToggleBoxes) do box:SetState(true) end
-    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+    SetAllClassFilters(true)
 end)
 
 local btnNone = addonTable.CreateFlatButton(filterPanel, "None", btnWidth)
+quickFilterButtons.none = btnNone
 btnNone:SetPoint("LEFT", btnAll, "RIGHT", 10, 0)
 btnNone:SetScript("OnClick", function()
-    for class, _ in pairs(addonTable.ClassFilters) do addonTable.ClassFilters[class] = false end
-    for class, box in pairs(classToggleBoxes) do box:SetState(false) end
-    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+    SetAllClassFilters(false)
 end)
 yOffset = yOffset - 25
 
 local btnLust = addonTable.CreateFlatButton(filterPanel, "Lust", btnWidth)
+quickFilterButtons.lust = btnLust
 btnLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, yOffset)
 btnLust:SetScript("OnClick", function() ApplyQuickFilter(classData.lust) end)
 
 local btnBrez = addonTable.CreateFlatButton(filterPanel, "B-Rez", btnWidth)
+quickFilterButtons.brez = btnBrez
 btnBrez:SetPoint("LEFT", btnLust, "RIGHT", 10, 0)
 btnBrez:SetScript("OnClick", function() ApplyQuickFilter(classData.brez) end)
 yOffset = yOffset - 25
 
 local btnPlate = addonTable.CreateFlatButton(filterPanel, "Plate", btnWidth)
+quickFilterButtons.plate = btnPlate
 btnPlate:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, yOffset)
 btnPlate:SetScript("OnClick", function() ApplyQuickFilter(classData.plate) end)
 
 local btnMail = addonTable.CreateFlatButton(filterPanel, "Mail", btnWidth)
+quickFilterButtons.mail = btnMail
 btnMail:SetPoint("LEFT", btnPlate, "RIGHT", 10, 0)
 btnMail:SetScript("OnClick", function() ApplyQuickFilter(classData.mail) end)
 yOffset = yOffset - 25
 
 local btnLeather = addonTable.CreateFlatButton(filterPanel, "Leather", btnWidth)
+quickFilterButtons.leather = btnLeather
 btnLeather:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, yOffset)
 btnLeather:SetScript("OnClick", function() ApplyQuickFilter(classData.leather) end)
 
 local btnCloth = addonTable.CreateFlatButton(filterPanel, "Cloth", btnWidth)
+quickFilterButtons.cloth = btnCloth
 btnCloth:SetPoint("LEFT", btnLeather, "RIGHT", 10, 0)
 btnCloth:SetScript("OnClick", function() ApplyQuickFilter(classData.cloth) end)
 yOffset = yOffset - 20
+
+addonTable.UpdateQuickFilterButtons = UpdateQuickFilterButtons
+UpdateQuickFilterButtons()
 
 local div2 = filterPanel:CreateTexture(nil, "ARTWORK")
 div2:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.5)
 div2:SetSize(160, 1)
 div2:SetPoint("TOP", filterPanel, "TOP", 0, yOffset - 5)
-yOffset = yOffset - 12
+yOffset = yOffset - 16
 
 local classXOffset = 15
 local classYOffset = yOffset
@@ -179,9 +273,14 @@ for i, class in ipairs(addonTable.ValidClasses) do
     end
 end
 
+local bottomDivider = filterPanel:CreateTexture(nil, "ARTWORK")
+bottomDivider:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
+bottomDivider:SetSize(160, 1)
+bottomDivider:SetPoint("BOTTOM", filterPanel, "BOTTOM", 0, 70)
+
 -- Decline Filtered Button
 local btnDecline = addonTable.CreateFlatButton(filterPanel, "Decline Filtered", 160)
-btnDecline:SetPoint("BOTTOM", filterPanel, "BOTTOM", 0, 15)
+btnDecline:SetPoint("BOTTOM", filterPanel, "BOTTOM", 0, 48)
 btnDecline:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(1, 0.2, 0.2, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -198,20 +297,35 @@ end)
 btnDecline:SetScript("OnClick", function()
     if not addonTable.ApplicantGroups then return end
     for _, group in ipairs(addonTable.ApplicantGroups) do
-        local isValidClass = true
-        if group.leadClass and group.leadClass ~= "UNKNOWN" and addonTable.ClassFilters[group.leadClass] == false then
-            isValidClass = false
-        end
-        local isValidRole = true
-        if group.leadRole and addonTable.RoleFilters[group.leadRole] == false then
-            isValidRole = false
-        end
-
-        if not (isValidClass and isValidRole) then
+        if not addonTable.GroupPassesFilters(group) then
             C_LFGList.DeclineApplicant(group.id)
             return
         end
     end
+end)
+
+local mutePingBox = CreateOakToggleBox(filterPanel, "muteApplicantPing", OakLFGSorterDB)
+mutePingBox:SetPoint("TOPLEFT", btnDecline, "BOTTOMLEFT", 0, -8)
+
+local mutePingText = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+mutePingText:SetPoint("LEFT", mutePingBox, "RIGHT", 8, 0)
+mutePingText:SetText("Mute Ping")
+
+mutePingBox:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Mute Ping", 1, 1, 1)
+    GameTooltip:AddLine("Suppress the Blizzard new-applicant alert sound while Oak LFG Sorter is open and the Blizzard Group Finder window is closed.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+mutePingBox:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+mutePingBox:SetScript("OnClick", function(self)
+    OakLFGSorterDB.muteApplicantPing = not OakLFGSorterDB.muteApplicantPing
+    self:SetState(OakLFGSorterDB.muteApplicantPing)
+    RefreshFilters()
 end)
 
 -- Supporters Flyout Panel
