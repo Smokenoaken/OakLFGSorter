@@ -177,9 +177,9 @@ function addonTable.UpdateTopBarLayout()
 
         scaleSlider:SetWidth(60)
         scaleSlider:SetPoint("LEFT", title, "RIGHT", 12, 0)
-        scaleReset:SetWidth(28)
+        scaleReset:SetWidth(20)
         scaleReset.text:SetText("R")
-        scaleReset:SetPoint("LEFT", scaleSlider, "RIGHT", 4, 0)
+        scaleReset:SetPoint("LEFT", scaleSlider, "RIGHT", 3, 0)
 
         toggleFiltersBtn:SetWidth(54)
         refreshBtn:SetWidth(58)
@@ -397,7 +397,7 @@ end)
 -- Supporters Flyout Panel
 local supportersPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.SupportersPanel = supportersPanel
-supportersPanel:SetSize(190, 444) 
+supportersPanel:SetSize(190, 410) 
 supportersPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
 supportersPanel:Hide()
 supportersPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1) 

@@ -10,6 +10,29 @@ local COLLAPSED_FRAME_WIDTH = 460
 local HEADER_TOP_OFFSET = -43
 local SCROLL_TOP_OFFSET = -70
 local roleWeights = { ["TANK"] = 1, ["HEALER"] = 2, ["DAMAGER"] = 3 }
+local MODE_CONFIGS = {
+    mythic_plus = { ratingLabel = "M+ Rating", keyLabel = "Key" },
+    rated_pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
+    pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
+    raid = { ratingLabel = "Progress", keyLabel = "Raid" },
+    legacy_raid = { ratingLabel = "Progress", keyLabel = "Raid" },
+    delve = { ratingLabel = "M+ Rating", keyLabel = "Key" },
+    open_world = { ratingLabel = "M+ Rating", keyLabel = "Key" },
+    generic = { ratingLabel = "M+ Rating", keyLabel = "Key" },
+}
+
+local function GetListingMode()
+    return (addonTable.CurrentListingContext and addonTable.CurrentListingContext.mode) or "generic"
+end
+
+local function GetModeConfig()
+    return MODE_CONFIGS[GetListingMode()] or MODE_CONFIGS.generic
+end
+
+local function UsesSecondaryMetricColumn()
+    local listingMode = GetListingMode()
+    return not (listingMode == "rated_pvp" or listingMode == "pvp" or listingMode == "raid" or listingMode == "legacy_raid")
+end
 
 local scrollFrame = CreateFrame("ScrollFrame", "OakLFGScrollFrame", OAK_LFG, "UIPanelScrollFrameTemplate")
 scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET)
@@ -111,14 +134,32 @@ end
 
 local function SortGroups(grpA, grpB, sortBy, isAscending)
     local valA, valB
+    local listingMode = GetListingMode()
+
     if sortBy == "role" then valA, valB = roleWeights[grpA.leadRole] or 99, roleWeights[grpB.leadRole] or 99
     elseif sortBy == "class" then valA, valB = grpA.leadClass, grpB.leadClass
     elseif sortBy == "spec" then 
         valA = addonTable.SpecShortNames[grpA.leadSpec] or tostring(grpA.leadSpec or "")
         valB = addonTable.SpecShortNames[grpB.leadSpec] or tostring(grpB.leadSpec or "")
     elseif sortBy == "ilvl" then valA, valB = grpA.leadIlvl, grpB.leadIlvl
-    elseif sortBy == "rating" then valA, valB = grpA.leadRating, grpB.leadRating
-    elseif sortBy == "key" then valA, valB = grpA.leadKey, grpB.leadKey
+    elseif sortBy == "rating" then
+        if listingMode == "rated_pvp" or listingMode == "pvp" then
+            valA, valB = grpA.leadPvpRating or 0, grpB.leadPvpRating or 0
+        elseif listingMode == "raid" or listingMode == "legacy_raid" then
+            valA = (grpA.leadRaidProgress and grpA.leadRaidProgress.sortValue) or 0
+            valB = (grpB.leadRaidProgress and grpB.leadRaidProgress.sortValue) or 0
+        else
+            valA, valB = grpA.leadRating, grpB.leadRating
+        end
+    elseif sortBy == "key" then
+        if listingMode == "rated_pvp" or listingMode == "pvp" then
+            valA, valB = grpA.leadPvpBracket or "", grpB.leadPvpBracket or ""
+        elseif listingMode == "raid" or listingMode == "legacy_raid" then
+            valA = (grpA.leadRaidProgress and grpA.leadRaidProgress.raidName) or ""
+            valB = (grpB.leadRaidProgress and grpB.leadRaidProgress.raidName) or ""
+        else
+            valA, valB = grpA.leadKey, grpB.leadKey
+        end
     elseif sortBy == "note" then valA, valB = grpA.comment or "", grpB.comment or "" end
     
     if valA ~= valB then
@@ -134,8 +175,28 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
 end
 
 local headers = {}
+local keyHeader
 function addonTable.UpdateHeaderVisuals()
+    local modeConfig = GetModeConfig()
+    local showSecondaryMetric = UsesSecondaryMetricColumn()
+
     for _, header in ipairs(headers) do
+        if header.sortKey == "key" then
+            if showSecondaryMetric then
+                header:Show()
+            else
+                header:Hide()
+            end
+        end
+
+        if header.sortKey == "rating" then
+            header.text:SetText(modeConfig.ratingLabel)
+        elseif header.sortKey == "key" then
+            header.text:SetText(modeConfig.keyLabel)
+        else
+            header.text:SetText(header.baseText)
+        end
+
         if addonTable.CurrentSortBy == header.sortKey then
             header.arrow:SetTexture(addonTable.CurrentIsAscending and "Interface\\BUTTONS\\Arrow-Up-Up" or "Interface\\BUTTONS\\Arrow-Down-Up")
             header.arrow:Show()
@@ -178,6 +239,9 @@ local function CreateHeader(label, sortKey, column)
         addonTable.UpdateHeaderVisuals(); addonTable.UpdateDisplay()
     end)
     table.insert(headers, btn)
+    if sortKey == "key" then
+        keyHeader = btn
+    end
     return btn
 end
 
@@ -203,6 +267,18 @@ local R_RATING = RowColumn(C_RATING)
 local R_KEY    = RowColumn(C_KEY)
 local R_NOTE   = RowColumn(C_NOTE)
 
+local function GetCurrentNoteColumn()
+    if UsesSecondaryMetricColumn() then
+        return C_NOTE
+    end
+
+    return { x = C_KEY.x, w = C_KEY.w + C_NOTE.w, align = "LEFT" }
+end
+
+local function GetCurrentRowNoteColumn()
+    return RowColumn(GetCurrentNoteColumn())
+end
+
 CreateHeader("Role", "role", C_ROLE)
 CreateHeader("Class", "class", C_CLASS) 
 CreateHeader("Spec", "spec", C_SPEC)
@@ -214,12 +290,13 @@ local notesToggleBtn = addonTable.CreateFlatButton(OAK_LFG, "Notes", C_NOTE.w)
 notesToggleBtn:SetSize(C_NOTE.w, 22)
 
 local function UpdateNotesToggleLayout()
+    local noteColumn = GetCurrentNoteColumn()
     notesToggleBtn:ClearAllPoints()
-    notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", C_NOTE.x, HEADER_TOP_OFFSET)
+    notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", noteColumn.x, HEADER_TOP_OFFSET)
     if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
         notesToggleBtn:SetWidth(75)
     else
-        notesToggleBtn:SetWidth(C_NOTE.w)
+        notesToggleBtn:SetWidth(noteColumn.w)
     end
 end
 
@@ -297,6 +374,49 @@ local function GetPreferredScoreColor(score, defaultR, defaultG, defaultB)
     return defaultR, defaultG, defaultB
 end
 
+local function GetMemberRatingDisplay(member)
+    local listingMode = GetListingMode()
+
+    if listingMode == "rated_pvp" or listingMode == "pvp" then
+        local pvpRating = math.floor(member.pvpRating or 0)
+        return pvpRating > 0 and tostring(pvpRating) or "--"
+    elseif listingMode == "raid" or listingMode == "legacy_raid" then
+        return (member.raidProgress and member.raidProgress.displayText) or "--"
+    end
+
+    local ratingNum = math.floor(member.rating or 0)
+    local ratingStr = (ratingNum > 0 and tostring(ratingNum)) or "--"
+
+    if ratingNum > 0 then
+        local cR, cG, cB = GetPreferredScoreColor(ratingNum, 1, 1, 1)
+        ratingStr = string.format("|cFF%02x%02x%02x%s|r", cR * 255, cG * 255, cB * 255, ratingStr)
+    end
+
+    if member.mainScore and member.mainScore > ratingNum then
+        local mcR, mcG, mcB = GetPreferredScoreColor(member.mainScore, 0.5, 0.5, 0.5)
+        local mainStr = string.format("|cFF%02x%02x%02x[%d]|r", mcR * 255, mcG * 255, mcB * 255, math.floor(member.mainScore))
+        if ratingNum == 0 then
+            ratingStr = mainStr
+        else
+            ratingStr = ratingStr .. " " .. mainStr
+        end
+    end
+
+    return ratingStr
+end
+
+local function GetMemberSecondaryDisplay(member)
+    local listingMode = GetListingMode()
+
+    if listingMode == "rated_pvp" or listingMode == "pvp" then
+        return member.pvpBracket or "--"
+    elseif listingMode == "raid" or listingMode == "legacy_raid" then
+        return (member.raidProgress and member.raidProgress.raidName) or "--"
+    end
+
+    return member.highestKey > 0 and "+" .. member.highestKey or "--"
+end
+
 local function CreateRow(index)
     local row = CreateFrame("Button", nil, scrollChild)
     row:SetHeight(ROW_HEIGHT)
@@ -330,59 +450,74 @@ local function CreateRow(index)
                 GameTooltip:AddLine(addonTable.ApplyClassColor(name, class or ""), 1, 1, 1)
                 GameTooltip:AddLine(string.format("%s - Item Level: %d", localizedClass or "", math.floor(itemLevel or 0)), 1, 1, 1)
                 GameTooltip:AddLine(" ")
-                
-                GameTooltip:AddLine("Mythic+ Profile", 0.2, 1, 0.2)
-                
-                local score = math.floor(self.memberRating or 0)
-                
-                local cR, cG, cB = GetPreferredScoreColor(score, 1, 1, 1)
-                
-                GameTooltip:AddDoubleLine("Overall Rating:", score > 0 and score or "--", 1, 1, 1, cR, cG, cB)
-                
-                if self.rioProfile and type(self.rioProfile.mythicKeystoneProfile) == "table" then
-                    local mPlus = self.rioProfile.mythicKeystoneProfile
-                    local mainScore = math.floor(mPlus.mainCurrentScore or 0)
-                    if mainScore > score then
-                        local mcR, mcG, mcB = GetPreferredScoreColor(mainScore, 0.5, 0.5, 0.5)
-                        GameTooltip:AddDoubleLine("Main Rating:", mainScore, 0.5, 0.5, 0.5, mcR, mcG, mcB)
+
+                local listingMode = GetListingMode()
+                if listingMode == "rated_pvp" or listingMode == "pvp" then
+                    GameTooltip:AddLine("PvP Profile", 0.2, 1, 0.2)
+                    GameTooltip:AddDoubleLine("Rating:", (self.memberPvpRating and self.memberPvpRating > 0) and self.memberPvpRating or "--", 1, 1, 1, 1, 1, 1)
+                    if self.memberPvpBracket then
+                        GameTooltip:AddDoubleLine("Bracket:", self.memberPvpBracket, 1, 1, 1, 1, 1, 1)
                     end
-                end
-                
-                local entryInfo = C_LFGList.GetActiveEntryInfo()
-                local activityID = entryInfo and (entryInfo.activityID or (entryInfo.activityIDs and type(entryInfo.activityIDs) == "table" and entryInfo.activityIDs[1]))
-                if activityID then
-                    local success, bestForDungeon = pcall(C_LFGList.GetApplicantDungeonScoreForListing, self.applicantID, self.memberIdx, activityID)
-                    if success and type(bestForDungeon) == "table" and type(bestForDungeon.bestRunLevel) == "number" and bestForDungeon.bestRunLevel > 0 then
-                        GameTooltip:AddDoubleLine("Best for " .. (bestForDungeon.mapName or "Listing") .. ":", "+" .. bestForDungeon.bestRunLevel, 1, 1, 1, 1, 1, 1)
+                elseif listingMode == "raid" or listingMode == "legacy_raid" then
+                    GameTooltip:AddLine("Raid Profile", 1, 0.8, 0)
+                    if self.memberRaidProgress then
+                        GameTooltip:AddDoubleLine(self.memberRaidProgress.raidName .. ":", self.memberRaidProgress.longText or self.memberRaidProgress.displayText, 1, 1, 1, 1, 1, 1)
+                    else
+                        GameTooltip:AddDoubleLine("Progress:", "--", 1, 1, 1, 1, 1, 1)
                     end
-                end
-                
-                local successBest, bestOverall = pcall(C_LFGList.GetApplicantBestDungeonScore, self.applicantID, self.memberIdx)
-                if successBest and type(bestOverall) == "table" and type(bestOverall.bestRunLevel) == "number" and bestOverall.bestRunLevel > 0 then
-                    GameTooltip:AddDoubleLine("Best Run:", "+" .. bestOverall.bestRunLevel .. " (" .. (bestOverall.mapName or "Unknown") .. ")", 1, 1, 1, 1, 1, 1)
-                end
-                
-                if self.rioProfile and type(self.rioProfile.mythicKeystoneProfile) == "table" and type(self.rioProfile.mythicKeystoneProfile.sortedDungeons) == "table" then
-                    local dungeons = self.rioProfile.mythicKeystoneProfile.sortedDungeons
-                    if #dungeons > 0 then
-                        local hasRun = false
-                        for i = 1, math.min(3, #dungeons) do
-                            local d = dungeons[i]
-                            if type(d) == "table" and type(d.level) == "number" and d.level > 0 then
-                                if not hasRun then
-                                    GameTooltip:AddLine(" ")
-                                    GameTooltip:AddLine("Top R.IO Runs:", 0.8, 0.8, 0.8)
-                                    hasRun = true
+                else
+                    GameTooltip:AddLine("Mythic+ Profile", 0.2, 1, 0.2)
+
+                    local score = math.floor(self.memberRating or 0)
+                    local cR, cG, cB = GetPreferredScoreColor(score, 1, 1, 1)
+
+                    GameTooltip:AddDoubleLine("Overall Rating:", score > 0 and score or "--", 1, 1, 1, cR, cG, cB)
+
+                    if self.rioProfile and type(self.rioProfile.mythicKeystoneProfile) == "table" then
+                        local mPlus = self.rioProfile.mythicKeystoneProfile
+                        local mainScore = math.floor(mPlus.mainCurrentScore or 0)
+                        if mainScore > score then
+                            local mcR, mcG, mcB = GetPreferredScoreColor(mainScore, 0.5, 0.5, 0.5)
+                            GameTooltip:AddDoubleLine("Main Rating:", mainScore, 0.5, 0.5, 0.5, mcR, mcG, mcB)
+                        end
+                    end
+
+                    local entryInfo = C_LFGList.GetActiveEntryInfo()
+                    local activityID = entryInfo and (entryInfo.activityID or (entryInfo.activityIDs and type(entryInfo.activityIDs) == "table" and entryInfo.activityIDs[1]))
+                    if activityID then
+                        local success, bestForDungeon = pcall(C_LFGList.GetApplicantDungeonScoreForListing, self.applicantID, self.memberIdx, activityID)
+                        if success and type(bestForDungeon) == "table" and type(bestForDungeon.bestRunLevel) == "number" and bestForDungeon.bestRunLevel > 0 then
+                            GameTooltip:AddDoubleLine("Best for " .. (bestForDungeon.mapName or "Listing") .. ":", "+" .. bestForDungeon.bestRunLevel, 1, 1, 1, 1, 1, 1)
+                        end
+                    end
+
+                    local successBest, bestOverall = pcall(C_LFGList.GetApplicantBestDungeonScore, self.applicantID, self.memberIdx)
+                    if successBest and type(bestOverall) == "table" and type(bestOverall.bestRunLevel) == "number" and bestOverall.bestRunLevel > 0 then
+                        GameTooltip:AddDoubleLine("Best Run:", "+" .. bestOverall.bestRunLevel .. " (" .. (bestOverall.mapName or "Unknown") .. ")", 1, 1, 1, 1, 1, 1)
+                    end
+
+                    if self.rioProfile and type(self.rioProfile.mythicKeystoneProfile) == "table" and type(self.rioProfile.mythicKeystoneProfile.sortedDungeons) == "table" then
+                        local dungeons = self.rioProfile.mythicKeystoneProfile.sortedDungeons
+                        if #dungeons > 0 then
+                            local hasRun = false
+                            for i = 1, math.min(3, #dungeons) do
+                                local d = dungeons[i]
+                                if type(d) == "table" and type(d.level) == "number" and d.level > 0 then
+                                    if not hasRun then
+                                        GameTooltip:AddLine(" ")
+                                        GameTooltip:AddLine("Top R.IO Runs:", 0.8, 0.8, 0.8)
+                                        hasRun = true
+                                    end
+                                    local pluses = (type(d.numUpgrades) == "number" and d.numUpgrades > 0) and string.rep("+", d.numUpgrades) or ""
+                                    local dName = (type(d.dungeon) == "table" and d.dungeon.shortName) or "Unknown"
+                                    GameTooltip:AddDoubleLine(dName, "+" .. d.level .. pluses, 1, 1, 1, 0.2, 1, 0.2)
                                 end
-                                local pluses = (type(d.numUpgrades) == "number" and d.numUpgrades > 0) and string.rep("+", d.numUpgrades) or ""
-                                local dName = (type(d.dungeon) == "table" and d.dungeon.shortName) or "Unknown"
-                                GameTooltip:AddDoubleLine(dName, "+" .. d.level .. pluses, 1, 1, 1, 0.2, 1, 0.2)
                             end
                         end
                     end
                 end
 
-                if self.rioProfile then
+                if self.rioProfile and listingMode ~= "raid" and listingMode ~= "legacy_raid" then
                     local raidDataFound = {}
                     local function MineRaidData(t, depth)
                         if depth > 8 or type(t) ~= "table" then return end
@@ -487,7 +622,7 @@ local function CreateRow(index)
     ConfigureTextColumn(row.keyText, row, R_KEY)
     
     row.noteText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    ConfigureTextColumn(row.noteText, row, R_NOTE, 5)
+    ConfigureTextColumn(row.noteText, row, GetCurrentRowNoteColumn(), 5)
     row.noteText:SetTextColor(0.7, 0.7, 0.7) 
     if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
         row.noteText:Hide()
@@ -528,8 +663,21 @@ end
 function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
     local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
     local targetWidth = GetTargetFrameWidth()
+    local showSecondaryMetric = UsesSecondaryMetricColumn()
+    local rowNoteColumn = GetCurrentRowNoteColumn()
+
+    if not showSecondaryMetric and addonTable.CurrentSortBy == "key" then
+        addonTable.CurrentSortBy = "rating"
+        addonTable.CurrentIsAscending = false
+    end
 
     for _, row in ipairs(rows) do
+        if row.keyText then
+            if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
+        end
+        if row.noteText then
+            ConfigureTextColumn(row.noteText, row, rowNoteColumn, 5)
+        end
         if row.noteText then
             if hideNotes then row.noteText:Hide() else row.noteText:Show() end
         end
@@ -560,6 +708,7 @@ addonTable.ApplyHideNotesLayout()
 
 function addonTable.UpdateDisplay()
     addonTable.UpdateGroupBuffs()
+    addonTable.UpdateHeaderVisuals()
 
     local activeGroups = {}
     for _, group in ipairs(addonTable.ApplicantGroups) do
@@ -580,6 +729,7 @@ function addonTable.UpdateDisplay()
     for _, group in ipairs(activeGroups) do
         local isMulti = group.numMembers > 1
         local bgColor = isAltColor and addonTable.ROW_COLOR_B or addonTable.ROW_COLOR_A
+        local showSecondaryMetric = UsesSecondaryMetricColumn()
 
         for i, member in ipairs(group.members) do
             if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
@@ -592,6 +742,9 @@ function addonTable.UpdateDisplay()
             row.fullComment = group.comment 
             row.rioProfile = member.rioProfile 
             row.memberRating = member.rating
+            row.memberPvpRating = member.pvpRating
+            row.memberPvpBracket = member.pvpBracket
+            row.memberRaidProgress = member.raidProgress
 
             row.bg:SetColorTexture(unpack(bgColor))
 
@@ -617,29 +770,10 @@ function addonTable.UpdateDisplay()
             end
             
             row.nameText:SetText(formattedName); row.ilvlText:SetText(member.ilvl)
-            
-            -- Dynamic Score Coloring
-            local ratingNum = math.floor(member.rating or 0)
-            local ratingStr = (ratingNum > 0 and tostring(ratingNum)) or "--"
-            
-            if ratingNum > 0 then
-                local cR, cG, cB = GetPreferredScoreColor(ratingNum, 1, 1, 1)
-                ratingStr = string.format("|cFF%02x%02x%02x%s|r", cR*255, cG*255, cB*255, ratingStr)
-            end
-            
-            if member.mainScore and member.mainScore > ratingNum then 
-                local mcR, mcG, mcB = GetPreferredScoreColor(member.mainScore, 0.5, 0.5, 0.5)
-                local mainStr = string.format("|cFF%02x%02x%02x[%d]|r", mcR*255, mcG*255, mcB*255, math.floor(member.mainScore))
-                
-                if ratingNum == 0 then
-                    ratingStr = mainStr
-                else
-                    ratingStr = ratingStr .. " " .. mainStr
-                end
-            end
-            row.ratingText:SetText(ratingStr)
-            
-            row.keyText:SetText(member.highestKey > 0 and "+" .. member.highestKey or "--")
+
+            row.ratingText:SetText(GetMemberRatingDisplay(member))
+            row.keyText:SetText(GetMemberSecondaryDisplay(member))
+            if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
 
             if i == 1 then
                 row.noteText:SetText(group.comment or "")

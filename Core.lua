@@ -46,7 +46,197 @@ local function SetupApplicantPingMuteHook()
     QueueStatusButton.EyeHighlightAnim:SetScript("OnLoop", CreateApplicantPingHandler(originalApplicantPingOnLoop))
 end
 
+local function GetActiveListingActivityID()
+    local entryInfo = C_LFGList.GetActiveEntryInfo()
+    if not entryInfo then
+        return nil, nil
+    end
+
+    local activityID = entryInfo.activityID
+    if (not activityID or activityID == 0) and type(entryInfo.activityIDs) == "table" then
+        activityID = entryInfo.activityIDs[1]
+    end
+
+    return activityID, entryInfo
+end
+
+local function GetListingMode(activityInfo)
+    if not activityInfo then
+        return "generic"
+    end
+
+    local fullName = strlower(activityInfo.fullName or "")
+    local shortName = strlower(activityInfo.shortName or "")
+    local activityText = fullName .. " " .. shortName
+
+    if activityInfo.isMythicPlusActivity then
+        return "mythic_plus"
+    elseif activityInfo.isRatedPvpActivity then
+        return "rated_pvp"
+    elseif activityInfo.isPvpActivity then
+        return "pvp"
+    elseif activityInfo.isCurrentRaidActivity then
+        return "raid"
+    elseif activityText:find("legacy", 1, true) and activityText:find("raid", 1, true) then
+        return "legacy_raid"
+    elseif activityText:find("delve", 1, true) then
+        return "delve"
+    elseif activityText:find("world", 1, true) or activityText:find("outdoor", 1, true) then
+        return "open_world"
+    end
+
+    return "generic"
+end
+
+function addonTable.UpdateListingContext()
+    local activityID, entryInfo = GetActiveListingActivityID()
+    local activityInfo = activityID and C_LFGList.GetActivityInfoTable(activityID) or nil
+
+    addonTable.CurrentListingContext = {
+        activityID = activityID,
+        entryInfo = entryInfo,
+        activityInfo = activityInfo,
+        mode = GetListingMode(activityInfo),
+    }
+
+    return addonTable.CurrentListingContext
+end
+
+local function GetPvpBracketLabel(pvpRatingInfo)
+    if type(pvpRatingInfo) ~= "table" then
+        return nil
+    end
+
+    local activityName = strlower(pvpRatingInfo.activityName or "")
+    if activityName:find("2v2", 1, true) or activityName:find("2v", 1, true) then
+        return "2v2"
+    elseif activityName:find("3v3", 1, true) or activityName:find("3v", 1, true) then
+        return "3v3"
+    elseif activityName:find("shuffle", 1, true) or activityName:find("solo", 1, true) then
+        return "Solo"
+    elseif activityName:find("blitz", 1, true) then
+        return "Blitz"
+    elseif activityName:find("battleground", 1, true) then
+        return "RBG"
+    elseif activityName:find("skirm", 1, true) then
+        return "Skirm"
+    elseif type(pvpRatingInfo.bracket) == "number" then
+        return tostring(pvpRatingInfo.bracket)
+    end
+
+    return nil
+end
+
+local function CollectRaidProgress(rioProfile)
+    if type(rioProfile) ~= "table" then
+        return nil
+    end
+
+    local raidDataFound = {}
+
+    local function MineRaidData(t, depth)
+        if depth > 8 or type(t) ~= "table" then return end
+
+        if t.difficulty and t.progressCount and t.raid and type(t.raid) == "table" and t.raid.shortName then
+            local raidName = t.raid.shortName
+            local diff = tonumber(t.difficulty) or t.difficulty
+            local count = tonumber(t.progressCount) or 0
+            local bosses = tonumber(t.raid.bossCount) or 9
+
+            if not raidDataFound[raidName] then
+                raidDataFound[raidName] = { normal = 0, heroic = 0, mythic = 0, bosses = bosses, raidName = raidName }
+            end
+
+            if diff == 1 or diff == "Normal" or diff == "N" then
+                raidDataFound[raidName].normal = math.max(raidDataFound[raidName].normal, count)
+            elseif diff == 2 or diff == "Heroic" or diff == "H" then
+                raidDataFound[raidName].heroic = math.max(raidDataFound[raidName].heroic, count)
+            elseif diff == 3 or diff == "Mythic" or diff == "M" then
+                raidDataFound[raidName].mythic = math.max(raidDataFound[raidName].mythic, count)
+            end
+            return
+        end
+
+        local name = t.shortName or t.raid_name or t.name or (t.raid and type(t.raid) == "table" and t.raid.shortName)
+        if name and (t.normal or t.heroic or t.mythic or t.normal_bosses_killed) then
+            local raidName = tostring(name)
+            local bosses = tonumber(t.bossCount or t.boss_count or t.total_bosses or t.bosses) or 9
+
+            if not raidDataFound[raidName] then
+                raidDataFound[raidName] = { normal = 0, heroic = 0, mythic = 0, bosses = bosses, raidName = raidName }
+            end
+
+            raidDataFound[raidName].normal = math.max(raidDataFound[raidName].normal, tonumber(t.normal or t.normal_bosses_killed or t.Normal or t.n) or 0)
+            raidDataFound[raidName].heroic = math.max(raidDataFound[raidName].heroic, tonumber(t.heroic or t.heroic_bosses_killed or t.Heroic or t.h) or 0)
+            raidDataFound[raidName].mythic = math.max(raidDataFound[raidName].mythic, tonumber(t.mythic or t.mythic_bosses_killed or t.Mythic or t.m) or 0)
+            return
+        end
+
+        for _, value in pairs(t) do
+            if type(value) == "table" then
+                MineRaidData(value, depth + 1)
+            end
+        end
+    end
+
+    MineRaidData(rioProfile, 1)
+    return raidDataFound
+end
+
+function addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName)
+    local raidDataFound = CollectRaidProgress(rioProfile)
+    if not raidDataFound then
+        return nil
+    end
+
+    local preferred = preferredRaidName and strlower(preferredRaidName) or nil
+    local bestSummary = nil
+    local bestScore = -1
+
+    for raidName, data in pairs(raidDataFound) do
+        local score = (data.mythic * 10000) + (data.heroic * 100) + data.normal
+        local matchesPreferred = preferred and strlower(raidName):find(preferred, 1, true)
+
+        if matchesPreferred then
+            score = score + 1000000
+        end
+
+        if score > bestScore then
+            bestScore = score
+
+            local displayText = "--"
+            if data.mythic > 0 then
+                displayText = string.format("M %d/%d", data.mythic, data.bosses)
+            elseif data.heroic > 0 then
+                displayText = string.format("H %d/%d", data.heroic, data.bosses)
+            elseif data.normal > 0 then
+                displayText = string.format("N %d/%d", data.normal, data.bosses)
+            end
+
+            local longParts = {}
+            if data.normal > 0 then table.insert(longParts, string.format("N %d/%d", data.normal, data.bosses)) end
+            if data.heroic > 0 then table.insert(longParts, string.format("H %d/%d", data.heroic, data.bosses)) end
+            if data.mythic > 0 then table.insert(longParts, string.format("M %d/%d", data.mythic, data.bosses)) end
+
+            bestSummary = {
+                raidName = raidName,
+                displayText = displayText,
+                longText = (#longParts > 0) and table.concat(longParts, "  ") or "--",
+                sortValue = score,
+            }
+        end
+    end
+
+    return bestSummary
+end
+
 local function FetchApplicantData()
+    local listingContext = addonTable.UpdateListingContext()
+    local listingMode = listingContext and listingContext.mode or "generic"
+    local activityID = listingContext and listingContext.activityID or nil
+    local activityInfo = listingContext and listingContext.activityInfo or nil
+    local preferredRaidName = activityInfo and (activityInfo.shortName or activityInfo.fullName) or nil
+
     wipe(addonTable.ApplicantGroups)
     local applicants = C_LFGList.GetApplicants()
     if not applicants then return end
@@ -66,6 +256,9 @@ local function FetchApplicantData()
                 local bestKey, mainScore = 0, 0
                 local rioCurrentScore = 0
                 local rioProfile = nil
+                local pvpRating = 0
+                local pvpBracket = nil
+                local raidProgress = nil
                 
                 local success, bestScoreInfo = pcall(C_LFGList.GetApplicantBestDungeonScore, applicantID, i)
                 if success and type(bestScoreInfo) == "table" and type(bestScoreInfo.bestRunLevel) == "number" then
@@ -97,6 +290,18 @@ local function FetchApplicantData()
                     end
                 end
 
+                if activityID and (listingMode == "rated_pvp" or listingMode == "pvp") then
+                    local successPvp, pvpRatingInfo = pcall(C_LFGList.GetApplicantPvpRatingInfoForListing, applicantID, i, activityID)
+                    if successPvp and type(pvpRatingInfo) == "table" then
+                        pvpRating = tonumber(pvpRatingInfo.rating) or 0
+                        pvpBracket = GetPvpBracketLabel(pvpRatingInfo)
+                    end
+                end
+
+                if (listingMode == "raid" or listingMode == "legacy_raid") and rioProfile then
+                    raidProgress = addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName)
+                end
+
                 local finalRating = dungeonScore
                 if (type(finalRating) ~= "number" or finalRating == 0) and rioCurrentScore > 0 then
                     finalRating = rioCurrentScore
@@ -113,12 +318,23 @@ local function FetchApplicantData()
                     highestKey = bestKey,
                     rioProfile = rioProfile, 
                     isFriend = isFriend,
+                    pvpRating = pvpRating,
+                    pvpBracket = pvpBracket,
+                    raidProgress = raidProgress,
                     memberIdx = i 
                 }
                 table.insert(group.members, member)
             end
             local lead = group.members[1]
-            group.leadClass = lead.class; group.leadRole = lead.role; group.leadSpec = lead.specID; group.leadIlvl = lead.ilvl; group.leadRating = lead.rating; group.leadKey = lead.highestKey
+            group.leadClass = lead.class
+            group.leadRole = lead.role
+            group.leadSpec = lead.specID
+            group.leadIlvl = lead.ilvl
+            group.leadRating = lead.rating
+            group.leadKey = lead.highestKey
+            group.leadPvpRating = lead.pvpRating
+            group.leadPvpBracket = lead.pvpBracket
+            group.leadRaidProgress = lead.raidProgress
             table.insert(addonTable.ApplicantGroups, group)
         end
     end
