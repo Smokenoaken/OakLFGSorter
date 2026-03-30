@@ -175,7 +175,7 @@ addonTable.CloseButton = closeBtn
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
-VersionText:SetText("|cff888888v1.6.5|r")
+VersionText:SetText("|cff888888v1.6.6|r")
 VersionText:Hide()
 
 local resizeGrip = CreateFrame("Button", nil, OAK_LFG, "PanelResizeButtonTemplate")
