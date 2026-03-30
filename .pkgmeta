@@ -1,4 +1,5 @@
 package-as: OakLFGSorter
+manual-changelog: CHANGELOG.md
 
 ignore:
   - dist

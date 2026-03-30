@@ -1,6 +1,7 @@
 # Releasing OakLFGSorter
 
 This repo now includes a root [`.pkgmeta`](.pkgmeta) so CurseForge can package the addon automatically from GitHub.
+It also uses [CHANGELOG.md](CHANGELOG.md) as the manual CurseForge changelog source.
 
 ## One-Time CurseForge Setup
 
@@ -59,11 +60,12 @@ What it does:
 Recommended release steps:
 
 1. Finish your code changes
-2. Test in-game
-3. Run `.\release-addon.ps1 -Version 1.6.4`
-4. Let CurseForge package the pushed tag as a Release
-5. Let the Wago GitHub Action publish that same tag to Wago, if `## X-Wago-ID` and `WAGO_API_TOKEN` are configured
-6. Open the GitHub release page for that same tag and paste in your release notes
+2. Update [CHANGELOG.md](CHANGELOG.md) with the release notes you want CurseForge to display
+3. Test in-game
+4. Run `.\release-addon.ps1 -Version 1.6.4`
+5. Let CurseForge package the pushed tag as a Release using `CHANGELOG.md`
+6. Let the Wago GitHub Action publish that same tag to Wago, if `## X-Wago-ID` and `WAGO_API_TOKEN` are configured
+7. Open the GitHub release page for that same tag and paste in your release notes
 
 Tag naming rules from CurseForge:
 
