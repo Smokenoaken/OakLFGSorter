@@ -147,7 +147,7 @@ end)
 
 local filterPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.FilterPanel = filterPanel
-filterPanel:SetSize(190, 420) 
+filterPanel:SetSize(190, 444) 
 filterPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
 filterPanel:Hide()
 filterPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1) 
@@ -331,7 +331,7 @@ end)
 -- Supporters Flyout Panel
 local supportersPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.SupportersPanel = supportersPanel
-supportersPanel:SetSize(190, 420) 
+supportersPanel:SetSize(190, 444) 
 supportersPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
 supportersPanel:Hide()
 supportersPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1) 

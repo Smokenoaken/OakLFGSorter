@@ -4,7 +4,7 @@ local addonName, addonTable = ...
 OakLFGSorterDB = OakLFGSorterDB or {}
 if OakLFGSorterDB.autoOpen == nil then OakLFGSorterDB.autoOpen = false end
 if OakLFGSorterDB.scale == nil then OakLFGSorterDB.scale = 1.0 end
-if OakLFGSorterDB.muteApplicantPing == nil then OakLFGSorterDB.muteApplicantPing = false end
+if OakLFGSorterDB.muteApplicantPing == nil then OakLFGSorterDB.muteApplicantPing = true end
 
 -- Font Registration
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)

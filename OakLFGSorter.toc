@@ -4,6 +4,7 @@
 ## Author: OAK
 ## IconTexture: Interface\AddOns\OakLFGSorter\Media\icon.png
 ## Version: 1.6.3
+## X-Wago-ID: 96d2nXGO
 ## SavedVariables: OakLFGSorterDB
 
 Supporters.lua
