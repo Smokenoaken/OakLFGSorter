@@ -1,3 +1,11 @@
+## v1.6.7
+
+- Added adaptive applicant modes that change the sorter display based on the active listing type
+- Added PvP-aware applicant data and PVP Rating support for PvP listings
+- Added raid-aware applicant progress summaries for current-tier raid listings when Raider.IO data is available
+- Simplified raid and PvP layouts to use a single metric column with Notes expanding into the freed space
+- Refined the compact header and Supporters pane spacing for a cleaner overall layout
+
 ## v1.6.7-alpha1
 
 - Alpha tag to validate Discord release announcements,No addon behavior changes from v1.6.6
