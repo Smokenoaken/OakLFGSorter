@@ -9,6 +9,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
     steps:
       - name: Check out repository
@@ -37,12 +39,12 @@ jobs:
           fi
 
       - name: Package and publish to Wago
-        if: ${{ steps.wago.outputs.found == 'true' && secrets.WAGO_API_TOKEN != '' }}
+        if: ${{ steps.wago.outputs.found == 'true' && env.WAGO_API_TOKEN != '' }}
         uses: BigWigsMods/packager@v2
         env:
-          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          WAGO_API_TOKEN: ${{ env.WAGO_API_TOKEN }}
 
       - name: Missing Wago token
-        if: ${{ steps.wago.outputs.found == 'true' && secrets.WAGO_API_TOKEN == '' }}
+        if: ${{ steps.wago.outputs.found == 'true' && env.WAGO_API_TOKEN == '' }}
         run: |
           echo "::warning::WAGO_API_TOKEN is not set, so this tag was not published to Wago."
