@@ -67,6 +67,9 @@ function Get-ReleaseNotes {
     $resolvedNotes = @()
 
     if ($InlineNotes -and $InlineNotes.Count -gt 0) {
+        if ($InlineNotes.Count -eq 1 -and $InlineNotes[0].Contains(",")) {
+            $InlineNotes = $InlineNotes[0] -split '\s*,\s*'
+        }
         foreach ($note in $InlineNotes) {
             $trimmed = $note.Trim()
             if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
