@@ -36,6 +36,8 @@ thBg:SetColorTexture(unpack(addonTable.OAK_COLOR_PANE))
 OAK_LFG.title = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 OAK_LFG.title:SetPoint("LEFT", titleHeader, "LEFT", 15, 0)
 OAK_LFG.title:SetText(addonTable.ApplyClassColor("OAK", addonTable.PlayerClass) .. " LFG Sorter")
+addonTable.FullTitleText = addonTable.ApplyClassColor("OAK", addonTable.PlayerClass) .. " LFG Sorter"
+addonTable.CompactTitleText = addonTable.ApplyClassColor("OAK", addonTable.PlayerClass) .. " LFG"
 
 -- Scale UI Elements
 local scaleSlider = CreateFrame("Slider", "OakLFGScaleSlider", titleHeader, "BackdropTemplate")
@@ -153,6 +155,8 @@ end)
 
 addonTable.ScaleSlider = scaleSlider
 addonTable.ScaleEdit = scaleEdit
+addonTable.ScaleLabel = scaleLabel
+addonTable.ScaleReset = scaleReset
 
 local closeBtn = CreateFrame("Button", nil, titleHeader)
 closeBtn:SetSize(30, 30)
@@ -166,11 +170,13 @@ closeBtn.text:SetText("X")
 closeBtn:SetScript("OnClick", function() OAK_LFG:Hide() end)
 closeBtn:SetScript("OnEnter", function() clBg:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.5) end)
 closeBtn:SetScript("OnLeave", function() clBg:SetColorTexture(0, 0, 0, 0) end)
+addonTable.CloseButton = closeBtn
 
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
 VersionText:SetText("|cff888888v1.6.5|r")
+VersionText:Hide()
 
 local resizeGrip = CreateFrame("Button", nil, OAK_LFG, "PanelResizeButtonTemplate")
 addonTable.ResizeGrip = resizeGrip

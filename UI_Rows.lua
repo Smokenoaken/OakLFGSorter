@@ -5,10 +5,14 @@ addonTable.ApplicantGroups = {}
 addonTable.CurrentSortBy = "ilvl"
 addonTable.CurrentIsAscending = false
 local ROW_HEIGHT = 22 
+local FULL_FRAME_WIDTH = 660
+local COLLAPSED_FRAME_WIDTH = 460
+local HEADER_TOP_OFFSET = -43
+local SCROLL_TOP_OFFSET = -70
 local roleWeights = { ["TANK"] = 1, ["HEALER"] = 2, ["DAMAGER"] = 3 }
 
 local scrollFrame = CreateFrame("ScrollFrame", "OakLFGScrollFrame", OAK_LFG, "UIPanelScrollFrameTemplate")
-scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, -70)
+scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET)
 scrollFrame:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -25, 35) 
 
 local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
@@ -38,15 +42,27 @@ local scrollChild = CreateFrame("Frame")
 scrollChild:SetSize(scrollFrame:GetWidth(), 1)
 scrollFrame:SetScrollChild(scrollChild)
 
+local function GetTargetFrameWidth()
+    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        return COLLAPSED_FRAME_WIDTH
+    end
+    return FULL_FRAME_WIDTH
+end
+addonTable.GetTargetFrameWidth = GetTargetFrameWidth
+
 OAK_LFG:SetScript("OnSizeChanged", function(self, width, height)
     scrollChild:SetWidth(scrollFrame:GetWidth())
-    if width ~= 660 then self:SetWidth(660) end
+    local targetWidth = GetTargetFrameWidth()
+    if math.abs(width - targetWidth) > 0.5 then
+        self:SetWidth(targetWidth)
+    end
 end)
 
 local footer = CreateFrame("Frame", nil, OAK_LFG)
 footer:SetPoint("BOTTOMLEFT", OAK_LFG, "BOTTOMLEFT", 10, 10)
 footer:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -10, 10)
 footer:SetHeight(20)
+addonTable.Footer = footer
 
 local lustText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 lustText:SetPoint("LEFT", footer, "LEFT", 10, 0)
@@ -63,6 +79,10 @@ suppBtn:SetScript("OnClick", function()
         addonTable.SupportersPanel:Show()
     end
 end)
+
+local footerVersionText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+footerVersionText:SetPoint("RIGHT", footer, "RIGHT", -4, 0)
+footerVersionText:SetText(addonTable.VersionText and addonTable.VersionText:GetText() or "")
 
 function addonTable.UpdateGroupBuffs()
     local hasLust, hasBrez = false, false
@@ -128,7 +148,7 @@ end
 local function CreateHeader(label, sortKey, column)
     local btn = CreateFrame("Button", nil, OAK_LFG, "BackdropTemplate")
     btn:SetSize(column.w, 22)
-    btn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", column.x, -43)
+    btn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", column.x, HEADER_TOP_OFFSET)
     btn:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
     btn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
     btn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
@@ -189,9 +209,62 @@ CreateHeader("Spec", "spec", C_SPEC)
 CreateHeader("iLvl", "ilvl", C_ILVL)
 CreateHeader("Rating", "rating", C_RATING)
 CreateHeader("Key", "key", C_KEY)
-CreateHeader("Note", "note", C_NOTE)
+
+local notesToggleBtn = addonTable.CreateFlatButton(OAK_LFG, "Notes", C_NOTE.w)
+notesToggleBtn:SetSize(C_NOTE.w, 22)
+
+local function UpdateNotesToggleLayout()
+    notesToggleBtn:ClearAllPoints()
+    notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", C_NOTE.x, HEADER_TOP_OFFSET)
+    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        notesToggleBtn:SetWidth(75)
+    else
+        notesToggleBtn:SetWidth(C_NOTE.w)
+    end
+end
+
+local function UpdateNotesToggleVisual()
+    notesToggleBtn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
+    notesToggleBtn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+end
+
+notesToggleBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        GameTooltip:SetText("Show Notes", 1, 1, 1)
+        GameTooltip:AddLine("Expand the Note column and restore the full sorter width.", 1, 1, 1, true)
+    else
+        GameTooltip:SetText("Hide Notes", 1, 1, 1)
+        GameTooltip:AddLine("Collapse the Note column and shrink the sorter window.", 1, 1, 1, true)
+    end
+    GameTooltip:Show()
+end)
+notesToggleBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
 
 local rows = {}
+
+local function SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
+    OAK_LFG:SetResizeBounds(targetWidth, 420, targetWidth, 800)
+    if preserveLeftEdge then
+        local oldLeft = OAK_LFG:GetLeft()
+        local oldBottom = OAK_LFG:GetBottom()
+
+        OAK_LFG:SetWidth(targetWidth)
+        if oldLeft and oldBottom then
+            OAK_LFG:ClearAllPoints()
+            OAK_LFG:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", oldLeft, oldBottom)
+            if OakLFGSorterDB then
+                OakLFGSorterDB.framePos = { "BOTTOMLEFT", "BOTTOMLEFT", oldLeft, oldBottom }
+            end
+        end
+    elseif math.abs(OAK_LFG:GetWidth() - targetWidth) > 0.5 then
+        OAK_LFG:SetWidth(targetWidth)
+    end
+end
 
 local function ConfigureTextColumn(fontString, row, column, padding)
     padding = padding or 0
@@ -416,6 +489,9 @@ local function CreateRow(index)
     row.noteText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     ConfigureTextColumn(row.noteText, row, R_NOTE, 5)
     row.noteText:SetTextColor(0.7, 0.7, 0.7) 
+    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        row.noteText:Hide()
+    end
 
     row.declineBtn = CreateFrame("Button", nil, row)
     row.declineBtn:SetSize(20, 20)
@@ -448,6 +524,39 @@ local function CreateRow(index)
 
     return row
 end
+
+function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
+    local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
+    local targetWidth = GetTargetFrameWidth()
+
+    for _, row in ipairs(rows) do
+        if row.noteText then
+            if hideNotes then row.noteText:Hide() else row.noteText:Show() end
+        end
+    end
+
+    SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
+    scrollChild:SetWidth(scrollFrame:GetWidth())
+    UpdateNotesToggleLayout()
+    UpdateNotesToggleVisual()
+
+    if addonTable.UpdateTopBarLayout then
+        addonTable.UpdateTopBarLayout()
+    end
+
+    if addonTable.UpdateDisplay then
+        addonTable.UpdateDisplay()
+    end
+end
+
+notesToggleBtn:SetScript("OnClick", function()
+    OakLFGSorterDB.hideNotes = not OakLFGSorterDB.hideNotes
+    addonTable.ApplyHideNotesLayout(true)
+end)
+
+UpdateNotesToggleLayout()
+UpdateNotesToggleVisual()
+addonTable.ApplyHideNotesLayout()
 
 function addonTable.UpdateDisplay()
     addonTable.UpdateGroupBuffs()

@@ -145,7 +145,11 @@ OAK_LFG:SetScript("OnShow", function(self)
     SetupApplicantPingMuteHook()
     FetchApplicantData()
     addonTable.UpdateHeaderVisuals()
-    addonTable.UpdateDisplay()
+    if addonTable.ApplyHideNotesLayout then
+        addonTable.ApplyHideNotesLayout()
+    else
+        addonTable.UpdateDisplay()
+    end
     
     if addonTable.CheckRIOHook then addonTable.CheckRIOHook() end
     if addonTable.AutoPosition then addonTable.AutoPosition() end
@@ -184,8 +188,13 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             end
             
             if OakLFGSorterDB.frameSize then 
-                local w = math.max(660, OakLFGSorterDB.frameSize[1])
+                local minWidth = addonTable.GetTargetFrameWidth and addonTable.GetTargetFrameWidth() or 660
+                local w = math.max(minWidth, OakLFGSorterDB.frameSize[1])
                 OAK_LFG:SetSize(w, OakLFGSorterDB.frameSize[2]) 
+            end
+
+            if addonTable.ApplyHideNotesLayout then
+                addonTable.ApplyHideNotesLayout()
             end
             
             addonTable.SetupBlizzardLFGHook()

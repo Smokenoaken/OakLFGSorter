@@ -131,7 +131,7 @@ local function CreateOakToggleBox(parent, sortKey, globalFiltersTable)
 end
 
 local toggleFiltersBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Filters", 60)
-toggleFiltersBtn:SetPoint("RIGHT", addonTable.VersionText, "LEFT", -10, 0)
+toggleFiltersBtn:SetPoint("RIGHT", addonTable.CloseButton, "LEFT", -10, 0)
 
 local refreshBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Refresh", 60)
 refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
@@ -144,6 +144,72 @@ delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
 delistBtn:SetScript("OnClick", function()
     C_LFGList.RemoveListing()
 end)
+
+function addonTable.UpdateTopBarLayout()
+    local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
+    local title = addonTable.OAK_LFG and addonTable.OAK_LFG.title
+    local scaleSlider = addonTable.ScaleSlider
+    local scaleEdit = addonTable.ScaleEdit
+    local scaleLabel = addonTable.ScaleLabel
+    local scaleReset = addonTable.ScaleReset
+    local closeBtn = addonTable.CloseButton
+
+    if not (title and scaleSlider and scaleEdit and scaleLabel and scaleReset and closeBtn) then
+        return
+    end
+
+    if addonTable.VersionText then
+        addonTable.VersionText:Hide()
+    end
+
+    toggleFiltersBtn:ClearAllPoints()
+    refreshBtn:ClearAllPoints()
+    delistBtn:ClearAllPoints()
+    scaleSlider:ClearAllPoints()
+    scaleEdit:ClearAllPoints()
+    scaleReset:ClearAllPoints()
+
+    if hideNotes then
+        title:SetText(addonTable.CompactTitleText or "OAK LFG")
+        scaleLabel:Hide()
+        scaleEdit:Hide()
+        scaleReset:Show()
+
+        scaleSlider:SetWidth(60)
+        scaleSlider:SetPoint("LEFT", title, "RIGHT", 12, 0)
+        scaleReset:SetWidth(28)
+        scaleReset.text:SetText("R")
+        scaleReset:SetPoint("LEFT", scaleSlider, "RIGHT", 4, 0)
+
+        toggleFiltersBtn:SetWidth(54)
+        refreshBtn:SetWidth(58)
+        delistBtn:SetWidth(54)
+
+        toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -6, 0)
+        refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -4, 0)
+        delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -4, 0)
+    else
+        title:SetText(addonTable.FullTitleText or "OAK LFG Sorter")
+        scaleLabel:Show()
+        scaleEdit:Show()
+        scaleReset:Show()
+
+        scaleSlider:SetWidth(80)
+        scaleSlider:SetPoint("LEFT", title, "RIGHT", 45, 0)
+        scaleEdit:SetPoint("LEFT", scaleSlider, "RIGHT", 10, 0)
+        scaleReset:SetWidth(45)
+        scaleReset.text:SetText("Reset")
+        scaleReset:SetPoint("LEFT", scaleEdit, "RIGHT", 5, 0)
+
+        toggleFiltersBtn:SetWidth(60)
+        refreshBtn:SetWidth(60)
+        delistBtn:SetWidth(60)
+
+        toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -10, 0)
+        refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
+        delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+    end
+end
 
 local filterPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.FilterPanel = filterPanel
@@ -454,3 +520,5 @@ function addonTable.SetupBlizzardLFGHook()
         end
     end
 end
+
+addonTable.UpdateTopBarLayout()
