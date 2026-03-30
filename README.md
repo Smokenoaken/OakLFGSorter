@@ -59,9 +59,11 @@ If Raider.IO is installed, OakLFGSorter uses Raider.IO profile data and Raider.I
 
 ## Releasing
 
-This repo supports both manual zip builds and CurseForge automatic packaging from GitHub.
+This repo supports manual zip builds, CurseForge automatic packaging, and Wago publishing from GitHub tags.
 
 For automatic packaging, configure a GitHub webhook that points at your CurseForge project packaging URL. The repo root already includes a [`.pkgmeta`](.pkgmeta) file so CurseForge packages the addon under the correct top-level folder name.
+
+For Wago, the repo includes [`.github/workflows/wago-release.yml`](.github/workflows/wago-release.yml). After you add your `## X-Wago-ID` to [OakLFGSorter.toc](OakLFGSorter.toc) and set a `WAGO_API_TOKEN` GitHub secret, pushed version tags will publish there automatically too.
 
 For the easiest tagged release flow, use:
 

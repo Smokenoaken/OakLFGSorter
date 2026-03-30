@@ -16,6 +16,25 @@ This repo now includes a root [`.pkgmeta`](.pkgmeta) so CurseForge can package t
    - all commits packaged as alpha, or
    - tagged pushes only
 
+## One-Time Wago Setup
+
+Wago's current docs recommend using the BigWigs packager through GitHub Actions.
+
+This repo now includes [`.github/workflows/wago-release.yml`](.github/workflows/wago-release.yml), which watches for pushed tags like `v1.6.4` and publishes to Wago when the remaining Wago-specific values are configured.
+
+You still need to do these two steps once:
+
+1. Create or open your addon project on Wago and copy its 8-character project ID from the Wago developer dashboard.
+2. Add that ID to `OakLFGSorter.toc` as:
+
+   ```text
+   ## X-Wago-ID: YOURWAGO
+   ```
+
+3. Create a Wago API token and save it as a GitHub repository secret named `WAGO_API_TOKEN`.
+
+Once those are in place, every pushed release tag will also publish to Wago automatically.
+
 ## Recommended Release Flow
 
 Tagged pushes are the safest setup for this addon.
@@ -43,7 +62,8 @@ Recommended release steps:
 2. Test in-game
 3. Run `.\release-addon.ps1 -Version 1.6.4`
 4. Let CurseForge package the pushed tag as a Release
-5. Open the GitHub release page for that same tag and paste in your release notes
+5. Let the Wago GitHub Action publish that same tag to Wago, if `## X-Wago-ID` and `WAGO_API_TOKEN` are configured
+6. Open the GitHub release page for that same tag and paste in your release notes
 
 Tag naming rules from CurseForge:
 

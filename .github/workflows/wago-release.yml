@@ -1,0 +1,48 @@
+name: Wago Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect Wago project ID
+        id: wago
+        shell: bash
+        run: |
+          toc_file="OakLFGSorter.toc"
+          if [[ ! -f "$toc_file" ]]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Could not find $toc_file."
+            exit 0
+          fi
+
+          wago_id="$(sed -n 's/^## X-Wago-ID:[[:space:]]*//p' "$toc_file" | head -n 1)"
+          if [[ -n "$wago_id" ]]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "id=$wago_id" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Wago upload is not configured yet. Add '## X-Wago-ID: <your-id>' to OakLFGSorter.toc and set the WAGO_API_TOKEN repository secret."
+          fi
+
+      - name: Package and publish to Wago
+        if: ${{ steps.wago.outputs.found == 'true' && secrets.WAGO_API_TOKEN != '' }}
+        uses: BigWigsMods/packager@v2
+        env:
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+
+      - name: Missing Wago token
+        if: ${{ steps.wago.outputs.found == 'true' && secrets.WAGO_API_TOKEN == '' }}
+        run: |
+          echo "::warning::WAGO_API_TOKEN is not set, so this tag was not published to Wago."
