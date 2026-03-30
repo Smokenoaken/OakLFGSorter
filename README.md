@@ -59,7 +59,11 @@ If Raider.IO is installed, OakLFGSorter uses Raider.IO profile data and Raider.I
 
 ## Releasing
 
-This repo includes a packaging script for CurseForge-ready zips:
+This repo supports both manual zip builds and CurseForge automatic packaging from GitHub.
+
+For automatic packaging, configure a GitHub webhook that points at your CurseForge project packaging URL. The repo root already includes a [`.pkgmeta`](.pkgmeta) file so CurseForge packages the addon under the correct top-level folder name.
+
+For manual fallback builds, use:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\package-release.ps1
@@ -69,7 +73,7 @@ That produces a release zip in `dist\` with the correct top-level addon folder. 
 
 ## Version
 
-Current repo version: `1.6.2`
+Current repo version: `1.6.3`
 
 ## Project Summary
 

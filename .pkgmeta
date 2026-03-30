@@ -1,0 +1,7 @@
+package-as: OakLFGSorter
+
+ignore:
+  - dist
+  - package-release.ps1
+  - RELEASING.md
+  - README.md
