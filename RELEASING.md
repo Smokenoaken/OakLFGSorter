@@ -2,6 +2,7 @@
 
 This repo now includes a root [`.pkgmeta`](.pkgmeta) so CurseForge can package the addon automatically from GitHub.
 It also uses [CHANGELOG.md](CHANGELOG.md) as the manual CurseForge changelog source.
+Upcoming notes can live in [NEXT_CHANGELOG.md](NEXT_CHANGELOG.md), which the release script consumes automatically.
 
 ## One-Time CurseForge Setup
 
@@ -48,6 +49,8 @@ Use the one-command helper:
 
 What it does:
 
+- reads bullet points from `NEXT_CHANGELOG.md` by default, or from `-Notes` if you pass them directly
+- prepends a new release section into `CHANGELOG.md`
 - updates the version in `OakLFGSorter.toc`
 - updates the in-window version text in `UI_Header.lua`
 - updates the version line in `README.md`
@@ -60,12 +63,18 @@ What it does:
 Recommended release steps:
 
 1. Finish your code changes
-2. Update [CHANGELOG.md](CHANGELOG.md) with the release notes you want CurseForge to display
+2. Add one bullet per line to [NEXT_CHANGELOG.md](NEXT_CHANGELOG.md)
 3. Test in-game
 4. Run `.\release-addon.ps1 -Version 1.6.4`
 5. Let CurseForge package the pushed tag as a Release using `CHANGELOG.md`
 6. Let the Wago GitHub Action publish that same tag to Wago, if `## X-Wago-ID` and `WAGO_API_TOKEN` are configured
 7. Open the GitHub release page for that same tag and paste in your release notes
+
+Optional one-liner if you want to skip editing `NEXT_CHANGELOG.md`:
+
+```powershell
+.\release-addon.ps1 -Version 1.6.6 -Notes "Fixed tooltip alignment","Added smarter role filtering"
+```
 
 Tag naming rules from CurseForge:
 

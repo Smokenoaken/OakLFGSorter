@@ -71,7 +71,7 @@ For the easiest tagged release flow, use:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\release-addon.ps1 -Version 1.6.4
 ```
 
-That updates the repo version files, commits the release, creates and pushes the Git tag, and builds a local zip in `dist\`.
+Put one bullet per line in [NEXT_CHANGELOG.md](NEXT_CHANGELOG.md), then run the command. The script rolls those notes into [CHANGELOG.md](CHANGELOG.md), updates the repo version files, commits the release, creates and pushes the Git tag, and builds a local zip in `dist\`.
 
 For manual fallback builds only, use:
 

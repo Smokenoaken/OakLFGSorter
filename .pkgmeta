@@ -7,3 +7,4 @@ ignore:
   - release-addon.ps1
   - RELEASING.md
   - README.md
+  - NEXT_CHANGELOG.md

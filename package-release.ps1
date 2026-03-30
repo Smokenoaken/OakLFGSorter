@@ -48,6 +48,7 @@ $excludeFiles = @(
     ".gitignore",
     "README.md",
     "RELEASING.md",
+    "NEXT_CHANGELOG.md",
     "package-release.ps1",
     "release-addon.ps1",
     "addon_summary_onepager.html",
