@@ -63,7 +63,15 @@ This repo supports both manual zip builds and CurseForge automatic packaging fro
 
 For automatic packaging, configure a GitHub webhook that points at your CurseForge project packaging URL. The repo root already includes a [`.pkgmeta`](.pkgmeta) file so CurseForge packages the addon under the correct top-level folder name.
 
-For manual fallback builds, use:
+For the easiest tagged release flow, use:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\release-addon.ps1 -Version 1.6.4
+```
+
+That updates the repo version files, commits the release, creates and pushes the Git tag, and builds a local zip in `dist\`.
+
+For manual fallback builds only, use:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\package-release.ps1

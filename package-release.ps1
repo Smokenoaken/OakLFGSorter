@@ -44,10 +44,12 @@ $excludeNames = @(
 )
 
 $excludeFiles = @(
+    ".pkgmeta",
     ".gitignore",
     "README.md",
     "RELEASING.md",
     "package-release.ps1",
+    "release-addon.ps1",
     "addon_summary_onepager.html",
     "OakLFGSorter_Summary.pdf"
 )

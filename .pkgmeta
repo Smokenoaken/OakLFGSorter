@@ -3,5 +3,6 @@ package-as: OakLFGSorter
 ignore:
   - dist
   - package-release.ps1
+  - release-addon.ps1
   - RELEASING.md
   - README.md

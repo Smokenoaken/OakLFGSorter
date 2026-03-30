@@ -20,11 +20,30 @@ This repo now includes a root [`.pkgmeta`](.pkgmeta) so CurseForge can package t
 
 Tagged pushes are the safest setup for this addon.
 
-1. Update `## Version:` in `OakLFGSorter.toc`
+Use the one-command helper:
+
+```powershell
+.\release-addon.ps1 -Version 1.6.4
+```
+
+What it does:
+
+- updates the version in `OakLFGSorter.toc`
+- updates the in-window version text in `UI_Header.lua`
+- updates the version line in `README.md`
+- creates a release commit
+- creates and pushes a tag such as `v1.6.4`
+- pushes `main`
+- builds a local zip in `dist\`
+- leaves you on the GitHub release page URL for the new tag
+
+Recommended release steps:
+
+1. Finish your code changes
 2. Test in-game
-3. Commit and push to GitHub
-4. Create and push a tag such as `v1.6.4`
-5. CurseForge packages that pushed tag as a Release
+3. Run `.\release-addon.ps1 -Version 1.6.4`
+4. Let CurseForge package the pushed tag as a Release
+5. Open the GitHub release page for that same tag and paste in your release notes
 
 Tag naming rules from CurseForge:
 
