@@ -1,0 +1,98 @@
+name: Discord Release Announcement
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      ADDON_NAME: Oak LFG Sorter
+      WEBHOOK_USERNAME: Oak LFG Sorter Releases
+      CURSEFORGE_URL: https://www.curseforge.com/wow/addons/oak-lfg-sorter
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Collect release details
+        id: release
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME}"
+          notes="$(awk -v header="## ${version}" '
+            $0 == header { in_section = 1; next }
+            in_section && /^## / { exit }
+            in_section && NF { print }
+          ' CHANGELOG.md)"
+
+          if [[ -z "$notes" ]]; then
+            notes="- See the CurseForge page for full release notes."
+          fi
+
+          if [[ ${#notes} -gt 3500 ]]; then
+            notes="${notes:0:3497}..."
+          fi
+
+          {
+            echo "version=$version"
+            echo "notes<<EOF"
+            printf '%s\n' "$notes"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post Discord announcement
+        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          NOTES: ${{ steps.release.outputs.notes }}
+          GITHUB_RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          payload = {
+              "username": os.environ["WEBHOOK_USERNAME"],
+              "embeds": [
+                  {
+                      "title": f"New {os.environ['ADDON_NAME']} release: {os.environ['VERSION']}",
+                      "url": os.environ["CURSEFORGE_URL"],
+                      "description": os.environ["NOTES"],
+                      "color": 5763719,
+                      "fields": [
+                          {
+                              "name": "CurseForge",
+                              "value": f"[Open project]({os.environ['CURSEFORGE_URL']})",
+                              "inline": True,
+                          },
+                          {
+                              "name": "GitHub tag",
+                              "value": f"[View release/tag]({os.environ['GITHUB_RELEASE_URL']})",
+                              "inline": True,
+                          },
+                      ],
+                  }
+              ],
+          }
+
+          with open("discord-payload.json", "w", encoding="utf-8") as handle:
+              json.dump(payload, handle, ensure_ascii=True)
+          PY
+
+          curl --fail-with-body --silent --show-error \
+            -H "Content-Type: application/json" \
+            --data @discord-payload.json \
+            "$DISCORD_WEBHOOK_URL"
+
+      - name: Missing Discord webhook secret
+        if: ${{ env.DISCORD_WEBHOOK_URL == '' }}
+        run: |
+          echo "::warning::Set the DISCORD_WEBHOOK_URL repository secret to enable Discord release announcements."
