@@ -9,6 +9,7 @@
 
 Supporters.lua
 Init.lua
+Search.lua
 UI_Header.lua
 UI_Filters.lua
 UI_Rows.lua

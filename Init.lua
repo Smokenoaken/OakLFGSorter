@@ -6,6 +6,25 @@ if OakLFGSorterDB.autoOpen == nil then OakLFGSorterDB.autoOpen = false end
 if OakLFGSorterDB.scale == nil then OakLFGSorterDB.scale = 1.0 end
 if OakLFGSorterDB.muteApplicantPing == nil then OakLFGSorterDB.muteApplicantPing = true end
 if OakLFGSorterDB.hideNotes == nil then OakLFGSorterDB.hideNotes = false end
+if OakLFGSorterDB.autoHideFilledRoles == nil then OakLFGSorterDB.autoHideFilledRoles = false end
+OakLFGSorterDB.browserFilters = OakLFGSorterDB.browserFilters or {}
+
+local browserFilters = OakLFGSorterDB.browserFilters
+if browserFilters.difficulty == nil then browserFilters.difficulty = "ANY" end
+if browserFilters.playstyle == nil then browserFilters.playstyle = "ANY" end
+if browserFilters.keyMin == nil then browserFilters.keyMin = "" end
+if browserFilters.keyMax == nil then browserFilters.keyMax = "" end
+if browserFilters.currentSeasonOnly == nil then browserFilters.currentSeasonOnly = false end
+if browserFilters.needsTank == nil then browserFilters.needsTank = false end
+if browserFilters.needsHealer == nil then browserFilters.needsHealer = false end
+if browserFilters.needsDPS == nil then browserFilters.needsDPS = false end
+if browserFilters.hasTank == nil then browserFilters.hasTank = false end
+if browserFilters.hasHealer == nil then browserFilters.hasHealer = false end
+if browserFilters.partyFit == nil then browserFilters.partyFit = false end
+if browserFilters.needsLust == nil then browserFilters.needsLust = false end
+if browserFilters.needsBrez == nil then browserFilters.needsBrez = false end
+if browserFilters.hideDeclined == nil then browserFilters.hideDeclined = false end
+if type(browserFilters.selectedActivities) ~= "table" then browserFilters.selectedActivities = {} end
 
 -- Font Registration
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
@@ -55,6 +74,14 @@ addonTable.ValidClasses = {
     "SHAMAN", "WARLOCK", "WARRIOR"
 }
 
+addonTable.LustClasses = {
+    MAGE = true, SHAMAN = true, HUNTER = true, EVOKER = true,
+}
+
+addonTable.BrezClasses = {
+    DEATHKNIGHT = true, DRUID = true, WARLOCK = true, PALADIN = true,
+}
+
 -- Custom Spec Abbreviations
 addonTable.SpecShortNames = {
     -- Death Knight
@@ -89,6 +116,22 @@ function addonTable.ApplyClassColor(text, classStr)
     local c = RAID_CLASS_COLORS[string.upper(classStr or "")]
     if c then return string.format("|cFF%02x%02x%02x%s|r", c.r*255, c.g*255, c.b*255, text) end
     return "|cFFFFFFFF" .. (text or "") .. "|r"
+end
+
+function addonTable.ClassProvidesLust(classStr)
+    return addonTable.LustClasses[string.upper(classStr or "")] or false
+end
+
+function addonTable.ClassProvidesBrez(classStr)
+    return addonTable.BrezClasses[string.upper(classStr or "")] or false
+end
+
+function addonTable.GetCurrentViewMode()
+    if C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo() then
+        return "applicants"
+    end
+
+    return "browser"
 end
 
 function addonTable.CreateFlatButton(parent, label, width)

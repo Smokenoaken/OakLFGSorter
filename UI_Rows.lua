@@ -22,6 +22,10 @@ local MODE_CONFIGS = {
 }
 
 local function GetListingMode()
+    if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
+        return (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
+    end
+
     return (addonTable.CurrentListingContext and addonTable.CurrentListingContext.mode) or "generic"
 end
 
@@ -32,6 +36,10 @@ end
 local function UsesSecondaryMetricColumn()
     local listingMode = GetListingMode()
     return not (listingMode == "rated_pvp" or listingMode == "pvp" or listingMode == "raid" or listingMode == "legacy_raid")
+end
+
+local function IsBrowserMode()
+    return addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
 end
 
 local scrollFrame = CreateFrame("ScrollFrame", "OakLFGScrollFrame", OAK_LFG, "UIPanelScrollFrameTemplate")
@@ -98,8 +106,12 @@ suppBtn:SetScript("OnClick", function()
     if addonTable.SupportersPanel:IsShown() then
         addonTable.SupportersPanel:Hide()
     else
-        addonTable.FilterPanel:Hide()
+        if addonTable.FilterPanel then addonTable.FilterPanel:Hide() end
+        if addonTable.BrowserFilterPanel then addonTable.BrowserFilterPanel:Hide() end
         addonTable.SupportersPanel:Show()
+    end
+    if addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
     end
 end)
 
@@ -135,33 +147,62 @@ end
 local function SortGroups(grpA, grpB, sortBy, isAscending)
     local valA, valB
     local listingMode = GetListingMode()
+    local isBrowser = IsBrowserMode()
 
-    if sortBy == "role" then valA, valB = roleWeights[grpA.leadRole] or 99, roleWeights[grpB.leadRole] or 99
-    elseif sortBy == "class" then valA, valB = grpA.leadClass, grpB.leadClass
-    elseif sortBy == "spec" then 
-        valA = addonTable.SpecShortNames[grpA.leadSpec] or tostring(grpA.leadSpec or "")
-        valB = addonTable.SpecShortNames[grpB.leadSpec] or tostring(grpB.leadSpec or "")
-    elseif sortBy == "ilvl" then valA, valB = grpA.leadIlvl, grpB.leadIlvl
-    elseif sortBy == "rating" then
-        if listingMode == "rated_pvp" or listingMode == "pvp" then
-            valA, valB = grpA.leadPvpRating or 0, grpB.leadPvpRating or 0
-        elseif listingMode == "raid" or listingMode == "legacy_raid" then
-            valA = (grpA.leadRaidProgress and grpA.leadRaidProgress.sortValue) or 0
-            valB = (grpB.leadRaidProgress and grpB.leadRaidProgress.sortValue) or 0
-        else
-            valA, valB = grpA.leadRating, grpB.leadRating
+    if isBrowser then
+        if sortBy == "role" then valA, valB = grpA.dungeonName or grpA.activityFilterLabel or grpA.activityName or "", grpB.dungeonName or grpB.activityFilterLabel or grpB.activityName or ""
+        elseif sortBy == "class" then valA, valB = grpA.displayName or grpA.name or "", grpB.displayName or grpB.name or ""
+        elseif sortBy == "spec" then valA, valB = grpA.playstyleShortLabel or "", grpB.playstyleShortLabel or ""
+        elseif sortBy == "ilvl" then
+            local aCounts = grpA.roleCounts or {}
+            local bCounts = grpB.roleCounts or {}
+            valA = ((aCounts.TANK or 0) * 100) + ((aCounts.HEALER or 0) * 10) + (aCounts.DAMAGER or 0)
+            valB = ((bCounts.TANK or 0) * 100) + ((bCounts.HEALER or 0) * 10) + (bCounts.DAMAGER or 0)
+        elseif sortBy == "rating" then valA, valB = grpA.rating or 0, grpB.rating or 0
+        elseif sortBy == "key" then valA, valB = grpA.keyLevel or 0, grpB.keyLevel or 0
+        elseif sortBy == "note" then valA, valB = grpA.comment or "", grpB.comment or "" end
+    else
+        if sortBy == "role" then valA, valB = roleWeights[grpA.leadRole] or 99, roleWeights[grpB.leadRole] or 99
+        elseif sortBy == "class" then valA, valB = grpA.leadClass, grpB.leadClass
+        elseif sortBy == "spec" then 
+            valA = addonTable.SpecShortNames[grpA.leadSpec] or tostring(grpA.leadSpec or "")
+            valB = addonTable.SpecShortNames[grpB.leadSpec] or tostring(grpB.leadSpec or "")
+        elseif sortBy == "ilvl" then valA, valB = grpA.leadIlvl, grpB.leadIlvl
+        elseif sortBy == "rating" then
+            if listingMode == "rated_pvp" or listingMode == "pvp" then
+                valA, valB = grpA.leadPvpRating or 0, grpB.leadPvpRating or 0
+            elseif listingMode == "raid" or listingMode == "legacy_raid" then
+                valA = (grpA.leadRaidProgress and grpA.leadRaidProgress.sortValue) or 0
+                valB = (grpB.leadRaidProgress and grpB.leadRaidProgress.sortValue) or 0
+            else
+                valA, valB = grpA.leadRating, grpB.leadRating
+            end
+        elseif sortBy == "key" then
+            if listingMode == "rated_pvp" or listingMode == "pvp" then
+                valA, valB = grpA.leadPvpBracket or "", grpB.leadPvpBracket or ""
+            elseif listingMode == "raid" or listingMode == "legacy_raid" then
+                valA = (grpA.leadRaidProgress and grpA.leadRaidProgress.raidName) or ""
+                valB = (grpB.leadRaidProgress and grpB.leadRaidProgress.raidName) or ""
+            else
+                valA, valB = grpA.leadKey, grpB.leadKey
+            end
+        elseif sortBy == "note" then valA, valB = grpA.comment or "", grpB.comment or "" end
+    end
+
+    if isBrowser then
+        local priorityA, priorityB = GetBrowserApplicationPriority(grpA), GetBrowserApplicationPriority(grpB)
+        if priorityA ~= priorityB then
+            return priorityA > priorityB
         end
-    elseif sortBy == "key" then
-        if listingMode == "rated_pvp" or listingMode == "pvp" then
-            valA, valB = grpA.leadPvpBracket or "", grpB.leadPvpBracket or ""
-        elseif listingMode == "raid" or listingMode == "legacy_raid" then
-            valA = (grpA.leadRaidProgress and grpA.leadRaidProgress.raidName) or ""
-            valB = (grpB.leadRaidProgress and grpB.leadRaidProgress.raidName) or ""
-        else
-            valA, valB = grpA.leadKey, grpB.leadKey
+        if valA ~= valB then
+            if isAscending then return valA < valB else return valA > valB end
         end
-    elseif sortBy == "note" then valA, valB = grpA.comment or "", grpB.comment or "" end
-    
+        if grpA.rating ~= grpB.rating then
+            if isAscending then return grpA.rating < grpB.rating else return grpA.rating > grpB.rating end
+        end
+        if isAscending then return grpA.id < grpB.id else return grpA.id > grpB.id end
+    end
+
     if valA ~= valB then
         if isAscending then return valA < valB else return valA > valB end
     end
@@ -179,20 +220,60 @@ local keyHeader
 function addonTable.UpdateHeaderVisuals()
     local modeConfig = GetModeConfig()
     local showSecondaryMetric = UsesSecondaryMetricColumn()
+    local isBrowser = IsBrowserMode()
+    local browserColumns = {
+        role = B_DUNGEON,
+        class = B_TITLE,
+        spec = B_STYLE,
+        ilvl = B_SETUP,
+        rating = B_RATING,
+        key = B_KEY,
+    }
+    local defaultColumns = {
+        role = C_ROLE,
+        class = C_CLASS,
+        spec = C_SPEC,
+        ilvl = C_ILVL,
+        rating = C_RATING,
+        key = C_KEY,
+    }
 
     for _, header in ipairs(headers) do
+        local column = (isBrowser and browserColumns[header.sortKey]) or defaultColumns[header.sortKey]
+        if column then
+            header:ClearAllPoints()
+            header:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", column.x, HEADER_TOP_OFFSET)
+            header:SetSize(column.w, 22)
+            local leftPadding = (column.align == "LEFT") and 6 or 2
+            local rightPadding = (column.align == "LEFT") and 12 or 2
+            header.text:ClearAllPoints()
+            header.text:SetPoint("LEFT", header, "LEFT", leftPadding, 0)
+            header.text:SetPoint("RIGHT", header, "RIGHT", -rightPadding, 0)
+            header.text:SetJustifyH(column.align == "LEFT" and "LEFT" or "CENTER")
+        end
+
         if header.sortKey == "key" then
             if showSecondaryMetric then
                 header:Show()
             else
                 header:Hide()
             end
+        else
+            header:Show()
         end
 
         if header.sortKey == "rating" then
             header.text:SetText(modeConfig.ratingLabel)
         elseif header.sortKey == "key" then
             header.text:SetText(modeConfig.keyLabel)
+        elseif isBrowser and header.sortKey == "role" then
+            header.text:SetText("Dungeon")
+        elseif isBrowser and header.sortKey == "class" then
+            header.text:SetText("Title")
+        elseif isBrowser and header.sortKey == "spec" then
+            header.text:SetText("Style")
+        elseif isBrowser and header.sortKey == "ilvl" then
+            header.text:SetText("Setup")
         else
             header.text:SetText(header.baseText)
         end
@@ -253,6 +334,13 @@ local C_ILVL   = { x = 200, w = 40,  align = "CENTER" }
 local C_RATING = { x = 240, w = 90,  align = "CENTER" }
 local C_KEY    = { x = 330, w = 40,  align = "CENTER" }
 local C_NOTE   = { x = 370, w = 200, align = "LEFT" }
+local B_DUNGEON = { x = 10,  w = 130, align = "LEFT" }
+local B_TITLE   = { x = 140, w = 170, align = "LEFT" }
+local B_STYLE   = { x = 310, w = 64,  align = "LEFT" }
+local B_SETUP   = { x = 374, w = 58,  align = "CENTER" }
+local B_RATING  = { x = 432, w = 78,  align = "CENTER" }
+local B_KEY     = { x = 510, w = 44,  align = "CENTER" }
+local B_NOTE    = { x = 554, w = 76,  align = "LEFT" }
 local ROW_X_OFFSET = 10
 
 local function RowColumn(column)
@@ -266,8 +354,19 @@ local R_ILVL   = RowColumn(C_ILVL)
 local R_RATING = RowColumn(C_RATING)
 local R_KEY    = RowColumn(C_KEY)
 local R_NOTE   = RowColumn(C_NOTE)
+local BR_DUNGEON = RowColumn(B_DUNGEON)
+local BR_SETUP   = RowColumn(B_SETUP)
+local BR_TITLE   = RowColumn(B_TITLE)
+local BR_STYLE  = RowColumn(B_STYLE)
+local BR_RATING = RowColumn(B_RATING)
+local BR_KEY    = RowColumn(B_KEY)
+local BR_NOTE   = RowColumn(B_NOTE)
 
 local function GetCurrentNoteColumn()
+    if IsBrowserMode() then
+        return B_NOTE
+    end
+
     if UsesSecondaryMetricColumn() then
         return C_NOTE
     end
@@ -277,6 +376,69 @@ end
 
 local function GetCurrentRowNoteColumn()
     return RowColumn(GetCurrentNoteColumn())
+end
+
+local function GetBrowserApplicationPriority(result)
+    if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+        return 3
+    end
+    if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
+        return 1
+    end
+    return 2
+end
+
+local function GetBrowserSetupSummary(result)
+    local expectedRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
+    local sortedPlayers = {}
+    local roleOrder = { TANK = 1, HEALER = 2, DAMAGER = 3 }
+
+    for _, player in ipairs(result.players or {}) do
+        table.insert(sortedPlayers, player)
+    end
+
+    table.sort(sortedPlayers, function(a, b)
+        return (roleOrder[a.role] or 99) < (roleOrder[b.role] or 99)
+    end)
+
+    local usedPlayers = {}
+    local setup = {}
+    for index, expectedRole in ipairs(expectedRoles) do
+        local filled = false
+        local className = nil
+
+        for playerIndex, player in ipairs(sortedPlayers) do
+            if not usedPlayers[playerIndex] and player.role == expectedRole then
+                filled = true
+                className = player.class
+                usedPlayers[playerIndex] = true
+                break
+            end
+        end
+
+        setup[index] = {
+            role = expectedRole,
+            filled = filled,
+            class = className,
+        }
+    end
+
+    return setup
+end
+
+local function GetBrowserRowColor(result, isAltColor)
+    if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+        return 0.12, 0.32, 0.16, 0.55
+    end
+    if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
+        return 0.34, 0.10, 0.10, 0.55
+    end
+    if (result.numBNetFriends or 0) > 0 or (result.numCharFriends or 0) > 0 then
+        return 0.12, 0.22, 0.36, 0.50
+    end
+
+    local color = isAltColor and addonTable.ROW_COLOR_B or addonTable.ROW_COLOR_A
+    return unpack(color)
 end
 
 CreateHeader("Role", "role", C_ROLE)
@@ -291,13 +453,12 @@ notesToggleBtn:SetSize(C_NOTE.w, 22)
 
 local function UpdateNotesToggleLayout()
     local noteColumn = GetCurrentNoteColumn()
+    local toggleWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and 75 or noteColumn.w
+    local xOffset = noteColumn.x
+
     notesToggleBtn:ClearAllPoints()
-    notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", noteColumn.x, HEADER_TOP_OFFSET)
-    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
-        notesToggleBtn:SetWidth(75)
-    else
-        notesToggleBtn:SetWidth(noteColumn.w)
-    end
+    notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", xOffset, HEADER_TOP_OFFSET)
+    notesToggleBtn:SetWidth(toggleWidth)
 end
 
 local function UpdateNotesToggleVisual()
@@ -325,7 +486,7 @@ end)
 local rows = {}
 
 local function SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
-    OAK_LFG:SetResizeBounds(targetWidth, 420, targetWidth, 800)
+    OAK_LFG:SetResizeBounds(targetWidth, 444, targetWidth, 800)
     if preserveLeftEdge then
         local oldLeft = OAK_LFG:GetLeft()
         local oldBottom = OAK_LFG:GetBottom()
@@ -417,6 +578,70 @@ local function GetMemberSecondaryDisplay(member)
     return member.highestKey > 0 and "+" .. member.highestKey or "--"
 end
 
+local function GetBrowserRatingDisplay(result)
+    local listingMode = GetListingMode()
+
+    if listingMode == "raid" or listingMode == "legacy_raid" then
+        return (result.raidProgress and result.raidProgress.displayText) or "--"
+    end
+
+    local ratingNum = math.floor(result.rating or 0)
+    if ratingNum <= 0 then
+        return "--"
+    end
+
+    local cR, cG, cB = GetPreferredScoreColor(ratingNum, 1, 1, 1)
+    return string.format("|cFF%02x%02x%02x%d|r", cR * 255, cG * 255, cB * 255, ratingNum)
+end
+
+local function GetBrowserSecondaryDisplay(result)
+    local listingMode = GetListingMode()
+
+    if listingMode == "rated_pvp" or listingMode == "pvp" then
+        return result.pvpBracket or "--"
+    elseif listingMode == "raid" or listingMode == "legacy_raid" then
+        return "--"
+    end
+
+    return (result.keyLevel and result.keyLevel > 0) and ("+" .. result.keyLevel) or "--"
+end
+
+local function ConfigureBrowserRowLayout(row)
+    ConfigureTextColumn(row.dungeonText, row, BR_DUNGEON, 5)
+    ConfigureTextColumn(row.nameText, row, BR_TITLE, 5)
+    ConfigureTextColumn(row.specText, row, BR_STYLE, 4)
+    ConfigureTextColumn(row.ratingText, row, BR_RATING)
+    ConfigureTextColumn(row.keyText, row, BR_KEY)
+    ConfigureTextColumn(row.noteText, row, BR_NOTE, 5)
+end
+
+local function ConfigureApplicantRowLayout(row)
+    ConfigureTextColumn(row.nameText, row, R_CLASS, 5)
+    ConfigureTextColumn(row.specText, row, R_SPEC, 5)
+    ConfigureTextColumn(row.ilvlText, row, R_ILVL)
+    ConfigureTextColumn(row.ratingText, row, R_RATING)
+    ConfigureTextColumn(row.keyText, row, R_KEY)
+    ConfigureTextColumn(row.noteText, row, GetCurrentRowNoteColumn(), 5)
+end
+
+local function SetBrowserCompSlot(slotFrame, role, className, filled)
+    local coords = addonTable.RoleTexCoords[role]
+    if coords then
+        slotFrame.icon:SetTexCoord(unpack(coords))
+    end
+
+    if filled then
+        local classColor = RAID_CLASS_COLORS[string.upper(className or "")] or addonTable.ClassColor
+        slotFrame:SetBackdropColor(classColor.r, classColor.g, classColor.b, 0.95)
+        slotFrame.icon:SetDesaturated(false)
+        slotFrame.icon:SetAlpha(1)
+    else
+        slotFrame:SetBackdropColor(0.10, 0.10, 0.12, 0.95)
+        slotFrame.icon:SetDesaturated(true)
+        slotFrame.icon:SetAlpha(0.45)
+    end
+end
+
 local function CreateRow(index)
     local row = CreateFrame("Button", nil, scrollChild)
     row:SetHeight(ROW_HEIGHT)
@@ -439,8 +664,61 @@ local function CreateRow(index)
 
     row:SetScript("OnEnter", function(self) 
         self.hoverBg:Show() 
-        
-        if self.applicantID and self.memberIdx then
+
+        if self.searchResultID and self.searchResult then
+            GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
+            GameTooltip:ClearLines()
+
+            local result = self.searchResult
+            local listingMode = GetListingMode()
+
+            GameTooltip:AddLine(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "Group Listing"), 1, 1, 1)
+            if result.leaderName and result.leaderName ~= "" then
+                GameTooltip:AddDoubleLine("Leader:", addonTable.ApplyClassColor(result.leaderName, result.leaderClass), 1, 1, 1, 1, 1, 1)
+            end
+            if result.activityName and result.activityName ~= "" then
+                GameTooltip:AddDoubleLine("Activity:", result.activityName, 1, 1, 1, 1, 1, 1)
+            end
+            if (result.numBNetFriends or 0) > 0 or (result.numCharFriends or 0) > 0 then
+                GameTooltip:AddDoubleLine("Friends:", string.format("%d BNet / %d WoW", result.numBNetFriends or 0, result.numCharFriends or 0), 0.6, 0.85, 1, 0.6, 0.85, 1)
+            end
+
+            GameTooltip:AddDoubleLine("Members:", tostring(result.numMembers or 0), 1, 1, 1, 1, 1, 1)
+            GameTooltip:AddDoubleLine("Comp:", string.format("%d/%d/%d", result.roleCounts.TANK or 0, result.roleCounts.HEALER or 0, result.roleCounts.DAMAGER or 0), 1, 1, 1, 1, 1, 1)
+
+            if listingMode == "rated_pvp" or listingMode == "pvp" then
+                GameTooltip:AddDoubleLine("PVP Rating:", (result.pvpRating and result.pvpRating > 0) and result.pvpRating or "--", 1, 1, 1, 1, 1, 1)
+                if result.pvpBracket then
+                    GameTooltip:AddDoubleLine("Bracket:", result.pvpBracket, 1, 1, 1, 1, 1, 1)
+                end
+            elseif listingMode == "raid" or listingMode == "legacy_raid" then
+                GameTooltip:AddDoubleLine("Progress:", (result.raidProgress and result.raidProgress.longText) or "--", 1, 1, 1, 1, 1, 1)
+            else
+                GameTooltip:AddDoubleLine("M+ Rating:", (result.rating and result.rating > 0) and result.rating or "--", 1, 1, 1, 1, 1, 1)
+                if result.keyLevel and result.keyLevel > 0 then
+                    GameTooltip:AddDoubleLine("Parsed Key:", "+" .. result.keyLevel, 1, 1, 1, 1, 1, 1)
+                end
+            end
+
+            if result.playstyleLabel and result.playstyleLabel ~= "" and result.playstyleLabel ~= "Any" then
+                GameTooltip:AddDoubleLine("Playstyle:", result.playstyleLabel, 1, 1, 1, 1, 1, 1)
+            end
+
+            if result.requiredItemLevel and result.requiredItemLevel > 0 then
+                GameTooltip:AddDoubleLine("Req iLvl:", tostring(result.requiredItemLevel), 1, 1, 1, 1, 1, 1)
+            end
+            if result.requiredDungeonScore and result.requiredDungeonScore > 0 then
+                GameTooltip:AddDoubleLine("Req Rating:", tostring(result.requiredDungeonScore), 1, 1, 1, 1, 1, 1)
+            end
+
+            if result.comment and result.comment ~= "" then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Listing Note:", 1, 0.8, 0)
+                GameTooltip:AddLine(result.comment, 0.85, 0.85, 0.85, true)
+            end
+
+            GameTooltip:Show()
+        elseif self.applicantID and self.memberIdx then
             GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
             GameTooltip:ClearLines()
 
@@ -590,7 +868,11 @@ local function CreateRow(index)
 
     row:RegisterForClicks("LeftButtonUp")
     row:SetScript("OnDoubleClick", function(self)
-        if self.groupID then 
+        if self.searchResultID then
+            if addonTable.ApplyToSearchResult then
+                addonTable.ApplyToSearchResult(self.searchResultID)
+            end
+        elseif self.groupID then 
             C_LFGList.InviteApplicant(self.groupID)
             if self.inviteBtn then 
                 self.inviteBtn:Hide()
@@ -607,26 +889,33 @@ local function CreateRow(index)
     row.roleIcon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
 
     row.nameText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    ConfigureTextColumn(row.nameText, row, R_CLASS, 5)
-
+    row.dungeonText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
     row.specText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    ConfigureTextColumn(row.specText, row, R_SPEC, 5)
-
     row.ilvlText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    ConfigureTextColumn(row.ilvlText, row, R_ILVL)
-
     row.ratingText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    ConfigureTextColumn(row.ratingText, row, R_RATING)
-
     row.keyText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    ConfigureTextColumn(row.keyText, row, R_KEY)
-    
     row.noteText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    ConfigureTextColumn(row.noteText, row, GetCurrentRowNoteColumn(), 5)
     row.noteText:SetTextColor(0.7, 0.7, 0.7) 
     if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
         row.noteText:Hide()
     end
+
+    row.compSlots = {}
+    local compRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
+    for index, role in ipairs(compRoles) do
+        local slot = CreateFrame("Frame", nil, row, "BackdropTemplate")
+        slot:SetSize(12, 12)
+        slot:SetPoint("LEFT", row, "LEFT", BR_SETUP.x + ((index - 1) * 11) + 2, 0)
+        slot:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+        slot:SetBackdropBorderColor(0, 0, 0, 1)
+        slot.icon = slot:CreateTexture(nil, "OVERLAY")
+        slot.icon:SetPoint("CENTER")
+        slot.icon:SetSize(10, 10)
+        slot.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
+        row.compSlots[index] = slot
+    end
+
+    ConfigureApplicantRowLayout(row)
 
     row.declineBtn = CreateFrame("Button", nil, row)
     row.declineBtn:SetSize(20, 20)
@@ -665,6 +954,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
     local targetWidth = GetTargetFrameWidth()
     local showSecondaryMetric = UsesSecondaryMetricColumn()
     local rowNoteColumn = GetCurrentRowNoteColumn()
+    local isBrowser = IsBrowserMode()
 
     if not showSecondaryMetric and addonTable.CurrentSortBy == "key" then
         addonTable.CurrentSortBy = "rating"
@@ -676,10 +966,28 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
             if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
         end
         if row.noteText then
-            ConfigureTextColumn(row.noteText, row, rowNoteColumn, 5)
+            if isBrowser then
+                ConfigureBrowserRowLayout(row)
+            else
+                ConfigureApplicantRowLayout(row)
+            end
         end
         if row.noteText then
             if hideNotes then row.noteText:Hide() else row.noteText:Show() end
+        end
+        if row.dungeonText then
+            if isBrowser then row.dungeonText:Show() else row.dungeonText:Hide() end
+        end
+        if row.roleIcon then
+            if isBrowser then row.roleIcon:Hide() else row.roleIcon:Show() end
+        end
+        if row.ilvlText then
+            if isBrowser then row.ilvlText:Hide() else row.ilvlText:Show() end
+        end
+        if row.compSlots then
+            for _, slot in pairs(row.compSlots) do
+                if isBrowser then slot:Show() else slot:Hide() end
+            end
         end
     end
 
@@ -709,97 +1017,210 @@ addonTable.ApplyHideNotesLayout()
 function addonTable.UpdateDisplay()
     addonTable.UpdateGroupBuffs()
     addonTable.UpdateHeaderVisuals()
-
-    local activeGroups = {}
-    for _, group in ipairs(addonTable.ApplicantGroups) do
-        if addonTable.GroupPassesFilters(group) then
-            table.insert(activeGroups, group)
-        end
+    if addonTable.UpdateTopBarActions then
+        addonTable.UpdateTopBarActions()
     end
-
-    table.sort(activeGroups, function(a, b) 
-        return SortGroups(a, b, addonTable.CurrentSortBy, addonTable.CurrentIsAscending) 
-    end)
 
     for _, row in ipairs(rows) do row:Hide() end
 
+    local isBrowser = IsBrowserMode()
     local displayIndex = 1
-    local isAltColor = false 
+    local isAltColor = false
+    local showSecondaryMetric = UsesSecondaryMetricColumn()
 
-    for _, group in ipairs(activeGroups) do
-        local isMulti = group.numMembers > 1
-        local bgColor = isAltColor and addonTable.ROW_COLOR_B or addonTable.ROW_COLOR_A
-        local showSecondaryMetric = UsesSecondaryMetricColumn()
+    if isBrowser then
+        local activeResults = {}
+        for _, result in ipairs(addonTable.SearchResults or {}) do
+            if not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result) then
+                table.insert(activeResults, result)
+            end
+        end
 
-        for i, member in ipairs(group.members) do
+        table.sort(activeResults, function(a, b)
+            return SortGroups(a, b, addonTable.CurrentSortBy, addonTable.CurrentIsAscending)
+        end)
+
+        for _, result in ipairs(activeResults) do
             if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
             local row = rows[displayIndex]
-            
-            row.groupID = group.id
-            row.applicantID = group.id
-            row.memberIdx = member.memberIdx
-            row.memberName = member.name
-            row.fullComment = group.comment 
-            row.rioProfile = member.rioProfile 
-            row.memberRating = member.rating
-            row.memberPvpRating = member.pvpRating
-            row.memberPvpBracket = member.pvpBracket
-            row.memberRaidProgress = member.raidProgress
 
-            row.bg:SetColorTexture(unpack(bgColor))
+            row.searchResultID = result.id
+            row.searchResult = result
+            row.groupID = nil
+            row.applicantID = nil
+            row.memberIdx = nil
+            row.fullComment = result.comment
+            row.rioProfile = result.leaderProfile
+            row.memberRating = result.rating
+            row.memberPvpRating = result.pvpRating
+            row.memberPvpBracket = result.pvpBracket
+            row.memberRaidProgress = result.raidProgress
 
-            local coords = addonTable.RoleTexCoords[member.role]
-            if coords then
-                row.roleIcon:SetTexCoord(unpack(coords))
-                row.roleIcon:Show()
-            else
-                row.roleIcon:Hide()
-            end
-            
-            local specAbbr = addonTable.SpecShortNames and addonTable.SpecShortNames[member.specID] or ""
-            row.specText:SetText(addonTable.ApplyClassColor(specAbbr, member.class))
-            
-            local formattedName = addonTable.ApplyClassColor(member.name, member.class)
-            
-            if member.isFriend then
-                formattedName = "|TInterface\\ChatFrame\\UI-ChatIcon-Battlenet:14|t " .. formattedName
-            end
-            
-            if isMulti then
-                formattedName = (i == 1) and " " .. formattedName or "   * " .. formattedName 
-            end
-            
-            row.nameText:SetText(formattedName); row.ilvlText:SetText(member.ilvl)
+            row.bg:SetColorTexture(GetBrowserRowColor(result, isAltColor))
 
-            row.ratingText:SetText(GetMemberRatingDisplay(member))
-            row.keyText:SetText(GetMemberSecondaryDisplay(member))
+            ConfigureBrowserRowLayout(row)
+            row.dungeonText:Show()
+            row.roleIcon:Hide()
+            row.ilvlText:Hide()
+            for _, slot in pairs(row.compSlots) do
+                slot:Show()
+            end
+
+            local setupSummary = GetBrowserSetupSummary(result)
+            for index, slotInfo in ipairs(setupSummary) do
+                SetBrowserCompSlot(row.compSlots[index], slotInfo.role, slotInfo.class, slotInfo.filled)
+            end
+
+            row.nameText:SetText(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--"))
+            row.specText:SetText(result.playstyleShortLabel or "--")
+            row.ratingText:SetText(GetBrowserRatingDisplay(result))
+            row.keyText:SetText(GetBrowserSecondaryDisplay(result))
             if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
 
-            if i == 1 then
-                row.noteText:SetText(group.comment or "")
-                
-                row.statusText:Hide()
-                row.inviteBtn:SetScript("OnClick", function() 
-                    C_LFGList.InviteApplicant(group.id)
-                    row.inviteBtn:Hide()
-                    row.declineBtn:Hide()
-                    row.statusText:SetText("Invited")
-                    row.statusText:Show()
+            row.noteText:SetText(result.comment or "")
+            row.dungeonText:SetText(result.dungeonName ~= "" and result.dungeonName or "--")
+
+            row.statusText:Hide()
+            row.declineBtn:Hide()
+            row.inviteBtn:Show()
+            if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+                row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
+                row.inviteBtn:SetScript("OnClick", function()
+                    C_LFGList.CancelApplication(result.id)
                 end)
-                row.declineBtn:SetScript("OnClick", function() 
-                    C_LFGList.DeclineApplicant(group.id)
+                row.inviteBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Cancel", 1, 0.2, 0.2)
+                    GameTooltip:Show()
                 end)
-                row.inviteBtn:Show(); row.declineBtn:Show()
-            else 
-                row.noteText:SetText("")
-                row.inviteBtn:Hide(); row.declineBtn:Hide() 
-                row.statusText:Hide()
+                row.inviteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            else
+                row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
+                row.inviteBtn:SetScript("OnClick", function()
+                    if addonTable.ApplyToSearchResult then
+                        addonTable.ApplyToSearchResult(result.id)
+                    end
+                    addonTable.UpdateDisplay()
+                end)
+                row.inviteBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Apply", 0.2, 1, 0.2)
+                    GameTooltip:Show()
+                end)
+                row.inviteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
             end
 
             row:Show()
             displayIndex = displayIndex + 1
+            isAltColor = not isAltColor
         end
-        isAltColor = not isAltColor
+    else
+        local activeGroups = {}
+        for _, group in ipairs(addonTable.ApplicantGroups) do
+            if addonTable.GroupPassesFilters(group) then
+                table.insert(activeGroups, group)
+            end
+        end
+
+        table.sort(activeGroups, function(a, b)
+            return SortGroups(a, b, addonTable.CurrentSortBy, addonTable.CurrentIsAscending)
+        end)
+
+        for _, group in ipairs(activeGroups) do
+            local isMulti = group.numMembers > 1
+            local bgColor = isAltColor and addonTable.ROW_COLOR_B or addonTable.ROW_COLOR_A
+
+            for i, member in ipairs(group.members) do
+                if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
+            local row = rows[displayIndex]
+
+                row.searchResultID = nil
+                row.searchResult = nil
+                row.groupID = group.id
+                row.applicantID = group.id
+                row.memberIdx = member.memberIdx
+                row.memberName = member.name
+                row.fullComment = group.comment
+                row.rioProfile = member.rioProfile
+                row.memberRating = member.rating
+                row.memberPvpRating = member.pvpRating
+                row.memberPvpBracket = member.pvpBracket
+                row.memberRaidProgress = member.raidProgress
+
+                row.bg:SetColorTexture(unpack(bgColor))
+                ConfigureApplicantRowLayout(row)
+                row.dungeonText:Hide()
+                row.roleIcon:Show()
+                row.ilvlText:Show()
+                for _, slot in pairs(row.compSlots) do
+                    slot:Hide()
+                end
+
+                local coords = addonTable.RoleTexCoords[member.role]
+                if coords then
+                    row.roleIcon:SetTexCoord(unpack(coords))
+                    row.roleIcon:Show()
+                else
+                    row.roleIcon:Hide()
+                end
+
+                local specAbbr = addonTable.SpecShortNames and addonTable.SpecShortNames[member.specID] or ""
+                row.specText:SetText(addonTable.ApplyClassColor(specAbbr, member.class))
+
+                local formattedName = addonTable.ApplyClassColor(member.name, member.class)
+                if member.isFriend then
+                    formattedName = "|TInterface\\ChatFrame\\UI-ChatIcon-Battlenet:14|t " .. formattedName
+                end
+                if isMulti then
+                    formattedName = (i == 1) and " " .. formattedName or "   * " .. formattedName
+                end
+
+                row.nameText:SetText(formattedName)
+                row.ilvlText:SetText(member.ilvl)
+                row.ratingText:SetText(GetMemberRatingDisplay(member))
+                row.keyText:SetText(GetMemberSecondaryDisplay(member))
+                if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
+
+                if i == 1 then
+                    row.noteText:SetText(group.comment or "")
+                    row.statusText:Hide()
+                    row.inviteBtn:SetScript("OnClick", function()
+                        C_LFGList.InviteApplicant(group.id)
+                        row.inviteBtn:Hide()
+                        row.declineBtn:Hide()
+                        row.statusText:SetText("Invited")
+                        row.statusText:Show()
+                    end)
+                    row.inviteBtn:SetScript("OnEnter", function(self)
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetText("Invite", 0.2, 1, 0.2)
+                        GameTooltip:Show()
+                    end)
+                    row.inviteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                    row.declineBtn:SetScript("OnClick", function()
+                        C_LFGList.DeclineApplicant(group.id)
+                    end)
+                    row.declineBtn:SetScript("OnEnter", function(self)
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetText("Decline", 1, 0.2, 0.2)
+                        GameTooltip:Show()
+                    end)
+                    row.declineBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                    row.inviteBtn:Show()
+                    row.declineBtn:Show()
+                else
+                    row.noteText:SetText("")
+                    row.inviteBtn:Hide()
+                    row.declineBtn:Hide()
+                    row.statusText:Hide()
+                end
+
+                row:Show()
+                displayIndex = displayIndex + 1
+            end
+
+            isAltColor = not isAltColor
+        end
     end
 
     scrollChild:SetHeight(math.max(1, (displayIndex - 1) * ROW_HEIGHT))

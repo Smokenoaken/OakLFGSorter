@@ -2,11 +2,11 @@ local addonName, addonTable = ...
 
 local OAK_LFG = CreateFrame("Frame", "OakensoulLFGSorterFrame", UIParent, "BackdropTemplate")
 addonTable.OAK_LFG = OAK_LFG 
-OAK_LFG:SetSize(660, 420) 
+OAK_LFG:SetSize(660, 444) 
 OAK_LFG:SetPoint("CENTER")
 OAK_LFG:SetMovable(true)
 OAK_LFG:SetResizable(true)
-OAK_LFG:SetResizeBounds(660, 420, 660, 800) 
+OAK_LFG:SetResizeBounds(660, 444, 660, 800) 
 OAK_LFG:EnableMouse(true)
 OAK_LFG:RegisterForDrag("LeftButton")
 OAK_LFG:SetScript("OnDragStart", OAK_LFG.StartMoving)
@@ -114,24 +114,49 @@ end)
 
 function addonTable.AutoPosition()
     if not addonTable.OAK_LFG then return end
-    if OakLFGSorterDB and OakLFGSorterDB.framePos then return end 
+    if OakLFGSorterDB and OakLFGSorterDB.framePos then
+        if addonTable.AnchorRIOPanelToOak then
+            addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+        end
+        return
+    end 
 
     if PVEFrame and PVEFrame:IsShown() then
         addonTable.OAK_LFG:ClearAllPoints()
-        local xOffset = 2
-        
-        if RaiderIO_ProfileTooltip and RaiderIO_ProfileTooltip:IsShown() then
-            local rioWidth = RaiderIO_ProfileTooltip:GetWidth() or 0
-            if rioWidth > 0 then
-                xOffset = xOffset + rioWidth + 2
-            end
+        addonTable.OAK_LFG:SetPoint("TOPLEFT", PVEFrame, "TOPRIGHT", 2, 0)
+        if addonTable.AnchorRIOPanelToOak then
+            addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
         end
-        
-        addonTable.OAK_LFG:SetPoint("TOPLEFT", PVEFrame, "TOPRIGHT", xOffset, 0)
     elseif not addonTable.OAK_LFG:GetPoint() then
         addonTable.OAK_LFG:ClearAllPoints()
         addonTable.OAK_LFG:SetPoint("CENTER")
     end
+end
+
+function addonTable.AnchorRIOPanelToOak(ownerFrame)
+    if not (ownerFrame and RaiderIO_ProfileTooltip and RaiderIO_ProfileTooltip:IsShown()) then
+        return
+    end
+
+    local anchorTarget = ownerFrame
+    if ownerFrame == addonTable.OAK_LFG then
+        if addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() then
+            anchorTarget = addonTable.BrowserFilterPanel
+        elseif addonTable.FilterPanel and addonTable.FilterPanel:IsShown() then
+            anchorTarget = addonTable.FilterPanel
+        elseif addonTable.SupportersPanel and addonTable.SupportersPanel:IsShown() then
+            anchorTarget = addonTable.SupportersPanel
+        end
+    elseif ownerFrame == addonTable.OAK_SEARCH then
+        if addonTable.SearchFilterPanel and addonTable.SearchFilterPanel:IsShown() then
+            anchorTarget = addonTable.SearchFilterPanel
+        elseif addonTable.SearchSupportersPanel and addonTable.SearchSupportersPanel:IsShown() then
+            anchorTarget = addonTable.SearchSupportersPanel
+        end
+    end
+
+    RaiderIO_ProfileTooltip:ClearAllPoints()
+    RaiderIO_ProfileTooltip:SetPoint("TOPLEFT", anchorTarget, "TOPRIGHT", 2, 0)
 end
 
 local rioHooked = false
@@ -142,7 +167,11 @@ function addonTable.CheckRIOHook()
             if addonTable.OAK_LFG:IsShown() then addonTable.AutoPosition() end
         end)
         RaiderIO_ProfileTooltip:HookScript("OnShow", function()
-            if addonTable.OAK_LFG:IsShown() then addonTable.AutoPosition() end
+            if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
+                addonTable.AnchorRIOPanelToOak(addonTable.OAK_SEARCH)
+            elseif addonTable.OAK_LFG:IsShown() then
+                addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+            end
         end)
     end
 end
