@@ -1,3 +1,9 @@
+## v1.6.8-alpha1
+
+- Added the Oak Find Group browser view for Blizzard search results with dedicated browser rows and filters
+- Hosted Blizzard's native search box inside the Oak filter pane without search drift while preserving direct search execution
+- Polished browser column spacing, compact Notes behavior, and Raider.IO tooltip anchoring around the new search panes
+
 ## v1.6.7
 
 - Added adaptive applicant modes that change the sorter display based on the active listing type
