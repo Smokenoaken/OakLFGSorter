@@ -1,3 +1,7 @@
+## v1.6.8-alpha2
+
+- Removed accidental local `.claude` worktree metadata from the tracked repo contents so the published alpha tree stays clean
+
 ## v1.6.8-alpha1
 
 - Added the Oak Find Group browser view for Blizzard search results with dedicated browser rows and filters
