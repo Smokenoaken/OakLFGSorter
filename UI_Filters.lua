@@ -496,6 +496,20 @@ filterPanel:SetBackdrop({
 })
 filterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 filterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+filterPanel:HookScript("OnShow", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end)
+filterPanel:HookScript("OnHide", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end)
 
 local filterTitle = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 filterTitle:SetPoint("TOP", filterPanel, "TOP", 0, -10)
@@ -705,6 +719,20 @@ browserFilterPanel:SetBackdrop({
 })
 browserFilterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 browserFilterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+browserFilterPanel:HookScript("OnShow", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end)
+browserFilterPanel:HookScript("OnHide", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end)
 
 local browserTitle = browserFilterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 browserTitle:SetPoint("TOP", browserFilterPanel, "TOP", 0, -10)
@@ -1142,6 +1170,20 @@ supportersPanel:SetBackdrop({
 })
 supportersPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 supportersPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+supportersPanel:HookScript("OnShow", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end)
+supportersPanel:HookScript("OnHide", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end)
 
 local suppTitle = supportersPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 suppTitle:SetPoint("TOP", supportersPanel, "TOP", 0, -10)

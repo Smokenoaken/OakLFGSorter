@@ -215,6 +215,42 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
     if isAscending then return grpA.id < grpB.id else return grpA.id > grpB.id end
 end
 
+-- Master Column Coordinates
+local C_ROLE   = { x = 10,  w = 35,  align = "CENTER" }
+local C_CLASS  = { x = 45,  w = 110, align = "LEFT" }
+local C_SPEC   = { x = 155, w = 45,  align = "LEFT" }
+local C_ILVL   = { x = 200, w = 40,  align = "CENTER" }
+local C_RATING = { x = 240, w = 90,  align = "CENTER" }
+local C_KEY    = { x = 330, w = 40,  align = "CENTER" }
+local C_NOTE   = { x = 370, w = 200, align = "LEFT" }
+local B_DUNGEON = { x = 10,  w = 130, align = "LEFT" }
+local B_TITLE   = { x = 140, w = 170, align = "LEFT" }
+local B_STYLE   = { x = 310, w = 64,  align = "LEFT" }
+local B_SETUP   = { x = 374, w = 58,  align = "CENTER" }
+local B_RATING  = { x = 432, w = 78,  align = "CENTER" }
+local B_KEY     = { x = 510, w = 44,  align = "CENTER" }
+local B_NOTE    = { x = 554, w = 76,  align = "LEFT" }
+local ROW_X_OFFSET = 10
+
+local function RowColumn(column)
+    return { x = column.x - ROW_X_OFFSET, w = column.w, align = column.align }
+end
+
+local R_ROLE   = RowColumn(C_ROLE)
+local R_CLASS  = RowColumn(C_CLASS)
+local R_SPEC   = RowColumn(C_SPEC)
+local R_ILVL   = RowColumn(C_ILVL)
+local R_RATING = RowColumn(C_RATING)
+local R_KEY    = RowColumn(C_KEY)
+local R_NOTE   = RowColumn(C_NOTE)
+local BR_DUNGEON = RowColumn(B_DUNGEON)
+local BR_SETUP   = RowColumn(B_SETUP)
+local BR_TITLE   = RowColumn(B_TITLE)
+local BR_STYLE  = RowColumn(B_STYLE)
+local BR_RATING = RowColumn(B_RATING)
+local BR_KEY    = RowColumn(B_KEY)
+local BR_NOTE   = RowColumn(B_NOTE)
+
 local headers = {}
 local keyHeader
 function addonTable.UpdateHeaderVisuals()
@@ -326,42 +362,6 @@ local function CreateHeader(label, sortKey, column)
     return btn
 end
 
--- Master Column Coordinates
-local C_ROLE   = { x = 10,  w = 35,  align = "CENTER" }
-local C_CLASS  = { x = 45,  w = 110, align = "LEFT" }
-local C_SPEC   = { x = 155, w = 45,  align = "LEFT" }
-local C_ILVL   = { x = 200, w = 40,  align = "CENTER" }
-local C_RATING = { x = 240, w = 90,  align = "CENTER" }
-local C_KEY    = { x = 330, w = 40,  align = "CENTER" }
-local C_NOTE   = { x = 370, w = 200, align = "LEFT" }
-local B_DUNGEON = { x = 10,  w = 130, align = "LEFT" }
-local B_TITLE   = { x = 140, w = 170, align = "LEFT" }
-local B_STYLE   = { x = 310, w = 64,  align = "LEFT" }
-local B_SETUP   = { x = 374, w = 58,  align = "CENTER" }
-local B_RATING  = { x = 432, w = 78,  align = "CENTER" }
-local B_KEY     = { x = 510, w = 44,  align = "CENTER" }
-local B_NOTE    = { x = 554, w = 76,  align = "LEFT" }
-local ROW_X_OFFSET = 10
-
-local function RowColumn(column)
-    return { x = column.x - ROW_X_OFFSET, w = column.w, align = column.align }
-end
-
-local R_ROLE   = RowColumn(C_ROLE)
-local R_CLASS  = RowColumn(C_CLASS)
-local R_SPEC   = RowColumn(C_SPEC)
-local R_ILVL   = RowColumn(C_ILVL)
-local R_RATING = RowColumn(C_RATING)
-local R_KEY    = RowColumn(C_KEY)
-local R_NOTE   = RowColumn(C_NOTE)
-local BR_DUNGEON = RowColumn(B_DUNGEON)
-local BR_SETUP   = RowColumn(B_SETUP)
-local BR_TITLE   = RowColumn(B_TITLE)
-local BR_STYLE  = RowColumn(B_STYLE)
-local BR_RATING = RowColumn(B_RATING)
-local BR_KEY    = RowColumn(B_KEY)
-local BR_NOTE   = RowColumn(B_NOTE)
-
 local function GetCurrentNoteColumn()
     if IsBrowserMode() then
         return B_NOTE
@@ -464,6 +464,7 @@ end
 local function UpdateNotesToggleVisual()
     notesToggleBtn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
     notesToggleBtn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    notesToggleBtn.text:SetText((OakLFGSorterDB and OakLFGSorterDB.hideNotes) and "Notes" or "Hide Notes")
 end
 
 notesToggleBtn:SetScript("OnEnter", function(self)

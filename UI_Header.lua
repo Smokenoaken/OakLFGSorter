@@ -159,6 +159,25 @@ function addonTable.AnchorRIOPanelToOak(ownerFrame)
     RaiderIO_ProfileTooltip:SetPoint("TOPLEFT", anchorTarget, "TOPRIGHT", 2, 0)
 end
 
+function addonTable.RefreshRIOAnchor()
+    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_SEARCH)
+    elseif addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    elseif RaiderIO_ProfileTooltip and RaiderIO_ProfileTooltip:IsShown() then
+        local fallback = nil
+        if LFGListFrame and LFGListFrame:IsShown() then
+            fallback = LFGListFrame
+        elseif PVEFrame and PVEFrame:IsShown() then
+            fallback = PVEFrame
+        end
+        if fallback then
+            RaiderIO_ProfileTooltip:ClearAllPoints()
+            RaiderIO_ProfileTooltip:SetPoint("TOPLEFT", fallback, "TOPRIGHT", 2, 0)
+        end
+    end
+end
+
 local rioHooked = false
 function addonTable.CheckRIOHook()
     if not rioHooked and RaiderIO_ProfileTooltip then
@@ -167,14 +186,18 @@ function addonTable.CheckRIOHook()
             if addonTable.OAK_LFG:IsShown() then addonTable.AutoPosition() end
         end)
         RaiderIO_ProfileTooltip:HookScript("OnShow", function()
-            if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
-                addonTable.AnchorRIOPanelToOak(addonTable.OAK_SEARCH)
-            elseif addonTable.OAK_LFG:IsShown() then
-                addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
-            end
+            addonTable.RefreshRIOAnchor()
         end)
     end
 end
+
+OAK_LFG:HookScript("OnShow", function()
+    addonTable.RefreshRIOAnchor()
+end)
+
+OAK_LFG:HookScript("OnHide", function()
+    addonTable.RefreshRIOAnchor()
+end)
 
 scaleReset:SetScript("OnClick", function()
     scaleSlider:SetValue(1.0)

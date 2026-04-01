@@ -21,6 +21,10 @@ local RequestUpdate
 local ApplyOakSearchQuery
 local ScheduleSearchRefresh
 local searchQueryBtn
+local GetNativeSearchBox
+local AttachNativeSearchBoxToOak
+local RestoreNativeSearchBox
+local ShouldHostNativeSearchBox
 
 local function ApplyClassColor(text, classStr)
     local c = RAID_CLASS_COLORS[string.upper(classStr or "")]
@@ -263,6 +267,20 @@ supportersPanel:SetBackdrop({
 })
 supportersPanel:SetBackdropColor(unpack(OAK_COLOR_BG))
 supportersPanel:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+supportersPanel:HookScript("OnShow", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(OAK_SEARCH)
+    end
+end)
+supportersPanel:HookScript("OnHide", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(OAK_SEARCH)
+    end
+end)
 
 local suppTitle = supportersPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 suppTitle:SetPoint("TOP", supportersPanel, "TOP", 0, -10)
@@ -348,6 +366,20 @@ filterPanel:SetBackdrop({
 })
 filterPanel:SetBackdropColor(unpack(OAK_COLOR_BG))
 filterPanel:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+filterPanel:HookScript("OnShow", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(OAK_SEARCH)
+    end
+end)
+filterPanel:HookScript("OnHide", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(OAK_SEARCH)
+    end
+end)
 
 local filterTitle = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 filterTitle:SetPoint("TOP", filterPanel, "TOP", 0, -10)
@@ -357,11 +389,15 @@ filterTitle:SetTextColor(classColor.r, classColor.g, classColor.b)
 toggleFiltersBtn:SetScript("OnClick", function()
     if filterPanel:IsShown() then
         filterPanel:Hide()
-        RestoreNativeSearchBox()
+        if RestoreNativeSearchBox then
+            RestoreNativeSearchBox()
+        end
     else
         supportersPanel:Hide()
         filterPanel:Show()
-        AttachNativeSearchBoxToOak()
+        if AttachNativeSearchBoxToOak then
+            AttachNativeSearchBoxToOak()
+        end
     end
     if addonTable.AnchorRIOPanelToOak then
         addonTable.AnchorRIOPanelToOak(OAK_SEARCH)
@@ -448,6 +484,7 @@ local divTexture
 local filterDungeonContainer
 local nativeSearchBoxHost
 local nativeSearchBoxOriginalState
+local nativeAutoCompleteOriginalState
 
 local OAK_F = {
     Difficulty = 1,
@@ -514,13 +551,16 @@ local function CreateOakToggleBox(parent, label, stateKey, triggersSync)
     return box
 end
 
-local function GetNativeSearchBox()
+GetNativeSearchBox = function()
     return LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel.SearchBox
 end
 
-local function AttachNativeSearchBoxToOak()
+AttachNativeSearchBoxToOak = function()
     local searchBox = GetNativeSearchBox()
-    if not (searchBox and nativeSearchBoxHost) then
+    if not (searchBox and keyQueryBox) then
+        return
+    end
+    if not ShouldHostNativeSearchBox() then
         return
     end
 
@@ -535,25 +575,91 @@ local function AttachNativeSearchBoxToOak()
             yOfs = yOfs,
             width = searchBox:GetWidth(),
             height = searchBox:GetHeight(),
+            frameLevel = searchBox:GetFrameLevel(),
+            frameStrata = searchBox:GetFrameStrata(),
+            onEnterPressed = searchBox:GetScript("OnEnterPressed"),
+            onEscapePressed = searchBox:GetScript("OnEscapePressed"),
         }
     end
 
+    keyQueryBox.SearchBox = searchBox
+    if LFGListFrame and LFGListFrame.SearchPanel then
+        keyQueryBox.AutoCompleteFrame = LFGListFrame.SearchPanel.AutoCompleteFrame
+        if keyQueryBox.AutoCompleteFrame then
+            local autoCompleteFrame = keyQueryBox.AutoCompleteFrame
+            if not nativeAutoCompleteOriginalState then
+                local point, relativeTo, relativePoint, xOfs, yOfs = autoCompleteFrame:GetPoint(1)
+                nativeAutoCompleteOriginalState = {
+                    parent = autoCompleteFrame:GetParent(),
+                    point = point,
+                    relativeTo = relativeTo,
+                    relativePoint = relativePoint,
+                    xOfs = xOfs,
+                    yOfs = yOfs,
+                    frameLevel = autoCompleteFrame:GetFrameLevel(),
+                    frameStrata = autoCompleteFrame:GetFrameStrata(),
+                }
+            end
+            autoCompleteFrame:SetParent(filterPanel)
+            autoCompleteFrame:ClearAllPoints()
+            autoCompleteFrame:SetPoint("TOPLEFT", keyQueryBox, "BOTTOMLEFT", 0, -2)
+            autoCompleteFrame:SetFrameStrata("TOOLTIP")
+            autoCompleteFrame:SetFrameLevel(filterPanel:GetFrameLevel() + 30)
+        end
+    end
     searchBox:ClearAllPoints()
-    searchBox:SetParent(nativeSearchBoxHost)
-    searchBox:SetPoint("TOPLEFT", nativeSearchBoxHost, "TOPLEFT", 0, 0)
-    searchBox:SetPoint("BOTTOMRIGHT", nativeSearchBoxHost, "BOTTOMRIGHT", 0, 0)
-    searchBox:SetFrameLevel(nativeSearchBoxHost:GetFrameLevel() + 5)
+    searchBox:SetParent(keyQueryBox)
+    searchBox:SetPoint("TOPLEFT", keyQueryBox, "TOPLEFT", 0, 0)
+    searchBox:SetPoint("BOTTOMRIGHT", keyQueryBox, "BOTTOMRIGHT", 0, 0)
+    searchBox:SetFrameStrata("DIALOG")
+    searchBox:SetFrameLevel(keyQueryBox:GetFrameLevel() + 5)
+    searchBox:SetScript("OnEnterPressed", function(self)
+        LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
+        if RequestUpdate then
+            C_Timer.After(0.15, function()
+                RequestUpdate()
+            end)
+        end
+        self:ClearFocus()
+    end)
+    searchBox:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
     searchBox:Show()
 end
 
-local function RestoreNativeSearchBox()
+RestoreNativeSearchBox = function()
     local searchBox = GetNativeSearchBox()
     if not (searchBox and nativeSearchBoxOriginalState) then
         return
     end
 
+    keyQueryBox.SearchBox = nil
+    keyQueryBox.AutoCompleteFrame = nil
+    if nativeAutoCompleteOriginalState and LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel.AutoCompleteFrame then
+        local autoCompleteFrame = LFGListFrame.SearchPanel.AutoCompleteFrame
+        autoCompleteFrame:SetParent(nativeAutoCompleteOriginalState.parent)
+        autoCompleteFrame:ClearAllPoints()
+        if nativeAutoCompleteOriginalState.point and nativeAutoCompleteOriginalState.relativeTo then
+            autoCompleteFrame:SetPoint(
+                nativeAutoCompleteOriginalState.point,
+                nativeAutoCompleteOriginalState.relativeTo,
+                nativeAutoCompleteOriginalState.relativePoint,
+                nativeAutoCompleteOriginalState.xOfs,
+                nativeAutoCompleteOriginalState.yOfs
+            )
+        end
+        if nativeAutoCompleteOriginalState.frameStrata then
+            autoCompleteFrame:SetFrameStrata(nativeAutoCompleteOriginalState.frameStrata)
+        end
+        if nativeAutoCompleteOriginalState.frameLevel then
+            autoCompleteFrame:SetFrameLevel(nativeAutoCompleteOriginalState.frameLevel)
+        end
+    end
     searchBox:ClearAllPoints()
-    searchBox:SetParent(nativeSearchBoxOriginalState.parent)
+    if nativeSearchBoxOriginalState.parent then
+        searchBox:SetParent(nativeSearchBoxOriginalState.parent)
+    end
     if nativeSearchBoxOriginalState.point and nativeSearchBoxOriginalState.relativeTo then
         searchBox:SetPoint(
             nativeSearchBoxOriginalState.point,
@@ -565,6 +671,18 @@ local function RestoreNativeSearchBox()
     end
     if nativeSearchBoxOriginalState.width and nativeSearchBoxOriginalState.height then
         searchBox:SetSize(nativeSearchBoxOriginalState.width, nativeSearchBoxOriginalState.height)
+    end
+    if nativeSearchBoxOriginalState.frameStrata then
+        searchBox:SetFrameStrata(nativeSearchBoxOriginalState.frameStrata)
+    end
+    if nativeSearchBoxOriginalState.frameLevel then
+        searchBox:SetFrameLevel(nativeSearchBoxOriginalState.frameLevel)
+    end
+    if nativeSearchBoxOriginalState.onEnterPressed then
+        searchBox:SetScript("OnEnterPressed", nativeSearchBoxOriginalState.onEnterPressed)
+    end
+    if nativeSearchBoxOriginalState.onEscapePressed then
+        searchBox:SetScript("OnEscapePressed", nativeSearchBoxOriginalState.onEscapePressed)
     end
     searchBox:Show()
 end
@@ -594,24 +712,18 @@ keyRangeHint:SetJustifyH("LEFT")
 keyRangeHint:SetText("")
 keyRangeHint:SetTextColor(0.7, 0.7, 0.7)
 
-nativeSearchBoxHost = CreateFrame("Frame", nil, filterPanel, "BackdropTemplate")
-nativeSearchBoxHost:SetSize(175, 22)
-nativeSearchBoxHost:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, -88)
-nativeSearchBoxHost:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
-nativeSearchBoxHost:SetBackdropColor(unpack(OAK_COLOR_PANE))
-nativeSearchBoxHost:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
-keyQueryBox = nativeSearchBoxHost
+keyQueryBox = CreateFrame("Frame", nil, filterPanel, "BackdropTemplate")
+keyQueryBox:SetSize(175, 22)
+keyQueryBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, -88)
+keyQueryBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
+keyQueryBox:SetBackdropColor(unpack(OAK_COLOR_PANE))
+keyQueryBox:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
 
 searchQueryBtn = CreateFlatButton(filterPanel, "Search", 175)
 searchQueryBtn:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, -116)
 searchQueryBtn:SetScript("OnClick", function()
-    if LFGListFrame and LFGListFrame.SearchPanel then
-        LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
-        if RequestUpdate then
-            C_Timer.After(0.15, function()
-                RequestUpdate()
-            end)
-        end
+    if ApplyOakSearchQuery then
+        ApplyOakSearchQuery(true)
     end
 end)
 
@@ -725,31 +837,59 @@ local searchResults = {}
 local currentSortBy = "rating"
 local currentIsAscending = false
 local SEARCH_FULL_WIDTH = 660
-local SEARCH_COLLAPSED_WIDTH = 590
+local SEARCH_COLLAPSED_WIDTH = 540
 local SEARCH_NOTE_FULL_WIDTH = 155
-local SEARCH_NOTE_COLLAPSED_WIDTH = 75
+local SEARCH_NOTE_COLLAPSED_WIDTH = 42
+local SEARCH_ROW_X_OFFSET = 10
+local SEARCH_ROLE_SQUARE_SIZE = 15
+local SEARCH_ROLE_SQUARE_SPACING = 1
+local SEARCH_NOTES_RIGHT_MARGIN = 41
 
 local SEARCH_LAYOUT_EXPANDED = {
     dungeonX = 15, dungeonWidth = 145,
-    setupX = 165, setupWidth = 90,
-    titleX = 260, titleWidth = 105,
+    setupX = 165, setupWidth = 98,
+    titleX = 267, titleWidth = 98,
     ratingX = 370, ratingWidth = 65,
     ageX = 440, ageWidth = 35,
     notesX = 480, notesWidth = SEARCH_NOTE_FULL_WIDTH,
-    roleStartX = 173,
-    roleSummaryX = {173, 205, 237},
+    roleStartX = 177,
+    roleSummaryX = {175, 205, 235},
 }
 
 local SEARCH_LAYOUT_COLLAPSED = {
     dungeonX = 15, dungeonWidth = 145,
-    setupX = 165, setupWidth = 90,
-    titleX = 260, titleWidth = 105,
+    setupX = 165, setupWidth = 98,
+    titleX = 267, titleWidth = 98,
     ratingX = 370, ratingWidth = 65,
     ageX = 440, ageWidth = 35,
-    notesX = 480, notesWidth = SEARCH_NOTE_COLLAPSED_WIDTH,
-    roleStartX = 173,
-    roleSummaryX = {173, 205, 237},
+    notesX = 482, notesWidth = SEARCH_NOTE_COLLAPSED_WIDTH,
+    roleStartX = 177,
+    roleSummaryX = {175, 205, 235},
 }
+
+local function GetSearchRoleStartX(layout)
+    return layout.setupX + 6
+end
+
+local function GetSearchRoleSummaryX(layout)
+    local startX = layout.setupX + 4
+    return startX, startX + 30, startX + 60
+end
+
+local function GetSearchActionRightInset()
+    if OakLFGSorterDB and OakLFGSorterDB.searchHideNotes then
+        return -10
+    end
+    return -15
+end
+
+ShouldHostNativeSearchBox = function()
+    return currentSearchMode == "mythic_plus" or currentSearchMode == "generic" or currentSearchMode == "delve"
+end
+
+local function GetCollapsedSearchActionCenterX(layout)
+    return layout.notesX + math.floor(layout.notesWidth / 2) - SEARCH_ROW_X_OFFSET
+end
 
 local function GetSearchLayout()
     if OakLFGSorterDB and OakLFGSorterDB.searchHideNotes then
@@ -849,7 +989,7 @@ local function CreateHeader(label, sortKey, width, xOffset)
 end
 
 dungeonHeader = CreateHeader("Dungeon", "dungeon", SEARCH_LAYOUT_EXPANDED.dungeonWidth, SEARCH_LAYOUT_EXPANDED.dungeonX)
-setupHeader = CreateHeader("Setup", "members", SEARCH_LAYOUT_EXPANDED.setupWidth, SEARCH_LAYOUT_EXPANDED.setupX)
+setupHeader = CreateHeader("Comp", "members", SEARCH_LAYOUT_EXPANDED.setupWidth, SEARCH_LAYOUT_EXPANDED.setupX)
 titleHeader = CreateHeader("Title", "title", SEARCH_LAYOUT_EXPANDED.titleWidth, SEARCH_LAYOUT_EXPANDED.titleX)
 ratingHeader = CreateHeader("Rating", "rating", SEARCH_LAYOUT_EXPANDED.ratingWidth, SEARCH_LAYOUT_EXPANDED.ratingX)
 ageHeader = CreateHeader("Age", "age", SEARCH_LAYOUT_EXPANDED.ageWidth, SEARCH_LAYOUT_EXPANDED.ageX)
@@ -898,6 +1038,7 @@ local function UpdateSearchHeaderVisuals()
     ageHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.ageX, -43)
 
     notesToggleBtn:SetWidth(layout.notesWidth)
+    notesToggleBtn.text:SetText((OakLFGSorterDB and OakLFGSorterDB.searchHideNotes) and "Notes" or "Hide Notes")
     notesToggleBtn:ClearAllPoints()
     notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.notesX, -43)
 end
@@ -1309,10 +1450,6 @@ local function UpdateSearchFilterPane()
 
     if not showKeyRange then
         OAK_F.SearchQuery = ""
-        local searchBox = GetNativeSearchBox()
-        if searchBox then
-            searchBox:SetText("")
-        end
     end
 
     if currentSearchMode ~= "mythic_plus" and OAK_F.Difficulty == 5 then
@@ -1326,9 +1463,13 @@ local function UpdateSearchFilterPane()
     SetControlVisible(keyQueryBox, showKeyRange)
     SetControlVisible(searchQueryBtn, showKeyRange)
     if showKeyRange and filterPanel:IsShown() then
-        AttachNativeSearchBoxToOak()
+        if AttachNativeSearchBoxToOak then
+            AttachNativeSearchBoxToOak()
+        end
     else
-        RestoreNativeSearchBox()
+        if RestoreNativeSearchBox then
+            RestoreNativeSearchBox()
+        end
     end
     SetControlVisible(boxNeedTank, showNeedFilters)
     SetControlVisible(boxNeedHeal, showNeedFilters)
@@ -1522,38 +1663,52 @@ ApplySearchNotesLayout = function()
         for index, square in ipairs(row.roleSquares) do
             square:ClearAllPoints()
             if index == 1 then
-                square:SetPoint("LEFT", row, "LEFT", layout.roleStartX, 0)
+                square:SetPoint("LEFT", row, "LEFT", GetSearchRoleStartX(layout) - SEARCH_ROW_X_OFFSET, 0)
             else
-                square:SetPoint("LEFT", row.roleSquares[index - 1], "RIGHT", 2, 0)
+                square:SetPoint("LEFT", row.roleSquares[index - 1], "RIGHT", SEARCH_ROLE_SQUARE_SPACING, 0)
             end
         end
 
+        local summaryX1, summaryX2, summaryX3 = GetSearchRoleSummaryX(layout)
         for index, summary in ipairs(row.roleSummaries) do
             summary:ClearAllPoints()
-            summary:SetPoint("LEFT", row, "LEFT", layout.roleSummaryX[index], 0)
+            local summaryX = (index == 1 and summaryX1) or (index == 2 and summaryX2) or summaryX3
+            summary:SetPoint("LEFT", row, "LEFT", summaryX - SEARCH_ROW_X_OFFSET, 0)
         end
 
         row.titleText:ClearAllPoints()
-        row.titleText:SetPoint("LEFT", row, "LEFT", layout.titleX, 0)
+        row.titleText:SetPoint("LEFT", row, "LEFT", layout.titleX - SEARCH_ROW_X_OFFSET, 0)
         row.titleText:SetWidth(layout.titleWidth)
 
         row.ratingText:ClearAllPoints()
-        row.ratingText:SetPoint("CENTER", row, "LEFT", layout.ratingX + (layout.ratingWidth / 2), 0)
+        row.ratingText:SetPoint("CENTER", row, "LEFT", layout.ratingX + (layout.ratingWidth / 2) - SEARCH_ROW_X_OFFSET, 0)
         row.ratingText:SetWidth(layout.ratingWidth)
 
         row.ageText:ClearAllPoints()
-        row.ageText:SetPoint("CENTER", row, "LEFT", layout.ageX + (layout.ageWidth / 2), 0)
+        row.ageText:SetPoint("CENTER", row, "LEFT", layout.ageX + (layout.ageWidth / 2) - SEARCH_ROW_X_OFFSET, 0)
         row.ageText:SetWidth(layout.ageWidth)
 
         row.notesText:ClearAllPoints()
-        row.notesText:SetPoint("LEFT", row, "LEFT", layout.notesX, 0)
+        row.notesText:SetPoint("LEFT", row, "LEFT", layout.notesX - SEARCH_ROW_X_OFFSET, 0)
+        row.notesText:SetPoint("RIGHT", row.applyBtn, "LEFT", -6, 0)
         if row.notesText then
-            row.notesText:SetWidth(layout.notesWidth)
             if hideNotes then
                 row.notesText:Hide()
             else
                 row.notesText:Show()
             end
+        end
+
+        row.applyBtn:ClearAllPoints()
+        row.cancelBtn:ClearAllPoints()
+        if hideNotes then
+            local collapsedCenterX = GetCollapsedSearchActionCenterX(layout)
+            row.applyBtn:SetPoint("CENTER", row, "LEFT", collapsedCenterX, 0)
+            row.cancelBtn:SetPoint("CENTER", row, "LEFT", collapsedCenterX, 0)
+        else
+            local actionInset = GetSearchActionRightInset()
+            row.applyBtn:SetPoint("RIGHT", row, "RIGHT", actionInset, 0)
+            row.cancelBtn:SetPoint("RIGHT", row, "RIGHT", actionInset, 0)
         end
     end
 end
@@ -1727,36 +1882,43 @@ local function CreateRow(index)
     row.playstyleText:SetWidth(SEARCH_LAYOUT_EXPANDED.dungeonWidth); row.playstyleText:SetJustifyH("LEFT"); row.playstyleText:SetWordWrap(false)
     
     row.roleSquares = {}
-    local startX = SEARCH_LAYOUT_EXPANDED.roleStartX
+    local startX = GetSearchRoleStartX(SEARCH_LAYOUT_EXPANDED) - SEARCH_ROW_X_OFFSET
     for i = 1, 5 do
-        local sq = CreateRoleSquare(row, 16)
+        local sq = CreateRoleSquare(row, SEARCH_ROLE_SQUARE_SIZE)
         if i == 1 then sq:SetPoint("LEFT", row, "LEFT", startX, 0)
-        else sq:SetPoint("LEFT", row.roleSquares[i-1], "RIGHT", 2, 0) end
+        else sq:SetPoint("LEFT", row.roleSquares[i-1], "RIGHT", SEARCH_ROLE_SQUARE_SPACING, 0) end
         row.roleSquares[i] = sq
     end
+    local summaryX1, summaryX2, summaryX3 = GetSearchRoleSummaryX(SEARCH_LAYOUT_EXPANDED)
     row.roleSummaries = {
-        CreateRoleSummary(row, "TANK", SEARCH_LAYOUT_EXPANDED.roleSummaryX[1]),
-        CreateRoleSummary(row, "HEALER", SEARCH_LAYOUT_EXPANDED.roleSummaryX[2]),
-        CreateRoleSummary(row, "DAMAGER", SEARCH_LAYOUT_EXPANDED.roleSummaryX[3]),
+        CreateRoleSummary(row, "TANK", summaryX1 - SEARCH_ROW_X_OFFSET),
+        CreateRoleSummary(row, "HEALER", summaryX2 - SEARCH_ROW_X_OFFSET),
+        CreateRoleSummary(row, "DAMAGER", summaryX3 - SEARCH_ROW_X_OFFSET),
     }
 
     row.titleText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    row.titleText:SetPoint("LEFT", row, "LEFT", SEARCH_LAYOUT_EXPANDED.titleX, 0); row.titleText:SetWidth(SEARCH_LAYOUT_EXPANDED.titleWidth); row.titleText:SetJustifyH("LEFT")
-    
+    row.titleText:SetPoint("LEFT", row, "LEFT", SEARCH_LAYOUT_EXPANDED.titleX - SEARCH_ROW_X_OFFSET, 0); row.titleText:SetWidth(SEARCH_LAYOUT_EXPANDED.titleWidth); row.titleText:SetJustifyH("LEFT")
+
     row.ratingText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    row.ratingText:SetPoint("CENTER", row, "LEFT", SEARCH_LAYOUT_EXPANDED.ratingX + (SEARCH_LAYOUT_EXPANDED.ratingWidth / 2), 0); row.ratingText:SetWidth(SEARCH_LAYOUT_EXPANDED.ratingWidth); row.ratingText:SetJustifyH("CENTER")
-    
+    row.ratingText:SetPoint("CENTER", row, "LEFT", SEARCH_LAYOUT_EXPANDED.ratingX + (SEARCH_LAYOUT_EXPANDED.ratingWidth / 2) - SEARCH_ROW_X_OFFSET, 0); row.ratingText:SetWidth(SEARCH_LAYOUT_EXPANDED.ratingWidth); row.ratingText:SetJustifyH("CENTER")
+
     row.ageText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    row.ageText:SetPoint("CENTER", row, "LEFT", SEARCH_LAYOUT_EXPANDED.ageX + (SEARCH_LAYOUT_EXPANDED.ageWidth / 2), 0); row.ageText:SetWidth(SEARCH_LAYOUT_EXPANDED.ageWidth); row.ageText:SetJustifyH("CENTER")
-    
+    row.ageText:SetPoint("CENTER", row, "LEFT", SEARCH_LAYOUT_EXPANDED.ageX + (SEARCH_LAYOUT_EXPANDED.ageWidth / 2) - SEARCH_ROW_X_OFFSET, 0); row.ageText:SetWidth(SEARCH_LAYOUT_EXPANDED.ageWidth); row.ageText:SetJustifyH("CENTER")
+
     row.notesText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    row.notesText:SetPoint("LEFT", row, "LEFT", SEARCH_LAYOUT_EXPANDED.notesX, 0); row.notesText:SetWidth(SEARCH_NOTE_FULL_WIDTH); row.notesText:SetJustifyH("LEFT"); row.notesText:SetWordWrap(false)
+    row.notesText:SetPoint("LEFT", row, "LEFT", SEARCH_LAYOUT_EXPANDED.notesX - SEARCH_ROW_X_OFFSET, 0)
+    row.notesText:SetPoint("RIGHT", row, "RIGHT", -SEARCH_NOTES_RIGHT_MARGIN, 0)
+    row.notesText:SetJustifyH("LEFT")
+    row.notesText:SetWordWrap(false)
     row.notesText:SetTextColor(0.7, 0.7, 0.7)
+    if row.notesText.SetMaxLines then
+        row.notesText:SetMaxLines(1)
+    end
 
     -- Sign Up Button (Green Checkmark)
     row.applyBtn = CreateFrame("Button", nil, row)
     row.applyBtn:SetSize(20, 20)
-    row.applyBtn:SetPoint("RIGHT", row, "RIGHT", -15, 0)
+    row.applyBtn:SetPoint("RIGHT", row, "RIGHT", GetSearchActionRightInset(), 0)
     row.applyBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
     row.applyBtn:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
     row.applyBtn:SetScript("OnEnter", function(self)
@@ -1775,7 +1937,7 @@ local function CreateRow(index)
     -- Cancel Button (Red X)
     row.cancelBtn = CreateFrame("Button", nil, row)
     row.cancelBtn:SetSize(20, 20)
-    row.cancelBtn:SetPoint("RIGHT", row, "RIGHT", -15, 0)
+    row.cancelBtn:SetPoint("RIGHT", row, "RIGHT", GetSearchActionRightInset(), 0)
     row.cancelBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
     row.cancelBtn:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
     row.cancelBtn:SetScript("OnEnter", function(self)
@@ -1789,6 +1951,10 @@ local function CreateRow(index)
             C_LFGList.CancelApplication(row.groupData.id)
         end
     end)
+
+    row.notesText:ClearAllPoints()
+    row.notesText:SetPoint("LEFT", row, "LEFT", SEARCH_LAYOUT_EXPANDED.notesX - SEARCH_ROW_X_OFFSET, 0)
+    row.notesText:SetPoint("RIGHT", row.applyBtn, "LEFT", -6, 0)
 
     return row
 end
@@ -2145,7 +2311,9 @@ OAK_SEARCH:SetScript("OnShow", function(self)
     OAK_SEARCH:SetScale(OakLFGSorterDB.searchScale or 1.0)
     scaleSlider:SetValue(OakLFGSorterDB.searchScale or 1.0)
     ApplySearchNotesLayout()
-    if addonTable.AnchorRIOPanelToOak then
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
         addonTable.AnchorRIOPanelToOak(OAK_SEARCH)
     end
     RequestUpdate()
@@ -2154,7 +2322,12 @@ end)
 OAK_SEARCH:SetScript("OnHide", function()
     if filterPanel then filterPanel:Hide() end
     if supportersPanel then supportersPanel:Hide() end
-    RestoreNativeSearchBox()
+    if RestoreNativeSearchBox then
+        RestoreNativeSearchBox()
+    end
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    end
 end)
 
 -- ==========================================
