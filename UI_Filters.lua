@@ -12,6 +12,22 @@ local BrowserFilterState
 local BROWSER_FILTER_VERSION = 4
 local GetPartyRoleSupply
 
+local function GetBrowserMode()
+    return (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
+end
+
+local function BrowserModeUsesDifficulty(mode)
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid"
+end
+
+local function BrowserModeUsesKeyRange(mode)
+    return mode == "mythic_plus"
+end
+
+local function BrowserModeUsesActivityFilter(mode)
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid" or mode == "delve"
+end
+
 local function SetQuickFilterButtonState(button, isActive)
     if not button then return end
 
@@ -29,7 +45,10 @@ local function GroupMatchesRoleFilters(group)
         local partyRoles, _ = GetPartyRoleSupply()
         local targets = { TANK = 1, HEALER = 1, DAMAGER = 3 }
         local entryInfo = C_LFGList and C_LFGList.GetActiveEntryInfo and C_LFGList.GetActiveEntryInfo()
-        local activityID = entryInfo and (entryInfo.activityID or (type(entryInfo.activityIDs) == "table" and entryInfo.activityIDs[1]))
+        local activityID = entryInfo and tonumber(entryInfo.activityID)
+        if activityID == 0 then
+            activityID = nil
+        end
         local activityInfo = activityID and C_LFGList.GetActivityInfoTable and C_LFGList.GetActivityInfoTable(activityID)
         local maxPlayers = tonumber(activityInfo and activityInfo.maxPlayers) or 5
 
@@ -104,6 +123,10 @@ GetPartyRoleSupply = function()
 end
 
 local function ResultMatchesSelectedActivities(result, filters)
+    if not BrowserModeUsesActivityFilter(result.mode or GetBrowserMode()) then
+        return true
+    end
+
     if type(filters.selectedActivities) ~= "table" then
         return true
     end
@@ -124,6 +147,10 @@ local function ResultMatchesSelectedActivities(result, filters)
 end
 
 local function ResultMatchesDifficulty(result, difficulty)
+    if not BrowserModeUsesDifficulty(result.mode or GetBrowserMode()) then
+        return true
+    end
+
     if difficulty == "ANY" then
         return true
     end
@@ -173,6 +200,10 @@ local function ResultMatchesPlaystyle(result, playstyle)
 end
 
 local function ResultMatchesKeyRange(result, filters)
+    if not BrowserModeUsesKeyRange(result.mode or GetBrowserMode()) then
+        return true
+    end
+
     local minKey = tonumber(filters.keyMin)
     local maxKey = tonumber(filters.keyMax)
     local keyLevel = tonumber(result.keyLevel) or 0
@@ -958,26 +989,26 @@ local function CreateBrowserNumberBox(parent, filterKey, width)
 end
 
 local function GetBrowserDifficultyOptions()
-    local mode = (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
-    if mode == "raid" or mode == "legacy_raid" then
+    local mode = GetBrowserMode()
+    if mode == "mythic_plus" or mode == "dungeon" then
+        return {
+            { value = "ANY", label = "Any Difficulty" },
+            { value = "NORMAL", label = "Normal" },
+            { value = "HEROIC", label = "Heroic" },
+            { value = "MYTHIC", label = "Mythic" },
+            { value = "MYTHIC_PLUS", label = "Mythic+" },
+        }
+    elseif mode == "raid" then
         return {
             { value = "ANY", label = "Any Difficulty" },
             { value = "NORMAL", label = "Normal" },
             { value = "HEROIC", label = "Heroic" },
             { value = "MYTHIC", label = "Mythic" },
         }
-    elseif mode == "rated_pvp" or mode == "pvp" then
-        return {
-            { value = "ANY", label = "Any Difficulty" },
-        }
     end
 
     return {
         { value = "ANY", label = "Any Difficulty" },
-        { value = "MYTHIC_PLUS", label = "Mythic+" },
-        { value = "MYTHIC", label = "Mythic" },
-        { value = "HEROIC", label = "Heroic" },
-        { value = "NORMAL", label = "Normal" },
     }
 end
 
@@ -1029,16 +1060,16 @@ activityHeader:SetText("Filter Activities")
 activityHeader:SetTextColor(1, 1, 1)
 
 local function GetBrowserActivitySectionTitle()
-    local mode = (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
-    if mode == "raid" or mode == "legacy_raid" then
+    local mode = GetBrowserMode()
+    if mode == "raid" then
         return "Filter Raids"
-    elseif mode == "pvp" or mode == "rated_pvp" then
-        return "Filter Brackets"
-    elseif mode == "mythic_plus" or mode == "generic" or mode == "delve" then
+    elseif mode == "delve" then
+        return "Filter Delves"
+    elseif mode == "mythic_plus" or mode == "dungeon" then
         return "Filter Dungeons"
     end
 
-    return "Filter Activities"
+    return nil
 end
 
 local function UpdateBrowserActivityButtons(startY)
@@ -1092,9 +1123,27 @@ end
 
 function addonTable.UpdateBrowserFilterPanel()
     local filters = BrowserFilterState()
+    local mode = GetBrowserMode()
+    local showDifficulty = BrowserModeUsesDifficulty(mode)
+    local showKeyRange = BrowserModeUsesKeyRange(mode)
+    local showActivityFilters = BrowserModeUsesActivityFilter(mode)
+    local validDifficulty = {}
+
+    for _, option in ipairs(GetBrowserDifficultyOptions()) do
+        validDifficulty[option.value] = true
+    end
+    if not validDifficulty[filters.difficulty] then
+        filters.difficulty = "ANY"
+    end
+
     difficultyDropdown:ClearAllPoints()
     difficultyDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, 0)
     difficultyDropdown.UpdateText()
+    if showDifficulty then
+        difficultyDropdown:Show()
+    else
+        difficultyDropdown:Hide()
+    end
 
     playstyleDropdown:Hide()
     HideAllBrowserDropdowns()
@@ -1110,10 +1159,21 @@ function addonTable.UpdateBrowserFilterPanel()
     keyMaxBox:ClearAllPoints()
     keyMaxBox:SetPoint("LEFT", keyRangeTo, "RIGHT", 6, 0)
     keyMaxBox:SetText(filters.keyMax or "")
+    if showKeyRange then
+        keyRangeLabel:Show()
+        keyMinBox:Show()
+        keyRangeTo:Show()
+        keyMaxBox:Show()
+    else
+        keyRangeLabel:Hide()
+        keyMinBox:Hide()
+        keyRangeTo:Hide()
+        keyMaxBox:Hide()
+    end
 
     local leftColumnX = 0
     local rightColumnX = 108
-    local toggleY = -70
+    local toggleY = showKeyRange and -70 or (showDifficulty and -34 or 0)
     local rowHeight = 20
     for _, toggleInfo in ipairs(browserToggleKeys) do
         local row = browserToggleRows[toggleInfo.key]
@@ -1132,17 +1192,28 @@ function addonTable.UpdateBrowserFilterPanel()
         end
     end
 
-    activityDivider:ClearAllPoints()
-    activityDivider:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, toggleY - 4)
-    activityDivider:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, toggleY - 4)
-    activityDivider:SetHeight(1)
+    if showActivityFilters then
+        activityDivider:Show()
+        activityHeader:Show()
+        activityDivider:ClearAllPoints()
+        activityDivider:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, toggleY - 4)
+        activityDivider:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, toggleY - 4)
+        activityDivider:SetHeight(1)
 
-    activityHeader:ClearAllPoints()
-    activityHeader:SetText(GetBrowserActivitySectionTitle())
-    activityHeader:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, toggleY - 16)
+        activityHeader:ClearAllPoints()
+        activityHeader:SetText(GetBrowserActivitySectionTitle() or "")
+        activityHeader:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, toggleY - 16)
 
-    local endY = UpdateBrowserActivityButtons(toggleY - 34)
-    browserContent:SetHeight(math.max(1, math.abs(endY) + 20))
+        local endY = UpdateBrowserActivityButtons(toggleY - 34)
+        browserContent:SetHeight(math.max(1, math.abs(endY) + 20))
+    else
+        activityDivider:Hide()
+        activityHeader:Hide()
+        for _, button in ipairs(browserActivityButtons) do
+            button:Hide()
+        end
+        browserContent:SetHeight(math.max(1, math.abs(toggleY) + 20))
+    end
 end
 
 function addonTable.UpdateFilterPaneMode()

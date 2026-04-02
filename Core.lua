@@ -52,9 +52,16 @@ local function GetActiveListingActivityID()
         return nil, nil
     end
 
-    local activityID = entryInfo.activityID
-    if (not activityID or activityID == 0) and type(entryInfo.activityIDs) == "table" then
-        activityID = entryInfo.activityIDs[1]
+    local activityID = tonumber(entryInfo.activityID)
+    if not activityID and securecallfunction then
+        activityID = securecallfunction(function(info)
+            local ids = info and info.activityIDs
+            local firstID = type(ids) == "table" and ids[1] or nil
+            return tonumber(firstID)
+        end, entryInfo)
+    end
+    if activityID == 0 then
+        activityID = nil
     end
 
     return activityID, entryInfo
@@ -65,9 +72,25 @@ local function GetListingMode(activityInfo)
         return "generic"
     end
 
+    local delveLookup = {
+        ["atal'aman"] = true,
+        ["collegiate calamity"] = true,
+        ["parhelion plaza"] = true,
+        ["shadowguard point"] = true,
+        ["sunkiller sanctum"] = true,
+        ["the darkway"] = true,
+        ["the grudge pit"] = true,
+        ["the gulf of memory"] = true,
+        ["the shadow enclave"] = true,
+        ["torment's rise"] = true,
+        ["twilight crypts"] = true,
+    }
     local fullName = strlower(activityInfo.fullName or "")
     local shortName = strlower(activityInfo.shortName or "")
+    local cleanFullName = strlower(tostring(activityInfo.fullName or ""):gsub("%s*%(.+%)", ""))
+    local cleanShortName = strlower(tostring(activityInfo.shortName or ""):gsub("%s*%(.+%)", ""))
     local activityText = fullName .. " " .. shortName
+    local maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or 0
 
     if activityInfo.isMythicPlusActivity then
         return "mythic_plus"
@@ -79,10 +102,14 @@ local function GetListingMode(activityInfo)
         return "raid"
     elseif activityText:find("legacy", 1, true) and activityText:find("raid", 1, true) then
         return "legacy_raid"
-    elseif activityText:find("delve", 1, true) then
+    elseif activityText:find("delve", 1, true) or delveLookup[cleanFullName] or delveLookup[cleanShortName] then
         return "delve"
     elseif activityText:find("world", 1, true) or activityText:find("outdoor", 1, true) then
         return "open_world"
+    elseif maxPlayers > 0 and maxPlayers <= 5 then
+        if activityText:find("mythic", 1, true) or activityText:find("heroic", 1, true) or activityText:find("normal", 1, true) then
+            return "dungeon"
+        end
     end
 
     return "generic"
@@ -131,9 +158,16 @@ local function GetSearchResultActivityID(resultInfo)
         return nil
     end
 
-    local activityID = resultInfo.activityID
-    if (not activityID or activityID == 0) and type(resultInfo.activityIDs) == "table" then
-        activityID = resultInfo.activityIDs[1]
+    local activityID = tonumber(resultInfo.activityID)
+    if not activityID and securecallfunction then
+        activityID = securecallfunction(function(info)
+            local ids = info and info.activityIDs
+            local firstID = type(ids) == "table" and ids[1] or nil
+            return tonumber(firstID)
+        end, resultInfo)
+    end
+    if activityID == 0 then
+        activityID = nil
     end
 
     return activityID

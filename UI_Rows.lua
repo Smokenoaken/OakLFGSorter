@@ -10,6 +10,7 @@ local COLLAPSED_FRAME_WIDTH = 460
 local HEADER_TOP_OFFSET = -43
 local SCROLL_TOP_OFFSET = -70
 local roleWeights = { ["TANK"] = 1, ["HEALER"] = 2, ["DAMAGER"] = 3 }
+local GetBrowserApplicationPriority
 local MODE_CONFIGS = {
     mythic_plus = { ratingLabel = "M+ Rating", keyLabel = "Key" },
     rated_pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
@@ -378,7 +379,7 @@ local function GetCurrentRowNoteColumn()
     return RowColumn(GetCurrentNoteColumn())
 end
 
-local function GetBrowserApplicationPriority(result)
+GetBrowserApplicationPriority = function(result)
     if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
         return 3
     end
@@ -762,7 +763,10 @@ local function CreateRow(index)
                     end
 
                     local entryInfo = C_LFGList.GetActiveEntryInfo()
-                    local activityID = entryInfo and (entryInfo.activityID or (entryInfo.activityIDs and type(entryInfo.activityIDs) == "table" and entryInfo.activityIDs[1]))
+                    local activityID = entryInfo and tonumber(entryInfo.activityID)
+                    if activityID == 0 then
+                        activityID = nil
+                    end
                     if activityID then
                         local success, bestForDungeon = pcall(C_LFGList.GetApplicantDungeonScoreForListing, self.applicantID, self.memberIdx, activityID)
                         if success and type(bestForDungeon) == "table" and type(bestForDungeon.bestRunLevel) == "number" and bestForDungeon.bestRunLevel > 0 then

@@ -21,10 +21,14 @@ local RequestUpdate
 local ApplyOakSearchQuery
 local ScheduleSearchRefresh
 local searchQueryBtn
+local resetFiltersBtn
+local ResetSearchFilters
 local GetNativeSearchBox
 local AttachNativeSearchBoxToOak
 local RestoreNativeSearchBox
 local ShouldHostNativeSearchBox
+local AutoPositionSearch
+local UpdateSearchFilterPane
 
 local function ApplyClassColor(text, classStr)
     local c = RAID_CLASS_COLORS[string.upper(classStr or "")]
@@ -56,6 +60,7 @@ local function SaveSearchFramePosition()
     local point, _, relativePoint, xOfs, yOfs = OAK_SEARCH:GetPoint(1)
     if point then
         OakLFGSorterDB.searchFramePos = { point, relativePoint or point, xOfs or 0, yOfs or 0 }
+        OakLFGSorterDB.searchFrameUserPlaced = true
     end
 end
 
@@ -67,6 +72,32 @@ local function RestoreSearchFramePosition()
         return true
     end
     return false
+end
+
+local function HasSavedSearchFramePosition()
+    return OakLFGSorterDB
+        and OakLFGSorterDB.searchFrameUserPlaced
+        and type(OakLFGSorterDB.searchFramePos) == "table"
+        and #OakLFGSorterDB.searchFramePos >= 4
+end
+
+local function ApplySearchScale(scaleValue)
+    local rounded = math.floor((tonumber(scaleValue) or 1.0) * 100 + 0.5) / 100
+
+    OAK_SEARCH:SetScale(rounded)
+    OakLFGSorterDB.searchScale = rounded
+
+    if HasSavedSearchFramePosition() then
+        RestoreSearchFramePosition()
+    else
+        AutoPositionSearch()
+    end
+
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(OAK_SEARCH)
+    end
 end
 
 local function HideApplicantWindow()
@@ -196,15 +227,13 @@ scaleSlider:SetScript("OnMouseDown", function(self) self.isDragging = true end)
 scaleSlider:SetScript("OnMouseUp", function(self)
     self.isDragging = false
     local rounded = math.floor(self:GetValue() * 100 + 0.5) / 100
-    OAK_SEARCH:SetScale(rounded)
-    OakLFGSorterDB.searchScale = rounded
+    ApplySearchScale(rounded)
 end)
 scaleSlider:SetScript("OnValueChanged", function(self, value)
     local rounded = math.floor(value * 100 + 0.5) / 100
     scaleEdit:SetText(string.format("%.2f", rounded))
     if not self.isDragging then
-        OAK_SEARCH:SetScale(rounded)
-        OakLFGSorterDB.searchScale = rounded
+        ApplySearchScale(rounded)
     end
 end)
 scaleEdit:SetScript("OnEnterPressed", function(self)
@@ -216,8 +245,8 @@ scaleEdit:SetScript("OnEnterPressed", function(self)
     self:ClearFocus()
 end)
 
-local function AutoPositionSearch()
-    if RestoreSearchFramePosition() then
+AutoPositionSearch = function()
+    if HasSavedSearchFramePosition() and RestoreSearchFramePosition() then
         if addonTable.AnchorRIOPanelToOak then
             addonTable.AnchorRIOPanelToOak(OAK_SEARCH)
         end
@@ -237,12 +266,12 @@ end
 
 function addonTable.ResetSearchWindow()
     OakLFGSorterDB.searchFramePos = nil
+    OakLFGSorterDB.searchFrameUserPlaced = false
     OakLFGSorterDB.searchScale = 1.0
     OakLFGSorterDB.searchHideNotes = false
     scaleSlider:SetValue(1.0)
     scaleEdit:SetText("1.00")
-    OAK_SEARCH:SetScale(1.0)
-    AutoPositionSearch()
+    ApplySearchScale(1.0)
     ApplySearchNotesLayout()
 end
 
@@ -252,7 +281,7 @@ end)
 
 scaleSlider:SetValue(OakLFGSorterDB.searchScale)
 scaleEdit:SetText(string.format("%.2f", OakLFGSorterDB.searchScale))
-OAK_SEARCH:SetScale(OakLFGSorterDB.searchScale)
+ApplySearchScale(OakLFGSorterDB.searchScale)
 AutoPositionSearch()
 
 supportersPanel = CreateFrame("Frame", nil, OAK_SEARCH, "BackdropTemplate")
@@ -429,40 +458,110 @@ local function CreateOakDropdown(parent, width, defaultText, options, callback)
     listFrame:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
     listFrame:SetFrameStrata("TOOLTIP")
     listFrame:Hide()
+    frame.optionButtons = {}
+    frame.options = {}
     
     frame:SetScript("OnClick", function()
         if listFrame:IsShown() then listFrame:Hide() else listFrame:Show() end
     end)
     frame:SetScript("OnHide", function() listFrame:Hide() end)
 
-    for i, opt in ipairs(options) do
-        local btn = CreateFrame("Button", nil, listFrame, "BackdropTemplate")
-        btn:SetSize(width - 2, 22)
-        btn:SetPoint("TOPLEFT", listFrame, "TOPLEFT", 1, -((i-1)*22) - 1)
-        
-        local btnBg = btn:CreateTexture(nil, "BACKGROUND")
-        btnBg:SetAllPoints(); btnBg:SetColorTexture(unpack(OAK_COLOR_BG))
-        
-        local hoverBg = btn:CreateTexture(nil, "HIGHLIGHT")
-        hoverBg:SetAllPoints(); hoverBg:SetColorTexture(classColor.r, classColor.g, classColor.b, 0.3)
-        
-        btn.text = btn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-        btn.text:SetPoint("LEFT", btn, "LEFT", 8, 0)
-        btn.text:SetText(opt)
-        
-        btn:SetScript("OnClick", function()
-            frame.text:SetText(opt)
-            listFrame:Hide()
-            if callback then callback(i) end
-        end)
+    function frame:SetValue(selectedValue)
+        self.selectedValue = selectedValue
+        for _, option in ipairs(self.options) do
+            if option.value == selectedValue then
+                self.text:SetText(option.label)
+                return
+            end
+        end
+        self.text:SetText(defaultText)
     end
+
+    function frame:SetOptions(newOptions)
+        self.options = newOptions or {}
+        listFrame:SetHeight((#self.options * 22) + 2)
+
+        for index, option in ipairs(self.options) do
+            local btn = self.optionButtons[index]
+            if not btn then
+                btn = CreateFrame("Button", nil, listFrame, "BackdropTemplate")
+                btn:SetSize(width - 2, 22)
+
+                local btnBg = btn:CreateTexture(nil, "BACKGROUND")
+                btnBg:SetAllPoints()
+                btnBg:SetColorTexture(unpack(OAK_COLOR_BG))
+
+                local hoverBg = btn:CreateTexture(nil, "HIGHLIGHT")
+                hoverBg:SetAllPoints()
+                hoverBg:SetColorTexture(classColor.r, classColor.g, classColor.b, 0.3)
+
+                btn.text = btn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+                btn.text:SetPoint("LEFT", btn, "LEFT", 8, 0)
+                self.optionButtons[index] = btn
+            end
+
+            btn:ClearAllPoints()
+            btn:SetPoint("TOPLEFT", listFrame, "TOPLEFT", 1, -((index - 1) * 22) - 1)
+            btn.text:SetText(option.label)
+            btn:SetScript("OnClick", function()
+                frame:SetValue(option.value)
+                listFrame:Hide()
+                if callback then callback(option.value, option.label, index) end
+            end)
+            btn:Show()
+        end
+
+        for index = #self.options + 1, #self.optionButtons do
+            self.optionButtons[index]:Hide()
+        end
+    end
+
+    frame:SetOptions(options)
     return frame
 end
 
 local DEFAULT_SEASON_DUNGEONS = {
-    "Maisara Caverns", "Nexus-Point Xenos", "Magisters' Terrace",
+    "Maisara Caverns", "Nexus-Point Xenas", "Magisters' Terrace",
     "Windrunner Spire", "Algeth'ar Academy", "Seat of the Triumvirate",
     "Skyreach", "Pit of Saron"
+}
+
+local DEFAULT_SEASON_DELVES = {
+    "Atal'Aman",
+    "Collegiate Calamity",
+    "Parhelion Plaza",
+    "Shadowguard Point",
+    "Sunkiller Sanctum",
+    "The Darkway",
+    "The Grudge Pit",
+    "The Gulf of Memory",
+    "The Shadow Enclave",
+    "Torment's Rise",
+    "Twilight Crypts",
+}
+
+local SEARCH_DELVE_LABEL_LOOKUP = {}
+for _, delveName in ipairs(DEFAULT_SEASON_DELVES) do
+    SEARCH_DELVE_LABEL_LOOKUP[strlower(delveName)] = true
+end
+
+local SEARCH_FIVE_MAN_DIFFICULTY_OPTIONS = {
+    { value = "ANY", label = "Any Difficulty" },
+    { value = "NORMAL", label = "Normal" },
+    { value = "HEROIC", label = "Heroic" },
+    { value = "MYTHIC", label = "Mythic" },
+    { value = "MYTHIC_PLUS", label = "Mythic+" },
+}
+
+local SEARCH_DIFFICULTY_OPTIONS = {
+    mythic_plus = SEARCH_FIVE_MAN_DIFFICULTY_OPTIONS,
+    dungeon = SEARCH_FIVE_MAN_DIFFICULTY_OPTIONS,
+    raid = {
+        { value = "ANY", label = "Any Difficulty" },
+        { value = "NORMAL", label = "Normal" },
+        { value = "HEROIC", label = "Heroic" },
+        { value = "MYTHIC", label = "Mythic" },
+    },
 }
 
 local currentSearchMode = "generic"
@@ -482,12 +581,29 @@ local boxLust
 local boxBrez
 local divTexture
 local filterDungeonContainer
+local nativeDungeonFilterScroll
+local nativeDungeonFilterContent
+local nativeDungeonActivityButtons = {}
+local nativeNeedsTankBox
+local nativeNeedsHealBox
+local nativeNeedsDpsBox
+local nativeNeedsMyClassBox
+local nativeHasTankBox
+local nativeHasHealBox
+local nativePartyBox
+local nativeLustBox
+local nativeBrezBox
+local nativeMinimumRatingLabel
+local nativeMinimumRatingBox
+local nativeActivityLabel
+local nativePGFWarningBox
+local nativePGFWarningText
 local nativeSearchBoxHost
 local nativeSearchBoxOriginalState
 local nativeAutoCompleteOriginalState
 
 local OAK_F = {
-    Difficulty = 1,
+    Difficulty = "ANY",
     HasTank = false,
     NeedTank = false,
     HasHeal = false,
@@ -503,25 +619,137 @@ local OAK_F = {
 for _, dun in ipairs(DEFAULT_SEASON_DUNGEONS) do
     OAK_F.Activities[dun] = false
 end
+for _, delve in ipairs(DEFAULT_SEASON_DELVES) do
+    OAK_F.Activities[delve] = false
+end
+
+local function SearchModeUsesDifficulty(mode)
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid"
+end
+
+local function SearchModeUsesActivityFilters(mode)
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid" or mode == "delve"
+end
+
+local function SearchModeUsesHostedSearch(mode)
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "generic" or mode == "delve"
+end
+
+local function SearchModeUsesNativeDungeonFilters(mode)
+    return mode == "mythic_plus" or mode == "dungeon"
+end
+
+local function GetSearchDifficultyOptions(mode)
+    return SEARCH_DIFFICULTY_OPTIONS[mode] or {}
+end
+
+local function SearchDifficultyIsValidForMode(mode, difficultyValue)
+    if difficultyValue == "ANY" then
+        return true
+    end
+
+    for _, option in ipairs(GetSearchDifficultyOptions(mode)) do
+        if option.value == difficultyValue then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function GetSearchActivitySectionTitle(mode)
+    if mode == "raid" then
+        return "Filter Raids"
+    elseif mode == "delve" then
+        return "Filter Delves"
+    elseif mode == "mythic_plus" or mode == "dungeon" then
+        return "Filter Dungeons"
+    end
+
+    return nil
+end
+
+local function GetSearchQueryLabel(mode)
+    if mode == "mythic_plus" then
+        return "Examples: 12-13, <10, 12 pit", ""
+    elseif mode == "dungeon" or mode == "delve" or mode == "generic" then
+        return "Use Blizzard search terms", ""
+    end
+
+    return "", ""
+end
+
+local function GetAdvancedSearchFilter()
+    if C_LFGList and C_LFGList.GetAdvancedFilter then
+        return C_LFGList.GetAdvancedFilter() or {}
+    end
+
+    return {}
+end
+
+local function IsAddonLoadedCompat(addonNameToCheck)
+    if not addonNameToCheck or addonNameToCheck == "" then
+        return false
+    end
+
+    if C_AddOns and C_AddOns.IsAddOnLoaded then
+        local loaded = C_AddOns.IsAddOnLoaded(addonNameToCheck)
+        if loaded then
+            return true
+        end
+    end
+
+    if IsAddOnLoaded then
+        local loaded = IsAddOnLoaded(addonNameToCheck)
+        if loaded then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function IsPGFDetected()
+    local addonNames = {
+        "PremadeGroupsFilter",
+        "PremadeGroupFilter",
+        "PGF",
+    }
+
+    for _, addonKey in ipairs(addonNames) do
+        if IsAddonLoadedCompat(addonKey) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function SaveAdvancedSearchFilter(mutator)
+    if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then
+        OAK_SEARCH:UpdateDisplay()
+        return
+    end
+
+    local adv = GetAdvancedSearchFilter()
+    if mutator then
+        mutator(adv)
+    end
+    C_LFGList.SaveAdvancedFilter(adv)
+    if OAK_SEARCH and OAK_SEARCH.UpdateDisplay then
+        OAK_SEARCH:UpdateDisplay()
+    end
+end
 
 -- Native API Syncer for Advanced Filters
 local function SyncNativeFilters()
-    if C_LFGList.GetAdvancedFilter and C_LFGList.SaveAdvancedFilter then
-        local adv = C_LFGList.GetAdvancedFilter() or {}
-        adv.roleTank = OAK_F.NeedTank
-        adv.roleHealer = OAK_F.NeedHeal
-        adv.roleDamage = OAK_F.NeedDPS
-        C_LFGList.SaveAdvancedFilter(adv)
-        
-        if LFGListFrame and LFGListFrame.SearchPanel then
-            if ApplyOakSearchQuery then
-                ApplyOakSearchQuery(false)
-            end
-            LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
-        end
-    else
-        OAK_SEARCH:UpdateDisplay()
-    end
+    SaveAdvancedSearchFilter(function(adv)
+        adv.needsTank = OAK_F.NeedTank and true or nil
+        adv.needsHealer = OAK_F.NeedHeal and true or nil
+        adv.needsDamage = OAK_F.NeedDPS and true or nil
+        adv.hasTank = OAK_F.HasTank and true or nil
+        adv.hasHealer = OAK_F.HasHeal and true or nil
+    end)
 end
 
 local function CreateOakToggleBox(parent, label, stateKey, triggersSync)
@@ -548,6 +776,48 @@ local function CreateOakToggleBox(parent, label, stateKey, triggersSync)
         self:SetState(OAK_F[stateKey])
         if triggersSync then SyncNativeFilters() else OAK_SEARCH:UpdateDisplay() end
     end)
+    return box
+end
+
+local function CreateStandaloneToggleBox(parent, label)
+    local box = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    box:SetSize(16, 16)
+    box:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
+    box:SetBackdropColor(0.106, 0.106, 0.129, 0.95)
+    box:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
+
+    local text = parent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    text:SetPoint("LEFT", box, "RIGHT", 5, 0)
+    text:SetText(label or "")
+    box.labelText = text
+
+    function box:SetLabel(newLabel)
+        self.labelText:SetText(newLabel or "")
+    end
+
+    function box:SetState(isActive)
+        if isActive then
+            self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
+            self:SetBackdropBorderColor(0, 0, 0, 1)
+        else
+            self:SetBackdropColor(0.106, 0.106, 0.129, 0.95)
+            self:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
+        end
+    end
+
+    return box
+end
+
+local function CreateStandaloneNumberBox(parent, width)
+    local box = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
+    box:SetSize(width, 20)
+    box:SetAutoFocus(false)
+    box:SetNumeric(true)
+    box:SetFontObject("OakLFG_FontRegular")
+    box:SetJustifyH("CENTER")
+    box:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
+    box:SetBackdropColor(unpack(OAK_COLOR_PANE))
+    box:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
     return box
 end
 
@@ -688,9 +958,8 @@ RestoreNativeSearchBox = function()
 end
 
 -- Dropdowns
-local diffOptions = {"Any Difficulty", "Normal", "Heroic", "Mythic", "Mythic+"}
-local diffDropdown = CreateOakDropdown(filterPanel, 175, diffOptions[1], diffOptions, function(idx)
-    OAK_F.Difficulty = idx
+local diffDropdown = CreateOakDropdown(filterPanel, 175, "Any Difficulty", GetSearchDifficultyOptions(currentSearchMode), function(value)
+    OAK_F.Difficulty = value
     if ApplyOakSearchQuery then
         ApplyOakSearchQuery(false)
     end
@@ -725,6 +994,12 @@ searchQueryBtn:SetScript("OnClick", function()
     if ApplyOakSearchQuery then
         ApplyOakSearchQuery(true)
     end
+end)
+
+resetFiltersBtn = CreateFlatButton(filterPanel, "Reset", 84)
+resetFiltersBtn:SetPoint("TOPLEFT", searchQueryBtn, "TOPRIGHT", 7, 0)
+resetFiltersBtn:SetScript("OnClick", function()
+    ResetSearchFilters()
 end)
 
 -- Modern 2-Column Exact Layout Match
@@ -802,6 +1077,153 @@ for index = 1, 18 do
     filterDungeonButtons[index] = box
 end
 
+nativeDungeonFilterScroll = CreateFrame("ScrollFrame", "OakLFGNativeDungeonFilterScroll", filterPanel, "UIPanelScrollFrameTemplate")
+nativeDungeonFilterScroll:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 10, -148)
+nativeDungeonFilterScroll:SetPoint("BOTTOMRIGHT", filterPanel, "BOTTOMRIGHT", -12, 10)
+nativeDungeonFilterScroll:Hide()
+
+do
+    local scrollBar = _G[nativeDungeonFilterScroll:GetName() .. "ScrollBar"]
+    if scrollBar then
+        local upBtn = _G[scrollBar:GetName() .. "ScrollUpButton"]
+        local downBtn = _G[scrollBar:GetName() .. "ScrollDownButton"]
+        if upBtn then upBtn:Hide(); upBtn:SetSize(0.1, 0.1) end
+        if downBtn then downBtn:Hide(); downBtn:SetSize(0.1, 0.1) end
+        local topTex = _G[scrollBar:GetName() .. "Top"]
+        local bottomTex = _G[scrollBar:GetName() .. "Bottom"]
+        local midTex = _G[scrollBar:GetName() .. "Middle"]
+        if topTex then topTex:Hide() end
+        if bottomTex then bottomTex:Hide() end
+        if midTex then midTex:Hide() end
+        local thumb = scrollBar:GetThumbTexture()
+        if thumb then
+            thumb:SetTexture(FLAT_TEX)
+            thumb:SetVertexColor(classColor.r, classColor.g, classColor.b, 1)
+            thumb:SetSize(8, 40)
+        end
+        scrollBar:SetWidth(8)
+    end
+end
+
+nativeDungeonFilterContent = CreateFrame("Frame", nil, nativeDungeonFilterScroll)
+nativeDungeonFilterContent:SetSize(175, 1)
+nativeDungeonFilterScroll:SetScrollChild(nativeDungeonFilterContent)
+
+nativePGFWarningBox = CreateFrame("Frame", nil, nativeDungeonFilterContent, "BackdropTemplate")
+nativePGFWarningBox:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
+nativePGFWarningBox:SetBackdropColor(0.24, 0.16, 0.04, 0.92)
+nativePGFWarningBox:SetBackdropBorderColor(classColor.r * 0.8, classColor.g * 0.8, classColor.b * 0.8, 1)
+nativePGFWarningBox:SetHeight(38)
+nativePGFWarningBox:Hide()
+
+nativePGFWarningText = nativePGFWarningBox:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+nativePGFWarningText:SetPoint("TOPLEFT", nativePGFWarningBox, "TOPLEFT", 6, -5)
+nativePGFWarningText:SetPoint("TOPRIGHT", nativePGFWarningBox, "TOPRIGHT", -6, -5)
+nativePGFWarningText:SetJustifyH("LEFT")
+nativePGFWarningText:SetJustifyV("TOP")
+nativePGFWarningText:SetTextColor(1, 0.9, 0.45)
+nativePGFWarningText:SetText("PGF detected. Blizzard dungeon filters are shared, so PGF and Oak may overwrite each other's selections.")
+
+nativeNeedsTankBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need Tank")
+nativeNeedsHealBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need Healer")
+nativeNeedsDpsBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need Damage")
+nativeNeedsMyClassBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "")
+nativeNeedsMyClassBox.labelText:SetFontObject("OakLFG_FontSmall")
+nativeHasTankBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Has Tank")
+nativeHasHealBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Has Healer")
+nativePartyBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Party Fit")
+nativeLustBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need Lust")
+nativeBrezBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need BRez")
+
+nativeMinimumRatingLabel = nativeDungeonFilterContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+nativeMinimumRatingLabel:SetText("Min Rating")
+nativeMinimumRatingLabel:SetTextColor(classColor.r, classColor.g, classColor.b)
+
+nativeMinimumRatingBox = CreateStandaloneNumberBox(nativeDungeonFilterContent, 56)
+
+nativeActivityLabel = nativeDungeonFilterContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+nativeActivityLabel:SetText("Dungeons")
+nativeActivityLabel:SetTextColor(classColor.r, classColor.g, classColor.b)
+nativeActivityLabel:SetFontObject("OakLFG_FontSmall")
+
+nativeNeedsTankBox:SetScript("OnClick", function()
+    local adv = GetAdvancedSearchFilter()
+    local nextState = not (adv.needsTank == true)
+    nativeNeedsTankBox:SetState(nextState)
+    SaveAdvancedSearchFilter(function(state)
+        state.needsTank = nextState and true or nil
+    end)
+end)
+nativeNeedsHealBox:SetScript("OnClick", function()
+    local adv = GetAdvancedSearchFilter()
+    local nextState = not (adv.needsHealer == true)
+    nativeNeedsHealBox:SetState(nextState)
+    SaveAdvancedSearchFilter(function(state)
+        state.needsHealer = nextState and true or nil
+    end)
+end)
+nativeNeedsDpsBox:SetScript("OnClick", function()
+    local adv = GetAdvancedSearchFilter()
+    local nextState = not (adv.needsDamage == true)
+    nativeNeedsDpsBox:SetState(nextState)
+    SaveAdvancedSearchFilter(function(state)
+        state.needsDamage = nextState and true or nil
+    end)
+end)
+nativeNeedsMyClassBox:SetScript("OnClick", function()
+    local adv = GetAdvancedSearchFilter()
+    local nextState = not (adv.needsMyClass == true)
+    nativeNeedsMyClassBox:SetState(nextState)
+    SaveAdvancedSearchFilter(function(state)
+        state.needsMyClass = nextState and true or nil
+    end)
+end)
+nativeHasTankBox:SetScript("OnClick", function()
+    local adv = GetAdvancedSearchFilter()
+    local nextState = not (adv.hasTank == true)
+    nativeHasTankBox:SetState(nextState)
+    SaveAdvancedSearchFilter(function(state)
+        state.hasTank = nextState and true or nil
+    end)
+end)
+nativeHasHealBox:SetScript("OnClick", function()
+    local adv = GetAdvancedSearchFilter()
+    local nextState = not (adv.hasHealer == true)
+    nativeHasHealBox:SetState(nextState)
+    SaveAdvancedSearchFilter(function(state)
+        state.hasHealer = nextState and true or nil
+    end)
+end)
+nativePartyBox:SetScript("OnClick", function(self)
+    OAK_F.PartyFit = not OAK_F.PartyFit
+    self:SetState(OAK_F.PartyFit)
+    OAK_SEARCH:UpdateDisplay()
+end)
+nativeLustBox:SetScript("OnClick", function(self)
+    OAK_F.NeedLust = not OAK_F.NeedLust
+    self:SetState(OAK_F.NeedLust)
+    OAK_SEARCH:UpdateDisplay()
+end)
+nativeBrezBox:SetScript("OnClick", function(self)
+    OAK_F.NeedBrez = not OAK_F.NeedBrez
+    self:SetState(OAK_F.NeedBrez)
+    OAK_SEARCH:UpdateDisplay()
+end)
+
+nativeMinimumRatingBox:SetScript("OnEnterPressed", function(self)
+    local value = tonumber(self:GetText())
+    SaveAdvancedSearchFilter(function(state)
+        state.minimumRating = value and math.max(0, math.floor(value)) or nil
+    end)
+    self:ClearFocus()
+end)
+nativeMinimumRatingBox:SetScript("OnEditFocusLost", function(self)
+    local value = tonumber(self:GetText())
+    SaveAdvancedSearchFilter(function(state)
+        state.minimumRating = value and math.max(0, math.floor(value)) or nil
+    end)
+end)
+
 -- ==========================================
 -- 4. Scroll Frame Setup
 -- ==========================================
@@ -828,6 +1250,9 @@ scrollFrame:SetScrollChild(scrollChild)
 
 OAK_SEARCH:SetScript("OnSizeChanged", function(self, width, height)
     scrollChild:SetWidth(scrollFrame:GetWidth())
+    if nativeDungeonFilterContent and nativeDungeonFilterScroll then
+        nativeDungeonFilterContent:SetWidth(math.max(1, nativeDungeonFilterScroll:GetWidth()))
+    end
 end)
 
 -- ==========================================
@@ -884,7 +1309,7 @@ local function GetSearchActionRightInset()
 end
 
 ShouldHostNativeSearchBox = function()
-    return currentSearchMode == "mythic_plus" or currentSearchMode == "generic" or currentSearchMode == "delve"
+    return SearchModeUsesHostedSearch(currentSearchMode)
 end
 
 local function GetCollapsedSearchActionCenterX(layout)
@@ -1178,6 +1603,9 @@ local function GetSearchListingMode(activityInfo)
     end
 
     local activityText = strlower((activityInfo.fullName or "") .. " " .. (activityInfo.shortName or ""))
+    local cleanFullName = strlower(tostring(activityInfo.fullName or ""):gsub("%s*%(.+%)", ""))
+    local cleanShortName = strlower(tostring(activityInfo.shortName or ""):gsub("%s*%(.+%)", ""))
+    local maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or 0
 
     if activityInfo.isMythicPlusActivity then
         return "mythic_plus"
@@ -1193,8 +1621,12 @@ local function GetSearchListingMode(activityInfo)
         return "legacy_raid"
     elseif activityText:find("world", 1, true) or activityText:find("outdoor", 1, true) then
         return "open_world"
-    elseif activityText:find("delve", 1, true) then
+    elseif activityText:find("delve", 1, true) or SEARCH_DELVE_LABEL_LOOKUP[cleanFullName] or SEARCH_DELVE_LABEL_LOOKUP[cleanShortName] then
         return "delve"
+    elseif maxPlayers > 0 and maxPlayers <= 5 then
+        if activityText:find("mythic", 1, true) or activityText:find("heroic", 1, true) or activityText:find("normal", 1, true) then
+            return "dungeon"
+        end
     end
 
     return "generic"
@@ -1296,6 +1728,270 @@ local function GetSearchFilterLabel(mode, activityInfo, pvpBracket)
         return pvpBracket or GetRaidFilterLabel(activityInfo)
     end
     return GetRaidFilterLabel(activityInfo)
+end
+
+local function GetNeedsMyClassLabel()
+    local localizedClassName = select(1, UnitClass("player"))
+    if localizedClassName and localizedClassName ~= "" then
+        return string.format("No %s in group", localizedClassName)
+    end
+
+    return "No duplicate class"
+end
+
+local function GetNativeDungeonActivityEntries()
+    local entries = {}
+    local seen = {}
+    local defaultOrder = {}
+
+    if currentSearchMode == "mythic_plus" then
+        for index, label in ipairs(DEFAULT_SEASON_DUNGEONS) do
+            defaultOrder[strlower(label)] = index
+            seen[strlower(label)] = { label = label, groupID = nil }
+            table.insert(entries, seen[strlower(label)])
+        end
+    end
+
+    for _, group in ipairs(searchResults) do
+        if group.mode == "mythic_plus" or group.mode == "dungeon" then
+            local label = GetRaidFilterLabel({ fullName = group.filterLabel })
+            local key = strlower(label or "")
+            if key ~= "" then
+                local existing = seen[key]
+                if existing then
+                    if not existing.groupID and group.activityGroupID and group.activityGroupID > 0 then
+                        existing.groupID = group.activityGroupID
+                    end
+                else
+                    local entry = {
+                        label = label,
+                        groupID = group.activityGroupID,
+                    }
+                    seen[key] = entry
+                    table.insert(entries, entry)
+                end
+            end
+        end
+    end
+
+    table.sort(entries, function(a, b)
+        local aKey = strlower(a.label or "")
+        local bKey = strlower(b.label or "")
+        local aOrder = defaultOrder[aKey]
+        local bOrder = defaultOrder[bKey]
+        if aOrder and bOrder then
+            return aOrder < bOrder
+        elseif aOrder then
+            return true
+        elseif bOrder then
+            return false
+        end
+        return (a.label or "") < (b.label or "")
+    end)
+
+    return entries
+end
+
+ResetSearchFilters = function()
+    OAK_F.Difficulty = "ANY"
+    OAK_F.HasTank = false
+    OAK_F.NeedTank = false
+    OAK_F.HasHeal = false
+    OAK_F.NeedHeal = false
+    OAK_F.NeedDPS = false
+    OAK_F.NeedLust = false
+    OAK_F.NeedBrez = false
+    OAK_F.PartyFit = false
+
+    for activityName in pairs(OAK_F.Activities) do
+        OAK_F.Activities[activityName] = false
+    end
+
+    if C_LFGList and C_LFGList.SaveAdvancedFilter then
+        local adv = GetAdvancedSearchFilter()
+        adv.needsTank = nil
+        adv.needsHealer = nil
+        adv.needsDamage = nil
+        adv.needsMyClass = nil
+        adv.hasTank = nil
+        adv.hasHealer = nil
+        adv.minimumRating = nil
+        adv.activities = {}
+        C_LFGList.SaveAdvancedFilter(adv)
+    end
+
+    if UpdateSearchFilterPane then
+        UpdateSearchFilterPane()
+    end
+    if OAK_SEARCH and OAK_SEARCH.UpdateDisplay then
+        OAK_SEARCH:UpdateDisplay()
+    end
+end
+
+local function UpdateNativeDungeonFilterPane(topOffset)
+    local adv = GetAdvancedSearchFilter()
+    local selectedActivities = {}
+    local y = -4
+    local showPGFWarning = IsPGFDetected()
+
+    nativeDungeonFilterScroll:ClearAllPoints()
+    nativeDungeonFilterScroll:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 10, topOffset)
+    nativeDungeonFilterScroll:SetPoint("BOTTOMRIGHT", filterPanel, "BOTTOMRIGHT", -12, 10)
+
+    if type(adv.activities) == "table" then
+        for _, groupID in ipairs(adv.activities) do
+            selectedActivities[tonumber(groupID) or 0] = true
+        end
+    end
+
+    nativeNeedsMyClassBox:SetLabel(GetNeedsMyClassLabel())
+
+    if showPGFWarning then
+        nativePGFWarningBox:ClearAllPoints()
+        nativePGFWarningBox:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", 5, y)
+        nativePGFWarningBox:SetPoint("TOPRIGHT", nativeDungeonFilterContent, "TOPRIGHT", -8, y)
+        nativePGFWarningBox:Show()
+        nativePGFWarningText:Show()
+        y = y - 46
+    else
+        nativePGFWarningBox:Hide()
+        nativePGFWarningText:Hide()
+    end
+
+    local topGrid = {
+        { box = nativeNeedsTankBox, active = adv.needsTank == true, x = 5, row = 0 },
+        { box = nativeHasTankBox, active = adv.hasTank == true, x = 95, row = 0 },
+        { box = nativeNeedsHealBox, active = adv.needsHealer == true, x = 5, row = 1 },
+        { box = nativeHasHealBox, active = adv.hasHealer == true, x = 95, row = 1 },
+        { box = nativeNeedsDpsBox, active = adv.needsDamage == true, x = 5, row = 2 },
+        { box = nativeNeedsMyClassBox, active = adv.needsMyClass == true, x = 95, row = 2 },
+    }
+
+    for _, entry in ipairs(topGrid) do
+        entry.box:ClearAllPoints()
+        entry.box:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", entry.x, y - (entry.row * 22))
+        entry.box:SetState(entry.active)
+        entry.box:Show()
+        if entry.box.labelText then
+            entry.box.labelText:Show()
+        end
+    end
+    y = y - 70
+
+    nativeMinimumRatingLabel:ClearAllPoints()
+    nativeMinimumRatingLabel:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", 5, y - 2)
+    nativeMinimumRatingLabel:Show()
+    nativeMinimumRatingBox:ClearAllPoints()
+    nativeMinimumRatingBox:SetPoint("TOPRIGHT", nativeDungeonFilterContent, "TOPRIGHT", -8, y + 2)
+    nativeMinimumRatingBox:SetText((tonumber(adv.minimumRating) or 0) > 0 and tostring(math.floor(adv.minimumRating)) or "")
+    nativeMinimumRatingBox:Show()
+    y = y - 28
+
+    local localUtilityControls = {
+        { box = nativePartyBox, active = OAK_F.PartyFit, x = 5, row = 0 },
+        { box = nativeLustBox, active = OAK_F.NeedLust, x = 95, row = 0 },
+        { box = nativeBrezBox, active = OAK_F.NeedBrez, x = 5, row = 1 },
+    }
+
+    for _, entry in ipairs(localUtilityControls) do
+        entry.box:ClearAllPoints()
+        entry.box:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", entry.x, y - (entry.row * 22))
+        entry.box:SetState(entry.active)
+        entry.box:Show()
+        if entry.box.labelText then
+            entry.box.labelText:Show()
+        end
+    end
+    y = y - 46
+
+    nativeActivityLabel:ClearAllPoints()
+    nativeActivityLabel:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", 5, y)
+    nativeActivityLabel:Show()
+    y = y - 16
+
+    local activityEntries = GetNativeDungeonActivityEntries()
+    for index, entry in ipairs(activityEntries) do
+        local button = nativeDungeonActivityButtons[index]
+        if not button then
+            button = CreateStandaloneToggleBox(nativeDungeonFilterContent, "")
+            button.labelText:SetFontObject("OakLFG_FontSmall")
+            button:SetScript("OnClick", function(self)
+                if not self.activityGroupID or self.activityGroupID <= 0 then
+                    return
+                end
+
+                local isSelected = false
+                local current = GetAdvancedSearchFilter()
+                local groups = {}
+                if type(current.activities) == "table" then
+                    for _, groupID in ipairs(current.activities) do
+                        local numericID = tonumber(groupID)
+                        if numericID and numericID > 0 then
+                            groups[numericID] = true
+                        end
+                    end
+                end
+                isSelected = groups[self.activityGroupID] == true
+
+                SaveAdvancedSearchFilter(function(state)
+                    local nextGroups = {}
+                    if type(state.activities) == "table" then
+                        for _, groupID in ipairs(state.activities) do
+                            local numericID = tonumber(groupID)
+                            if numericID and numericID > 0 then
+                                nextGroups[numericID] = true
+                            end
+                        end
+                    end
+
+                    if isSelected then
+                        nextGroups[self.activityGroupID] = nil
+                    else
+                        nextGroups[self.activityGroupID] = true
+                    end
+
+                    state.activities = {}
+                    for groupID in pairs(nextGroups) do
+                        table.insert(state.activities, groupID)
+                    end
+                    table.sort(state.activities)
+                end)
+                self:SetState(not isSelected)
+            end)
+            nativeDungeonActivityButtons[index] = button
+        end
+
+        button.activityGroupID = tonumber(entry.groupID) or 0
+        button:SetLabel(entry.label)
+        button:SetState(button.activityGroupID > 0 and selectedActivities[button.activityGroupID] == true)
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", 5, y)
+        if button.activityGroupID > 0 then
+            button:Enable()
+            button.labelText:SetTextColor(1, 1, 1)
+        else
+            button:Disable()
+            button:SetState(false)
+            button.labelText:SetTextColor(0.55, 0.55, 0.55)
+        end
+        button:Show()
+        if button.labelText then
+            button.labelText:Show()
+        end
+        y = y - 18
+    end
+
+    for index = #activityEntries + 1, #nativeDungeonActivityButtons do
+        local button = nativeDungeonActivityButtons[index]
+        if button then
+            button:Hide()
+            if button.labelText then
+                button.labelText:Hide()
+            end
+        end
+    end
+
+    nativeDungeonFilterContent:SetHeight(math.max(1, -y + 8))
 end
 
 local function GetResultRatingData(searchResultInfo, activityInfo)
@@ -1401,8 +2097,15 @@ local function GetCurrentSearchActivityLabels()
     local labels = {}
     local seen = {}
 
-    if currentSearchMode == "mythic_plus" or currentSearchMode == "generic" or currentSearchMode == "delve" then
+    if currentSearchMode == "mythic_plus" then
         for _, label in ipairs(DEFAULT_SEASON_DUNGEONS) do
+            if not seen[label] then
+                seen[label] = true
+                table.insert(labels, label)
+            end
+        end
+    elseif currentSearchMode == "delve" then
+        for _, label in ipairs(DEFAULT_SEASON_DELVES) do
             if not seen[label] then
                 seen[label] = true
                 table.insert(labels, label)
@@ -1420,6 +2123,26 @@ local function GetCurrentSearchActivityLabels()
 
     table.sort(labels)
     return labels
+end
+
+local function GetSearchResultActivityID(searchResultInfo)
+    if not searchResultInfo then
+        return nil
+    end
+
+    local activityID = tonumber(searchResultInfo.activityID)
+    if not activityID and securecallfunction then
+        activityID = securecallfunction(function(info)
+            local ids = info and info.activityIDs
+            local firstID = type(ids) == "table" and ids[1] or nil
+            return tonumber(firstID)
+        end, searchResultInfo)
+    end
+    if activityID == 0 then
+        activityID = nil
+    end
+
+    return activityID
 end
 
 local function SetControlVisible(control, visible)
@@ -1440,29 +2163,31 @@ local function SetControlVisible(control, visible)
     end
 end
 
-local function UpdateSearchFilterPane()
-    local showKeyRange = currentSearchMode == "mythic_plus" or currentSearchMode == "generic" or currentSearchMode == "delve"
-    local showPvpRange = currentSearchMode == "rated_pvp" or currentSearchMode == "pvp"
-    local showNeedFilters = true
-    local showHasFilters = true
-    local showPartyFit = true
-    local showUtility = true
+UpdateSearchFilterPane = function()
+    local showSearchQuery = SearchModeUsesHostedSearch(currentSearchMode)
+    local showNativeDungeonFilters = SearchModeUsesNativeDungeonFilters(currentSearchMode)
+    local showDifficulty = SearchModeUsesDifficulty(currentSearchMode)
+    local showActivityFilters = SearchModeUsesActivityFilters(currentSearchMode)
 
-    if not showKeyRange then
+    if not showSearchQuery then
         OAK_F.SearchQuery = ""
     end
 
-    if currentSearchMode ~= "mythic_plus" and OAK_F.Difficulty == 5 then
-        OAK_F.Difficulty = 1
+    if not SearchDifficultyIsValidForMode(currentSearchMode, OAK_F.Difficulty) then
+        OAK_F.Difficulty = "ANY"
     end
-    diffDropdown.text:SetText(diffOptions[OAK_F.Difficulty] or diffOptions[1])
+    diffDropdown:SetOptions(GetSearchDifficultyOptions(currentSearchMode))
+    diffDropdown:SetValue(OAK_F.Difficulty)
+    local queryLabel, queryHint = GetSearchQueryLabel(currentSearchMode)
+    keyRangeLabel:SetText(queryLabel)
+    keyRangeHint:SetText(queryHint)
 
-    SetControlVisible(diffDropdown, currentSearchMode ~= "pvp" and currentSearchMode ~= "rated_pvp" and currentSearchMode ~= "open_world")
-    SetControlVisible(keyRangeLabel, showKeyRange)
-    SetControlVisible(keyRangeHint, showKeyRange)
-    SetControlVisible(keyQueryBox, showKeyRange)
-    SetControlVisible(searchQueryBtn, showKeyRange)
-    if showKeyRange and filterPanel:IsShown() then
+    SetControlVisible(diffDropdown, showDifficulty)
+    SetControlVisible(keyRangeLabel, showSearchQuery)
+    SetControlVisible(keyRangeHint, showSearchQuery)
+    SetControlVisible(keyQueryBox, showSearchQuery)
+    SetControlVisible(searchQueryBtn, showSearchQuery)
+    if showSearchQuery and filterPanel:IsShown() then
         if AttachNativeSearchBoxToOak then
             AttachNativeSearchBoxToOak()
         end
@@ -1471,26 +2196,97 @@ local function UpdateSearchFilterPane()
             RestoreNativeSearchBox()
         end
     end
-    SetControlVisible(boxNeedTank, showNeedFilters)
-    SetControlVisible(boxNeedHeal, showNeedFilters)
-    SetControlVisible(boxNeedDPS, showNeedFilters)
-    SetControlVisible(boxHasTank, showHasFilters)
-    SetControlVisible(boxHasHeal, showHasFilters)
-    SetControlVisible(boxParty, showPartyFit)
-    SetControlVisible(boxLust, showUtility)
-    SetControlVisible(boxBrez, showUtility)
 
-    if currentSearchMode == "raid" or currentSearchMode == "legacy_raid" then
-        filterActivityTitle:SetText("Filter Raids")
-    elseif currentSearchMode == "rated_pvp" or currentSearchMode == "pvp" then
-        filterActivityTitle:SetText("Filter Activities")
-    elseif currentSearchMode == "open_world" then
-        filterActivityTitle:SetText("Filter Activities")
-    else
-        filterActivityTitle:SetText("Filter Dungeons")
+    local activitySectionTitle = GetSearchActivitySectionTitle(currentSearchMode)
+    if activitySectionTitle then
+        filterActivityTitle:SetText(activitySectionTitle)
     end
 
-    local baseY = showKeyRange and -148 or -78
+    local difficultyTopY = -35
+    local queryLabelTopY = showDifficulty and -67 or -35
+    local queryHintTopY = queryLabelTopY - 15
+    local queryBoxTopY = queryHintTopY - 6
+    local searchButtonTopY = queryBoxTopY - 28
+    local baseY
+
+    diffDropdown:ClearAllPoints()
+    diffDropdown:SetPoint("TOP", filterPanel, "TOP", 0, difficultyTopY)
+
+    keyRangeLabel:ClearAllPoints()
+    keyRangeLabel:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryLabelTopY)
+    keyRangeHint:ClearAllPoints()
+    keyRangeHint:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryHintTopY)
+    keyQueryBox:ClearAllPoints()
+    keyQueryBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY)
+    searchQueryBtn:ClearAllPoints()
+    resetFiltersBtn:ClearAllPoints()
+
+    if showNativeDungeonFilters then
+        searchQueryBtn:SetWidth(84)
+        searchQueryBtn.text:SetText("Refresh")
+        searchQueryBtn:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, searchButtonTopY)
+        resetFiltersBtn:SetPoint("TOPLEFT", searchQueryBtn, "TOPRIGHT", 7, 0)
+        resetFiltersBtn:Show()
+        SetControlVisible(boxNeedTank, false)
+        SetControlVisible(boxNeedHeal, false)
+        SetControlVisible(boxNeedDPS, false)
+        SetControlVisible(boxHasTank, false)
+        SetControlVisible(boxHasHeal, false)
+        SetControlVisible(boxParty, false)
+        SetControlVisible(boxLust, false)
+        SetControlVisible(boxBrez, false)
+        SetControlVisible(divTexture, false)
+        SetControlVisible(filterActivityTitle, false)
+        SetControlVisible(filterDungeonContainer, false)
+
+        nativeDungeonFilterScroll:Show()
+        UpdateNativeDungeonFilterPane(searchButtonTopY - 34)
+        return
+    else
+        nativeDungeonFilterScroll:Hide()
+        nativePGFWarningBox:Hide()
+        nativePGFWarningText:Hide()
+        nativeMinimumRatingLabel:Hide()
+        nativeMinimumRatingBox:Hide()
+        nativeActivityLabel:Hide()
+        for _, box in ipairs(nativeDungeonActivityButtons) do
+            box:Hide()
+            if box.labelText then box.labelText:Hide() end
+        end
+        nativeNeedsTankBox:Hide(); if nativeNeedsTankBox.labelText then nativeNeedsTankBox.labelText:Hide() end
+        nativeNeedsHealBox:Hide(); if nativeNeedsHealBox.labelText then nativeNeedsHealBox.labelText:Hide() end
+        nativeNeedsDpsBox:Hide(); if nativeNeedsDpsBox.labelText then nativeNeedsDpsBox.labelText:Hide() end
+        nativeNeedsMyClassBox:Hide(); if nativeNeedsMyClassBox.labelText then nativeNeedsMyClassBox.labelText:Hide() end
+        nativeHasTankBox:Hide(); if nativeHasTankBox.labelText then nativeHasTankBox.labelText:Hide() end
+        nativeHasHealBox:Hide(); if nativeHasHealBox.labelText then nativeHasHealBox.labelText:Hide() end
+        nativePartyBox:Hide(); if nativePartyBox.labelText then nativePartyBox.labelText:Hide() end
+        nativeLustBox:Hide(); if nativeLustBox.labelText then nativeLustBox.labelText:Hide() end
+        nativeBrezBox:Hide(); if nativeBrezBox.labelText then nativeBrezBox.labelText:Hide() end
+    end
+
+    searchQueryBtn:SetWidth(175)
+    searchQueryBtn.text:SetText("Search")
+    searchQueryBtn:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, searchButtonTopY)
+    resetFiltersBtn:Hide()
+
+    SetControlVisible(boxNeedTank, true)
+    SetControlVisible(boxNeedHeal, true)
+    SetControlVisible(boxNeedDPS, true)
+    SetControlVisible(boxHasTank, true)
+    SetControlVisible(boxHasHeal, true)
+    SetControlVisible(boxParty, true)
+    SetControlVisible(boxLust, true)
+    SetControlVisible(boxBrez, true)
+    SetControlVisible(divTexture, showActivityFilters)
+    SetControlVisible(filterActivityTitle, showActivityFilters)
+    SetControlVisible(filterDungeonContainer, showActivityFilters)
+
+    if showSearchQuery then
+        baseY = showDifficulty and -148 or -116
+    else
+        baseY = showDifficulty and -78 or -46
+    end
+
     boxNeedTank:ClearAllPoints()
     boxNeedTank:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY)
     boxHasTank:ClearAllPoints()
@@ -1515,10 +2311,10 @@ local function UpdateSearchFilterPane()
     filterDungeonContainer:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 10, baseY - 106)
     filterDungeonContainer:SetPoint("BOTTOMRIGHT", filterPanel, "BOTTOMRIGHT", -10, 10)
 
-    currentActivityFilters = GetCurrentSearchActivityLabels()
+    currentActivityFilters = showActivityFilters and GetCurrentSearchActivityLabels() or {}
     for index, box in ipairs(filterDungeonButtons) do
         local label = currentActivityFilters[index]
-        if label then
+        if label and showActivityFilters then
             if OAK_F.Activities[label] == nil then
                 OAK_F.Activities[label] = false
             end
@@ -1535,6 +2331,46 @@ local function UpdateSearchFilterPane()
             box:Hide()
         end
     end
+end
+
+local function DetermineSearchMode()
+    local modeCounts = {}
+    local priority = {
+        "raid",
+        "legacy_raid",
+        "rated_pvp",
+        "pvp",
+        "delve",
+        "dungeon",
+        "mythic_plus",
+        "open_world",
+        "generic",
+    }
+
+    for _, group in ipairs(searchResults) do
+        local mode = group.mode or "generic"
+        local filterLabel = strlower(tostring(group.filterLabel or ""))
+        if mode == "generic" and SEARCH_DELVE_LABEL_LOOKUP[filterLabel] then
+            mode = "delve"
+        end
+        modeCounts[mode] = (modeCounts[mode] or 0) + 1
+    end
+
+    for _, mode in ipairs(priority) do
+        if (modeCounts[mode] or 0) > 0 then
+            return mode
+        end
+    end
+
+    if currentSearchMode and currentSearchMode ~= "generic" then
+        return currentSearchMode
+    end
+
+    if addonTable and addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode then
+        return addonTable.CurrentSearchContext.mode
+    end
+
+    return "generic"
 end
 
 local function BuildRoleClassBreakdown(memberDetails)
@@ -1608,7 +2444,7 @@ local function EscapePattern(text)
 end
 
 local function IsSearchKeyMode()
-    return currentSearchMode == "mythic_plus" or currentSearchMode == "generic" or currentSearchMode == "delve" or OAK_F.Difficulty == 5
+    return currentSearchMode == "mythic_plus" or OAK_F.Difficulty == "MYTHIC_PLUS"
 end
 
 local function BuildNativeKeyQuery()
@@ -1637,21 +2473,33 @@ ApplyOakSearchQuery = function(triggerSearch)
     end
 end
 
-ApplySearchNotesLayout = function()
+ApplySearchNotesLayout = function(preserveLeftEdge)
     local hideNotes = OakLFGSorterDB and OakLFGSorterDB.searchHideNotes
     local targetWidth = hideNotes and SEARCH_COLLAPSED_WIDTH or SEARCH_FULL_WIDTH
-    local left = OAK_SEARCH:GetLeft()
-    local bottom = OAK_SEARCH:GetBottom()
 
     OAK_SEARCH:SetResizeBounds(targetWidth, 444, targetWidth, 800)
-    OAK_SEARCH:SetWidth(targetWidth)
-    scrollChild:SetWidth(scrollFrame:GetWidth())
 
-    if left and bottom then
-        OAK_SEARCH:ClearAllPoints()
-        OAK_SEARCH:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom)
-        OakLFGSorterDB.searchFramePos = { "BOTTOMLEFT", "BOTTOMLEFT", left, bottom }
+    if preserveLeftEdge and HasSavedSearchFramePosition() then
+        local left = OAK_SEARCH:GetLeft()
+        local bottom = OAK_SEARCH:GetBottom()
+
+        OAK_SEARCH:SetWidth(targetWidth)
+        if left and bottom then
+            OAK_SEARCH:ClearAllPoints()
+            OAK_SEARCH:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom)
+            OakLFGSorterDB.searchFramePos = { "BOTTOMLEFT", "BOTTOMLEFT", left, bottom }
+            OakLFGSorterDB.searchFrameUserPlaced = true
+        end
+    else
+        OAK_SEARCH:SetWidth(targetWidth)
+        if HasSavedSearchFramePosition() then
+            RestoreSearchFramePosition()
+        else
+            AutoPositionSearch()
+        end
     end
+
+    scrollChild:SetWidth(scrollFrame:GetWidth())
 
     UpdateSearchHeaderVisuals()
 
@@ -1715,7 +2563,7 @@ end
 
 notesToggleBtn:SetScript("OnClick", function()
     OakLFGSorterDB.searchHideNotes = not OakLFGSorterDB.searchHideNotes
-    ApplySearchNotesLayout()
+    ApplySearchNotesLayout(true)
     RequestUpdate()
 end)
 
@@ -1962,48 +2810,95 @@ end
 function OAK_SEARCH:UpdateDisplay()
     local myT, myH, myD = GetMyPartyRoles()
     local filteredGroups = {}
+    local useNativeDungeonFilters = SearchModeUsesNativeDungeonFilters(currentSearchMode)
+    local adv = useNativeDungeonFilters and GetAdvancedSearchFilter() or nil
+    local selectedActivityGroups = {}
+    local playerClassToken = select(2, UnitClass("player"))
+
+    if adv and type(adv.activities) == "table" then
+        for _, groupID in ipairs(adv.activities) do
+            local numericID = tonumber(groupID)
+            if numericID and numericID > 0 then
+                selectedActivityGroups[numericID] = true
+            end
+        end
+    end
     
     for _, group in ipairs(searchResults) do
         local skip = false
-        
-        local anyFilterActive = false
-        local matchFound = false
-        for _, activityName in ipairs(currentActivityFilters) do
-            if OAK_F.Activities[activityName] then
-                anyFilterActive = true
-                if group.filterLabel == activityName then
-                    matchFound = true
+
+        if useNativeDungeonFilters then
+            local selectedCount = 0
+            for _ in pairs(selectedActivityGroups) do
+                selectedCount = selectedCount + 1
+            end
+            if selectedCount > 0 and not selectedActivityGroups[tonumber(group.activityGroupID) or 0] then
+                skip = true
+            end
+
+            if adv.hasTank and group.tanks == 0 then skip = true end
+            if adv.hasHealer and group.heals == 0 then skip = true end
+        else
+            local anyFilterActive = false
+            local matchFound = false
+            for _, activityName in ipairs(currentActivityFilters) do
+                if OAK_F.Activities[activityName] then
+                    anyFilterActive = true
+                    if group.filterLabel == activityName then
+                        matchFound = true
+                    end
                 end
             end
+            if anyFilterActive and not matchFound then skip = true end
+
+            if OAK_F.HasTank and group.tanks == 0 then skip = true end
+            if OAK_F.HasHeal and group.heals == 0 then skip = true end
         end
-        if anyFilterActive and not matchFound then skip = true end
-        
-        if OAK_F.HasTank and group.tanks == 0 then skip = true end
-        if OAK_F.HasHeal and group.heals == 0 then skip = true end
 
         local maxPlayers = tonumber(group.maxPlayers) or 0
-        if currentSearchMode == "mythic_plus" or currentSearchMode == "generic" or currentSearchMode == "delve" or currentSearchMode == "rated_pvp" or currentSearchMode == "pvp" then
-            if OAK_F.NeedTank and group.tanks >= 1 then skip = true end
-            if OAK_F.NeedHeal and group.heals >= 1 then skip = true end
-            if OAK_F.NeedDPS and group.dps >= 3 then skip = true end
-        elseif maxPlayers > 5 then
-            local targetTanks = math.max(1, math.min(2, math.ceil(maxPlayers / 10)))
-            local targetHeals = math.max(2, math.floor(maxPlayers / 5))
-            local targetDps = math.max(0, maxPlayers - targetTanks - targetHeals)
+        if useNativeDungeonFilters then
+            if adv.needsTank and group.tanks >= 1 then skip = true end
+            if adv.needsHealer and group.heals >= 1 then skip = true end
+            if adv.needsDamage and group.dps >= 3 then skip = true end
+            if adv.minimumRating and (tonumber(group.rating) or 0) < tonumber(adv.minimumRating) then
+                skip = true
+            end
+            if adv.needsMyClass and playerClassToken then
+                local foundClass = false
+                for _, member in ipairs(group.memberDetails or {}) do
+                    if member.class and string.upper(member.class) == playerClassToken then
+                        foundClass = true
+                        break
+                    end
+                end
+                if foundClass then
+                    skip = true
+                end
+            end
+        else
+            if currentSearchMode == "mythic_plus" or currentSearchMode == "dungeon" or currentSearchMode == "generic" or currentSearchMode == "delve" or currentSearchMode == "rated_pvp" or currentSearchMode == "pvp" then
+                if OAK_F.NeedTank and group.tanks >= 1 then skip = true end
+                if OAK_F.NeedHeal and group.heals >= 1 then skip = true end
+                if OAK_F.NeedDPS and group.dps >= 3 then skip = true end
+            elseif maxPlayers > 5 then
+                local targetTanks = math.max(1, math.min(2, math.ceil(maxPlayers / 10)))
+                local targetHeals = math.max(2, math.floor(maxPlayers / 5))
+                local targetDps = math.max(0, maxPlayers - targetTanks - targetHeals)
 
-            if OAK_F.NeedTank and group.tanks >= targetTanks then skip = true end
-            if OAK_F.NeedHeal and group.heals >= targetHeals then skip = true end
-            if OAK_F.NeedDPS and (group.dps >= targetDps or group.members >= maxPlayers) then skip = true end
+                if OAK_F.NeedTank and group.tanks >= targetTanks then skip = true end
+                if OAK_F.NeedHeal and group.heals >= targetHeals then skip = true end
+                if OAK_F.NeedDPS and (group.dps >= targetDps or group.members >= maxPlayers) then skip = true end
+            end
         end
 
         if OAK_F.NeedLust and group.hasLust then skip = true end
         if OAK_F.NeedBrez and group.hasBrez then skip = true end
 
-        if currentSearchMode ~= "pvp" and currentSearchMode ~= "rated_pvp" and currentSearchMode ~= "open_world" then
-            if OAK_F.Difficulty == 2 and group.difficultyToken ~= "NORMAL" then skip = true end
-            if OAK_F.Difficulty == 3 and group.difficultyToken ~= "HEROIC" then skip = true end
-            if OAK_F.Difficulty == 4 and group.difficultyToken ~= "MYTHIC" then skip = true end
-            if OAK_F.Difficulty == 5 and group.difficultyToken ~= "MYTHIC_PLUS" then skip = true end
+        if SearchModeUsesDifficulty(currentSearchMode) then
+            if OAK_F.Difficulty == "NORMAL" and group.difficultyToken ~= "NORMAL" then skip = true end
+            if OAK_F.Difficulty == "HEROIC" and group.difficultyToken ~= "HEROIC" then skip = true end
+            if OAK_F.Difficulty == "MYTHIC" and group.difficultyToken ~= "MYTHIC" then skip = true end
+            if OAK_F.Difficulty == "MYTHIC_PLUS" and group.difficultyToken ~= "MYTHIC_PLUS" then skip = true end
         end
 
         local rowMode = group.mode or currentSearchMode
@@ -2166,14 +3061,12 @@ local function FetchSearchResults()
         return
     end
 
-    local firstMode = nil
-
     for _, resultID in ipairs(results) do
         local searchResultInfo = C_LFGList.GetSearchResultInfo(resultID)
         
         if searchResultInfo and not searchResultInfo.isDelisted then
-            local activityID = searchResultInfo.activityID or (searchResultInfo.activityIDs and searchResultInfo.activityIDs[1])
-            local activityInfo = C_LFGList.GetActivityInfoTable(activityID)
+            local activityID = GetSearchResultActivityID(searchResultInfo)
+            local activityInfo = activityID and C_LFGList.GetActivityInfoTable(activityID) or nil
             local memberCounts = C_LFGList.GetSearchResultMemberCounts(resultID) or {}
             
             local appID, appStatus = C_LFGList.GetApplicationInfo(resultID)
@@ -2182,9 +3075,6 @@ local function FetchSearchResults()
             
             if activityInfo then
                 local mode, rating, ratingLabel, pvpRating, pvpBracket = GetResultRatingData(searchResultInfo, activityInfo)
-                if not firstMode then
-                    firstMode = mode
-                end
 
                 local hasLust, hasBrez = false, false
                 local memberDetails = {}
@@ -2232,6 +3122,7 @@ local function FetchSearchResults()
                     id = resultID,
                     dungeon = displayActivity,
                     filterLabel = GetSearchFilterLabel(mode, activityInfo, pvpBracket),
+                    activityGroupID = tonumber(activityInfo.groupFinderActivityGroupID or activityInfo.groupID) or 0,
                     activityName = rawFullName,
                     difficulty = activityInfo.difficultyID or 0,
                     difficultyToken = GetSearchDifficultyToken(activityInfo),
@@ -2270,7 +3161,7 @@ local function FetchSearchResults()
         end
     end
 
-    currentSearchMode = firstMode or "generic"
+    currentSearchMode = DetermineSearchMode()
     UpdateSearchFilterPane()
     OAK_SEARCH.UpdateHeaderVisuals()
 end
@@ -2307,9 +3198,9 @@ OAK_SEARCH:RegisterEvent("LFG_LIST_APPLICANT_UPDATED")
 OAK_SEARCH:SetScript("OnEvent", function(self, event, ...) RequestUpdate() end)
 OAK_SEARCH:SetScript("OnShow", function(self)
     HideApplicantWindow()
-    AutoPositionSearch()
-    OAK_SEARCH:SetScale(OakLFGSorterDB.searchScale or 1.0)
     scaleSlider:SetValue(OakLFGSorterDB.searchScale or 1.0)
+    AutoPositionSearch()
+    ApplySearchScale(OakLFGSorterDB.searchScale or 1.0)
     ApplySearchNotesLayout()
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
@@ -2329,6 +3220,15 @@ OAK_SEARCH:SetScript("OnHide", function()
         addonTable.RefreshRIOAnchor()
     end
 end)
+
+if PVEFrame then
+    hooksecurefunc(PVEFrame, "SetPoint", function()
+        if OAK_SEARCH:IsShown() and not HasSavedSearchFramePosition() then
+            AutoPositionSearch()
+            ApplySearchScale(OakLFGSorterDB.searchScale or 1.0)
+        end
+    end)
+end
 
 -- ==========================================
 -- 9. Hooking the Start Search Button & Native Toggle

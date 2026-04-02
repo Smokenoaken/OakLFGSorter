@@ -1,3 +1,10 @@
+## v2.0.0-alpha1
+
+- Refined the Find Group browser scaling and anchoring so the browser stays aligned with Blizzard's LFG pane when resized
+- Fixed search/browser stability issues around sorting, activity lookups, and Blizzard result syncing
+- Reworked the search filter pane to be mode-aware for dungeons, raids, delves, and generic categories
+- Added Blizzard-backed dungeon filter integration in Oak's filter pane, plus a PGF compatibility warning when shared dungeon filters are detected
+
 ## v1.6.8-alpha2
 
 - Removed accidental local `.claude` worktree metadata from the tracked repo contents so the published alpha tree stays clean
