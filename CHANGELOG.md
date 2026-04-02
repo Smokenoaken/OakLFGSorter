@@ -1,3 +1,10 @@
+## v2.0.0-alpha2
+
+- Added Oak quick-signup role controls that now correctly sync into Blizzard's signup popup
+- Restored raid browser mode-aware columns, including a dedicated Difficulty column and raid-specific Kills sorting/display
+- Added applicant listing context under the Oak header and refined toggle visuals across the addon
+- Kept Blizzard listing edit handoff available from Oak even though the hidden-PVEFrame reopen issue remains unresolved in this alpha
+
 ## v2.0.0-alpha1
 
 - Refined the Find Group browser scaling and anchoring so the browser stays aligned with Blizzard's LFG pane when resized

@@ -9,7 +9,7 @@ local quickFilterButtons = {}
 local browserFilterButtons = {}
 local browserActivityButtons = {}
 local BrowserFilterState
-local BROWSER_FILTER_VERSION = 4
+local BROWSER_FILTER_VERSION = 5
 local GetPartyRoleSupply
 
 local function GetBrowserMode()
@@ -158,11 +158,11 @@ local function ResultMatchesDifficulty(result, difficulty)
     if difficulty == "MYTHIC_PLUS" then
         return result.isMythicPlus == true or result.difficultyToken == "MYTHIC_PLUS"
     elseif difficulty == "MYTHIC" then
-        return result.difficultyID == 23 or result.difficultyToken == "MYTHIC"
+        return result.difficultyID == 23 or result.difficultyID == 16 or result.difficultyToken == "MYTHIC"
     elseif difficulty == "HEROIC" then
-        return result.difficultyID == 2 or result.difficultyToken == "HEROIC"
+        return result.difficultyID == 2 or result.difficultyID == 15 or result.difficultyToken == "HEROIC"
     elseif difficulty == "NORMAL" then
-        return result.difficultyID == 1 or result.difficultyToken == "NORMAL"
+        return result.difficultyID == 1 or result.difficultyID == 14 or result.difficultyToken == "NORMAL"
     end
 
     return true
@@ -216,6 +216,125 @@ local function ResultMatchesKeyRange(result, filters)
     end
 
     return true
+end
+
+local function GetSavedRaidDifficultyToken(difficultyID, difficultyName)
+    local lowered = strlower(tostring(difficultyName or ""))
+    if difficultyID == 16 or lowered:find("mythic", 1, true) then
+        return "MYTHIC"
+    elseif difficultyID == 15 or lowered:find("heroic", 1, true) then
+        return "HEROIC"
+    elseif difficultyID == 14 or lowered:find("normal", 1, true) then
+        return "NORMAL"
+    end
+
+    return nil
+end
+
+local function NormalizeInstanceKey(name)
+    local text = strlower(tostring(name or ""))
+    text = text:gsub("%s*%b()", "")
+    text = text:gsub("[^%w%s]", "")
+    text = text:gsub("%s+", " ")
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    return text
+end
+
+local function BuildSavedRaidLockoutMap()
+    local lockouts = {}
+    local total = GetNumSavedInstances and GetNumSavedInstances() or 0
+
+    for index = 1, total do
+        local instanceName, _, _, difficultyID, locked, extended, _, isRaid, _, difficultyName, numEncounters, encounterProgress = GetSavedInstanceInfo(index)
+        if isRaid and (locked or extended) then
+            local difficultyToken = GetSavedRaidDifficultyToken(difficultyID, difficultyName)
+            local instanceKey = NormalizeInstanceKey(instanceName)
+            if difficultyToken and instanceKey ~= "" then
+                local defeatedBossNames = {}
+                for bossIndex = 1, tonumber(numEncounters) or 0 do
+                    local bossName, _, isKilled = GetSavedInstanceEncounterInfo(index, bossIndex)
+                    if isKilled and bossName then
+                        defeatedBossNames[bossName] = true
+                    end
+                end
+
+                lockouts[instanceKey] = lockouts[instanceKey] or {}
+                lockouts[instanceKey][difficultyToken] = {
+                    bossesKilled = tonumber(encounterProgress) or 0,
+                    bossCount = tonumber(numEncounters) or 0,
+                    defeatedBossNames = defeatedBossNames,
+                }
+            end
+        end
+    end
+
+    return lockouts
+end
+
+local function ResultMatchesRaidBossCount(result, filters)
+    local listingMode = result.mode or GetBrowserMode()
+    if listingMode ~= "raid" and listingMode ~= "legacy_raid" then
+        return true
+    end
+
+    local requiredBosses = tonumber(filters.raidBossesMin)
+    if not requiredBosses then
+        return true
+    end
+
+    local bossesKilled = tonumber(result.raidListing and result.raidListing.bossesKilled) or 0
+    if requiredBosses == 0 then
+        return bossesKilled == 0
+    end
+    return bossesKilled >= requiredBosses
+end
+
+local function ResultMatchesRaidLockout(result, filters)
+    if not filters.matchMyRaidLockout then
+        return true
+    end
+
+    local listingMode = result.mode or GetBrowserMode()
+    if listingMode ~= "raid" and listingMode ~= "legacy_raid" then
+        return true
+    end
+
+    local raidListing = result.raidListing
+    if not raidListing then
+        return false
+    end
+
+    local instanceKey = NormalizeInstanceKey(raidListing.raidName or result.dungeonName or result.activityFilterLabel or "")
+    local difficultyToken = raidListing.difficultyToken
+    if instanceKey == "" or not difficultyToken then
+        return false
+    end
+
+    local lockouts = BuildSavedRaidLockoutMap()
+    local myLockout = lockouts[instanceKey] and lockouts[instanceKey][difficultyToken]
+    if not myLockout then
+        return false
+    end
+
+    local listingBosses = raidListing.defeatedBossNames or {}
+    local myBosses = myLockout.defeatedBossNames or {}
+    local hasNamedBosses = next(listingBosses) ~= nil and next(myBosses) ~= nil
+    if hasNamedBosses then
+        for bossName, _ in pairs(listingBosses) do
+            if not myBosses[bossName] then
+                return false
+            end
+        end
+        for bossName, _ in pairs(myBosses) do
+            if not listingBosses[bossName] then
+                return false
+            end
+        end
+        return true
+    end
+
+    local bossesKilled = tonumber(raidListing.bossesKilled) or 0
+    return bossesKilled == (tonumber(myLockout.bossesKilled) or 0)
 end
 
 local function ResultMatchesRoleNeeds(result, filters)
@@ -279,6 +398,34 @@ end
 function addonTable.ResultPassesBrowserFilters(result)
     local filters = BrowserFilterState()
     if filters.hideDeclined and string.find(result.applicationStatus or "", "declined", 1, true) then
+        return false
+    end
+
+    if not ResultMatchesSelectedActivities(result, filters) then
+        return false
+    end
+    if not ResultMatchesDifficulty(result, filters.difficulty) then
+        return false
+    end
+    if not ResultMatchesKeyRange(result, filters) then
+        return false
+    end
+    if not ResultMatchesRoleNeeds(result, filters) then
+        return false
+    end
+    if filters.partyFit and not ResultMatchesPartyFit(result) then
+        return false
+    end
+    if filters.needsLust and result.hasLust then
+        return false
+    end
+    if filters.needsBrez and result.hasBrez then
+        return false
+    end
+    if not ResultMatchesRaidBossCount(result, filters) then
+        return false
+    end
+    if not ResultMatchesRaidLockout(result, filters) then
         return false
     end
 
@@ -389,8 +536,8 @@ local function CreateOakToggleBox(parent, sortKey, globalFiltersTable)
             self:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1) 
             self:SetBackdropBorderColor(0, 0, 0, 1) 
         else
-            self:SetBackdropColor(0.106, 0.106, 0.129, 1) 
-            self:SetBackdropBorderColor(0, 0, 0, 1) 
+            self:SetBackdropColor(0.08, 0.08, 0.10, 0.95) 
+            self:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1) 
         end
     end
     
@@ -411,12 +558,189 @@ toggleFiltersBtn:SetPoint("RIGHT", addonTable.CloseButton, "LEFT", -10, 0)
 local refreshBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Refresh", 60)
 refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
 
+local relistBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Edit", 60)
+relistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+
 local delistBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Delist", 60)
-delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+delistBtn:SetPoint("RIGHT", relistBtn, "LEFT", -5, 0)
+
+local function BuildActiveListingCreateData()
+    if not (C_LFGList and C_LFGList.GetActiveEntryInfo) then
+        return nil
+    end
+
+    local entryInfo = C_LFGList.GetActiveEntryInfo()
+    if type(entryInfo) ~= "table" then
+        return nil
+    end
+
+    local activityIDs = entryInfo.activityIDs
+    if type(activityIDs) ~= "table" or #activityIDs == 0 then
+        local activityID = tonumber(entryInfo.activityID)
+        if activityID and activityID > 0 then
+            activityIDs = { activityID }
+        end
+    end
+
+    if type(activityIDs) ~= "table" or #activityIDs == 0 then
+        return nil
+    end
+
+    return {
+        activityIDs = activityIDs,
+        activityID = tonumber(entryInfo.activityID) or nil,
+        name = entryInfo.name,
+        comment = entryInfo.comment,
+        voiceChat = entryInfo.voiceChat,
+        questID = entryInfo.questID,
+        isAutoAccept = entryInfo.isAutoAccept or entryInfo.autoAccept or false,
+        isCrossFactionListing = entryInfo.isCrossFactionListing or false,
+        isPrivateGroup = entryInfo.isPrivateGroup or entryInfo.privateGroup or false,
+        newPlayerFriendly = entryInfo.newPlayerFriendly or false,
+        playstyle = entryInfo.playstyle or 0,
+        generalPlaystyle = entryInfo.generalPlaystyle or 0,
+        requiredDungeonScore = tonumber(entryInfo.requiredDungeonScore) or 0,
+        requiredItemLevel = tonumber(entryInfo.requiredItemLevel) or 0,
+        requiredPvpRating = tonumber(entryInfo.requiredPvpRating) or 0,
+        requiredHonorLevel = tonumber(entryInfo.requiredHonorLevel) or 0,
+    }
+end
+
+local function GetButtonDisplayText(button)
+    if not button then
+        return nil
+    end
+
+    if button.GetText then
+        local ok, text = pcall(button.GetText, button)
+        if ok and type(text) == "string" and text ~= "" then
+            return text
+        end
+    end
+
+    local textRegion = button.text or button.Text or button.Label or button.Name
+    if textRegion and textRegion.GetText then
+        local ok, text = pcall(textRegion.GetText, textRegion)
+        if ok and type(text) == "string" and text ~= "" then
+            return text
+        end
+    end
+
+    return nil
+end
+
+local function TryClickVisibleButton(button)
+    if not (button and button.Click and button.IsShown and button:IsShown()) then
+        return false
+    end
+
+    if button.IsEnabled and not button:IsEnabled() then
+        return false
+    end
+
+    return pcall(button.Click, button)
+end
+
+local function FindBlizzardEditListingButton()
+    local candidates = {}
+    local viewer = LFGListFrame and LFGListFrame.ApplicationViewer
+    local entryCreation = LFGListFrame and (LFGListFrame.EntryCreation or LFGListFrame.EntryCreationFrame)
+
+    if type(viewer) == "table" then
+        table.insert(candidates, viewer.EditButton)
+        table.insert(candidates, viewer.EntryCreationButton)
+        for _, value in pairs(viewer) do
+            table.insert(candidates, value)
+        end
+    end
+
+    if type(entryCreation) == "table" then
+        table.insert(candidates, entryCreation.EditButton)
+        table.insert(candidates, entryCreation.CancelButton)
+        for _, value in pairs(entryCreation) do
+            table.insert(candidates, value)
+        end
+    end
+
+    for _, button in ipairs(candidates) do
+        if button and button.GetObjectType and button:GetObjectType() == "Button" then
+            local label = GetButtonDisplayText(button)
+            if label and string.lower(label) == "edit" then
+                return button
+            end
+        end
+    end
+
+    return nil
+end
+
+local function OpenBlizzardEditListing()
+    local function EnsureBlizzardGroupFinderVisible()
+        if PVEFrame and PVEFrame.IsShown and not PVEFrame:IsShown() then
+            if PVEFrame_ToggleFrame then
+                pcall(PVEFrame_ToggleFrame)
+            end
+            if TogglePVEFrame then
+                pcall(TogglePVEFrame)
+            end
+        end
+
+        if PVEFrame and PVEFrame.IsShown and not PVEFrame:IsShown() and ShowUIPanel then
+            pcall(ShowUIPanel, PVEFrame)
+        end
+
+        if PVEFrame_ShowFrame and GroupFinderFrame then
+            pcall(PVEFrame_ShowFrame, GroupFinderFrame)
+        end
+        if PVEFrame and PVEFrame.Show then
+            pcall(PVEFrame.Show, PVEFrame)
+        end
+        if GroupFinderFrame and GroupFinderFrame.Show then
+            pcall(GroupFinderFrame.Show, GroupFinderFrame)
+        end
+        if LFGListFrame and LFGListFrame.Show then
+            pcall(LFGListFrame.Show, LFGListFrame)
+        end
+        if GroupFinderFrameGroupButton4 and GroupFinderFrameGroupButton4.Click then
+            pcall(GroupFinderFrameGroupButton4.Click, GroupFinderFrameGroupButton4)
+        end
+
+        local viewer = LFGListFrame and LFGListFrame.ApplicationViewer
+        if viewer and viewer.Show then
+            pcall(viewer.Show, viewer)
+        end
+    end
+
+    local editButton = FindBlizzardEditListingButton()
+    if TryClickVisibleButton(editButton) then
+        return true
+    end
+
+    EnsureBlizzardGroupFinderVisible()
+
+    C_Timer.After(0, function()
+        EnsureBlizzardGroupFinderVisible()
+        local retryButton = FindBlizzardEditListingButton()
+        if retryButton then
+            TryClickVisibleButton(retryButton)
+        end
+    end)
+
+    C_Timer.After(0.1, function()
+        EnsureBlizzardGroupFinderVisible()
+    end)
+
+    C_Timer.After(0.2, function()
+        EnsureBlizzardGroupFinderVisible()
+    end)
+
+    return false
+end
 
 function addonTable.UpdateTopBarActions()
     if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
         delistBtn:Hide()
+        relistBtn:Hide()
 
         refreshBtn.text:SetText("Refresh")
         refreshBtn:SetScript("OnClick", function()
@@ -429,6 +753,13 @@ function addonTable.UpdateTopBarActions()
         end)
     else
         delistBtn:Show()
+        relistBtn:Show()
+
+        relistBtn.text:SetText("Edit")
+        relistBtn:SetScript("OnClick", function()
+            OpenBlizzardEditListing()
+        end)
+
         delistBtn.text:SetText("Delist")
         delistBtn:SetScript("OnClick", function()
             C_LFGList.RemoveListing()
@@ -460,6 +791,7 @@ function addonTable.UpdateTopBarLayout()
 
     toggleFiltersBtn:ClearAllPoints()
     refreshBtn:ClearAllPoints()
+    relistBtn:ClearAllPoints()
     delistBtn:ClearAllPoints()
     scaleSlider:ClearAllPoints()
     scaleEdit:ClearAllPoints()
@@ -479,12 +811,14 @@ function addonTable.UpdateTopBarLayout()
 
         toggleFiltersBtn:SetWidth(54)
         refreshBtn:SetWidth(58)
+        relistBtn:SetWidth(54)
         delistBtn:SetWidth(54)
 
         toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -6, 0)
         refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -4, 0)
         if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() ~= "browser" then
-            delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -4, 0)
+            relistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -4, 0)
+            delistBtn:SetPoint("RIGHT", relistBtn, "LEFT", -4, 0)
         end
     else
         title:SetText(addonTable.FullTitleText or "OAK LFG Sorter")
@@ -501,12 +835,14 @@ function addonTable.UpdateTopBarLayout()
 
         toggleFiltersBtn:SetWidth(60)
         refreshBtn:SetWidth(60)
+        relistBtn:SetWidth(60)
         delistBtn:SetWidth(60)
 
         toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -10, 0)
         refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
         if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() ~= "browser" then
-            delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+            relistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+            delistBtn:SetPoint("RIGHT", relistBtn, "LEFT", -5, 0)
         end
     end
 
@@ -803,6 +1139,8 @@ function BrowserFilterState()
             needsLust = false,
             needsBrez = false,
             hideDeclined = false,
+            raidBossesMin = "ANY",
+            matchMyRaidLockout = false,
             selectedActivities = {},
         }
     end
@@ -821,6 +1159,12 @@ function BrowserFilterState()
     }
     if not validPlaystyle[filters.playstyle] then
         filters.playstyle = "ANY"
+    end
+
+    if filters.raidBossesMin == nil then
+        filters.raidBossesMin = "ANY"
+    else
+        filters.raidBossesMin = tostring(filters.raidBossesMin)
     end
 
     if type(OakLFGSorterDB.browserFilters.selectedActivities) ~= "table" then
@@ -846,9 +1190,13 @@ local function CreateBrowserToggleBox(parent, key)
         if isActive then
             self:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
         else
-            self:SetBackdropColor(0.106, 0.106, 0.129, 1)
+            self:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
         end
-        self:SetBackdropBorderColor(0, 0, 0, 1)
+        if isActive then
+            self:SetBackdropBorderColor(0, 0, 0, 1)
+        else
+            self:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
+        end
     end
 
     box:SetScript("OnClick", function(self)
@@ -1012,6 +1360,29 @@ local function GetBrowserDifficultyOptions()
     }
 end
 
+local function GetRaidBossOptions()
+    local highestBossCount = 8
+    for _, result in ipairs(addonTable.SearchResults or {}) do
+        if result.mode == "raid" or result.mode == "legacy_raid" then
+            highestBossCount = math.max(highestBossCount, tonumber(result.raidListing and result.raidListing.bossCount) or 0)
+        end
+    end
+
+    local options = {
+        { value = "ANY", label = "Any Boss Kills" },
+        { value = "0", label = "Fresh (0 Kills)" },
+    }
+
+    for kills = 1, math.max(1, highestBossCount) do
+        table.insert(options, {
+            value = tostring(kills),
+            label = string.format("%d+ Boss%s", kills, kills == 1 and "" or "es"),
+        })
+    end
+
+    return options
+end
+
 local playstyleDropdown = CreateBrowserDropdown(browserContent, 188, function()
     return {
         { value = "ANY", label = "Any Playstyle" },
@@ -1023,6 +1394,7 @@ local playstyleDropdown = CreateBrowserDropdown(browserContent, 188, function()
 end, "playstyle", "Any Playstyle")
 
 local difficultyDropdown = CreateBrowserDropdown(browserContent, 188, GetBrowserDifficultyOptions, "difficulty", "Any Difficulty")
+local raidBossesDropdown = CreateBrowserDropdown(browserContent, 188, GetRaidBossOptions, "raidBossesMin", "Any Boss Kills")
 local keyRangeLabel = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 keyRangeLabel:SetText("Key Range")
 keyRangeLabel:SetTextColor(1, 1, 1)
@@ -1040,6 +1412,7 @@ local browserToggleKeys = {
     { key = "needsLust", label = "Need Lust", column = 1 },
     { key = "needsBrez", label = "Need BRez", column = 2 },
     { key = "hideDeclined", label = "Hide Declined", column = 1, span = 2 },
+    { key = "matchMyRaidLockout", label = "Match My Lockout", column = 1, span = 2, raidOnly = true },
 }
 
 local browserToggleRows = {}
@@ -1127,6 +1500,8 @@ function addonTable.UpdateBrowserFilterPanel()
     local showDifficulty = BrowserModeUsesDifficulty(mode)
     local showKeyRange = BrowserModeUsesKeyRange(mode)
     local showActivityFilters = BrowserModeUsesActivityFilter(mode)
+    local showRaidBosses = mode == "raid" or mode == "legacy_raid"
+    local isRaidMode = showRaidBosses
     local validDifficulty = {}
 
     for _, option in ipairs(GetBrowserDifficultyOptions()) do
@@ -1145,11 +1520,21 @@ function addonTable.UpdateBrowserFilterPanel()
         difficultyDropdown:Hide()
     end
 
+    raidBossesDropdown:ClearAllPoints()
+    raidBossesDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, -34)
+    raidBossesDropdown.UpdateText()
+    if showRaidBosses then
+        raidBossesDropdown:Show()
+    else
+        raidBossesDropdown:Hide()
+        filters.raidBossesMin = "ANY"
+    end
+
     playstyleDropdown:Hide()
     HideAllBrowserDropdowns()
 
     keyRangeLabel:ClearAllPoints()
-    keyRangeLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, -34)
+    keyRangeLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, showRaidBosses and -68 or -34)
     keyMinBox:ClearAllPoints()
     keyMinBox:SetPoint("TOPLEFT", keyRangeLabel, "BOTTOMLEFT", 0, -4)
     keyMinBox:SetText(filters.keyMin or "")
@@ -1173,22 +1558,39 @@ function addonTable.UpdateBrowserFilterPanel()
 
     local leftColumnX = 0
     local rightColumnX = 108
-    local toggleY = showKeyRange and -70 or (showDifficulty and -34 or 0)
+    local toggleY = 0
+    if showDifficulty then
+        toggleY = toggleY - 34
+    end
+    if showRaidBosses then
+        toggleY = toggleY - 34
+    end
+    if showKeyRange then
+        toggleY = toggleY - 36
+    end
     local rowHeight = 20
     for _, toggleInfo in ipairs(browserToggleKeys) do
         local row = browserToggleRows[toggleInfo.key]
+        local showRow = not toggleInfo.raidOnly or isRaidMode
         row.box:ClearAllPoints()
         row.text:ClearAllPoints()
-        local x = toggleInfo.column == 2 and rightColumnX or leftColumnX
-        row.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", x, toggleY)
-        row.box:SetState(filters[toggleInfo.key] == true)
-        row.text:SetText(row.label)
-        row.text:SetPoint("LEFT", row.box, "RIGHT", 8, 0)
+        if showRow then
+            local x = toggleInfo.column == 2 and rightColumnX or leftColumnX
+            row.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", x, toggleY)
+            row.box:SetState(filters[toggleInfo.key] == true)
+            row.text:SetText(row.label)
+            row.text:SetPoint("LEFT", row.box, "RIGHT", 8, 0)
+            row.box:Show()
+            row.text:Show()
 
-        if toggleInfo.span == 2 then
-            toggleY = toggleY - rowHeight
-        elseif toggleInfo.column == 2 then
-            toggleY = toggleY - rowHeight
+            if toggleInfo.span == 2 then
+                toggleY = toggleY - rowHeight
+            elseif toggleInfo.column == 2 then
+                toggleY = toggleY - rowHeight
+            end
+        else
+            row.box:Hide()
+            row.text:Hide()
         end
     end
 

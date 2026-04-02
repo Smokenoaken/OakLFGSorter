@@ -156,9 +156,11 @@ function addonTable.AnchorRIOPanelToOak(ownerFrame)
     end
 
     RaiderIO_ProfileTooltip:SetFrameStrata("TOOLTIP")
-    RaiderIO_ProfileTooltip:SetFrameLevel(math.max(anchorTarget:GetFrameLevel() or 0, ownerFrame:GetFrameLevel() or 0) + 20)
+    RaiderIO_ProfileTooltip:SetToplevel(true)
+    RaiderIO_ProfileTooltip:SetFrameLevel(math.max(anchorTarget:GetFrameLevel() or 0, ownerFrame:GetFrameLevel() or 0) + 80)
     RaiderIO_ProfileTooltip:ClearAllPoints()
     RaiderIO_ProfileTooltip:SetPoint("TOPLEFT", anchorTarget, "TOPRIGHT", 2, 0)
+    RaiderIO_ProfileTooltip:Raise()
 end
 
 function addonTable.RefreshRIOAnchor()
@@ -175,9 +177,11 @@ function addonTable.RefreshRIOAnchor()
         end
         if fallback then
             RaiderIO_ProfileTooltip:SetFrameStrata("TOOLTIP")
-            RaiderIO_ProfileTooltip:SetFrameLevel((fallback:GetFrameLevel() or 0) + 20)
+            RaiderIO_ProfileTooltip:SetToplevel(true)
+            RaiderIO_ProfileTooltip:SetFrameLevel((fallback:GetFrameLevel() or 0) + 80)
             RaiderIO_ProfileTooltip:ClearAllPoints()
             RaiderIO_ProfileTooltip:SetPoint("TOPLEFT", fallback, "TOPRIGHT", 2, 0)
+            RaiderIO_ProfileTooltip:Raise()
         end
     end
 end
@@ -231,7 +235,7 @@ addonTable.CloseButton = closeBtn
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
-VersionText:SetText("|cff888888v2.0.0-alpha1|r")
+VersionText:SetText("|cff888888v2.0.0-alpha2|r")
 VersionText:Hide()
 
 local resizeGrip = CreateFrame("Button", nil, OAK_LFG, "PanelResizeButtonTemplate")

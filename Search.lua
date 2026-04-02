@@ -11,7 +11,7 @@ local ROW_COLOR_A = {0.2, 0.22, 0.28, 0.4}
 local ROW_COLOR_B = {0, 0, 0, 0} 
 local ROW_HEIGHT = 34 
 
-local _, playerClass = UnitClass("player")
+local playerClass = select(2, UnitClass("player"))
 local classColor = RAID_CLASS_COLORS[playerClass] or {r = 1, g = 1, b = 1}
 local CreateFlatButton
 local supportersPanel
@@ -20,15 +20,10 @@ local ApplySearchNotesLayout
 local RequestUpdate
 local ApplyOakSearchQuery
 local ScheduleSearchRefresh
-local searchQueryBtn
-local resetFiltersBtn
 local ResetSearchFilters
-local GetNativeSearchBox
-local AttachNativeSearchBoxToOak
-local RestoreNativeSearchBox
-local ShouldHostNativeSearchBox
 local AutoPositionSearch
 local UpdateSearchFilterPane
+local nativeSearchHost = {}
 
 local function ApplyClassColor(text, classStr)
     local c = RAID_CLASS_COLORS[string.upper(classStr or "")]
@@ -55,6 +50,11 @@ OakLFGSorterDB = OakLFGSorterDB or {}
 if OakLFGSorterDB.autoOpenSearch == nil then OakLFGSorterDB.autoOpenSearch = true end
 if OakLFGSorterDB.searchScale == nil then OakLFGSorterDB.searchScale = 1.0 end
 if OakLFGSorterDB.searchHideNotes == nil then OakLFGSorterDB.searchHideNotes = false end
+if OakLFGSorterDB.searchQuickSignup == nil then OakLFGSorterDB.searchQuickSignup = false end
+if OakLFGSorterDB.searchQuickSignupNote == nil then OakLFGSorterDB.searchQuickSignupNote = "" end
+
+local SEARCH_COLUMN_HEADER_Y = -67
+local SEARCH_SCROLL_TOP_Y = -94
 
 local function SaveSearchFramePosition()
     local point, _, relativePoint, xOfs, yOfs = OAK_SEARCH:GetPoint(1)
@@ -418,14 +418,14 @@ filterTitle:SetTextColor(classColor.r, classColor.g, classColor.b)
 toggleFiltersBtn:SetScript("OnClick", function()
     if filterPanel:IsShown() then
         filterPanel:Hide()
-        if RestoreNativeSearchBox then
-            RestoreNativeSearchBox()
+        if nativeSearchHost.RestoreNativeSearchBox then
+            nativeSearchHost.RestoreNativeSearchBox()
         end
     else
         supportersPanel:Hide()
         filterPanel:Show()
-        if AttachNativeSearchBoxToOak then
-            AttachNativeSearchBoxToOak()
+        if nativeSearchHost.AttachNativeSearchBoxToOak then
+            nativeSearchHost.AttachNativeSearchBoxToOak()
         end
     end
     if addonTable.AnchorRIOPanelToOak then
@@ -765,8 +765,8 @@ local function CreateOakToggleBox(parent, label, stateKey, triggersSync)
             self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1) 
             self:SetBackdropBorderColor(0, 0, 0, 1) 
         else
-            self:SetBackdropColor(0.106, 0.106, 0.129, 0.95)
-            self:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
+            self:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+            self:SetBackdropBorderColor(0, 0, 0, 1)
         end
     end
     
@@ -783,8 +783,8 @@ local function CreateStandaloneToggleBox(parent, label)
     local box = CreateFrame("Button", nil, parent, "BackdropTemplate")
     box:SetSize(16, 16)
     box:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
-    box:SetBackdropColor(0.106, 0.106, 0.129, 0.95)
-    box:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
+    box:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+    box:SetBackdropBorderColor(0, 0, 0, 1)
 
     local text = parent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     text:SetPoint("LEFT", box, "RIGHT", 5, 0)
@@ -800,8 +800,8 @@ local function CreateStandaloneToggleBox(parent, label)
             self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
             self:SetBackdropBorderColor(0, 0, 0, 1)
         else
-            self:SetBackdropColor(0.106, 0.106, 0.129, 0.95)
-            self:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
+            self:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+            self:SetBackdropBorderColor(0, 0, 0, 1)
         end
     end
 
@@ -821,16 +821,16 @@ local function CreateStandaloneNumberBox(parent, width)
     return box
 end
 
-GetNativeSearchBox = function()
+nativeSearchHost.GetNativeSearchBox = function()
     return LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel.SearchBox
 end
 
-AttachNativeSearchBoxToOak = function()
-    local searchBox = GetNativeSearchBox()
+nativeSearchHost.AttachNativeSearchBoxToOak = function()
+    local searchBox = nativeSearchHost.GetNativeSearchBox()
     if not (searchBox and keyQueryBox) then
         return
     end
-    if not ShouldHostNativeSearchBox() then
+    if not nativeSearchHost.ShouldHostNativeSearchBox() then
         return
     end
 
@@ -898,8 +898,8 @@ AttachNativeSearchBoxToOak = function()
     searchBox:Show()
 end
 
-RestoreNativeSearchBox = function()
-    local searchBox = GetNativeSearchBox()
+nativeSearchHost.RestoreNativeSearchBox = function()
+    local searchBox = nativeSearchHost.GetNativeSearchBox()
     if not (searchBox and nativeSearchBoxOriginalState) then
         return
     end
@@ -988,17 +988,17 @@ keyQueryBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 }
 keyQueryBox:SetBackdropColor(unpack(OAK_COLOR_PANE))
 keyQueryBox:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
 
-searchQueryBtn = CreateFlatButton(filterPanel, "Search", 175)
-searchQueryBtn:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, -116)
-searchQueryBtn:SetScript("OnClick", function()
+addonTable.SearchQueryButton = CreateFlatButton(filterPanel, "Search", 175)
+addonTable.SearchQueryButton:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, -116)
+addonTable.SearchQueryButton:SetScript("OnClick", function()
     if ApplyOakSearchQuery then
         ApplyOakSearchQuery(true)
     end
 end)
 
-resetFiltersBtn = CreateFlatButton(filterPanel, "Reset", 84)
-resetFiltersBtn:SetPoint("TOPLEFT", searchQueryBtn, "TOPRIGHT", 7, 0)
-resetFiltersBtn:SetScript("OnClick", function()
+addonTable.SearchResetButton = CreateFlatButton(filterPanel, "Reset", 84)
+addonTable.SearchResetButton:SetPoint("TOPLEFT", addonTable.SearchQueryButton, "TOPRIGHT", 7, 0)
+addonTable.SearchResetButton:SetScript("OnClick", function()
     ResetSearchFilters()
 end)
 
@@ -1129,6 +1129,9 @@ nativeNeedsHealBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need
 nativeNeedsDpsBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need Damage")
 nativeNeedsMyClassBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "")
 nativeNeedsMyClassBox.labelText:SetFontObject("OakLFG_FontSmall")
+nativeNeedsMyClassBox.labelText:SetWidth(74)
+nativeNeedsMyClassBox.labelText:SetWordWrap(false)
+nativeNeedsMyClassBox.labelText:SetJustifyH("LEFT")
 nativeHasTankBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Has Tank")
 nativeHasHealBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Has Healer")
 nativePartyBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Party Fit")
@@ -1228,7 +1231,7 @@ end)
 -- 4. Scroll Frame Setup
 -- ==========================================
 local scrollFrame = CreateFrame("ScrollFrame", "OakLFGSearchScrollFrame", OAK_SEARCH, "UIPanelScrollFrameTemplate")
-scrollFrame:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", 10, -70)
+scrollFrame:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", 10, SEARCH_SCROLL_TOP_Y)
 scrollFrame:SetPoint("BOTTOMRIGHT", OAK_SEARCH, "BOTTOMRIGHT", -25, 26) 
 
 local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
@@ -1274,6 +1277,7 @@ local SEARCH_LAYOUT_EXPANDED = {
     dungeonX = 15, dungeonWidth = 145,
     setupX = 165, setupWidth = 98,
     titleX = 267, titleWidth = 98,
+    modeX = nil, modeWidth = 0,
     ratingX = 370, ratingWidth = 65,
     ageX = 440, ageWidth = 35,
     notesX = 480, notesWidth = SEARCH_NOTE_FULL_WIDTH,
@@ -1285,11 +1289,36 @@ local SEARCH_LAYOUT_COLLAPSED = {
     dungeonX = 15, dungeonWidth = 145,
     setupX = 165, setupWidth = 98,
     titleX = 267, titleWidth = 98,
+    modeX = nil, modeWidth = 0,
     ratingX = 370, ratingWidth = 65,
     ageX = 440, ageWidth = 35,
     notesX = 482, notesWidth = SEARCH_NOTE_COLLAPSED_WIDTH,
     roleStartX = 177,
     roleSummaryX = {175, 205, 235},
+}
+
+local SEARCH_LAYOUT_EXPANDED_RAID = {
+    dungeonX = 15, dungeonWidth = 132,
+    modeX = 151, modeWidth = 56,
+    setupX = 211, setupWidth = 92,
+    titleX = 307, titleWidth = 86,
+    ratingX = 397, ratingWidth = 30,
+    ageX = 431, ageWidth = 35,
+    notesX = 471, notesWidth = SEARCH_NOTE_FULL_WIDTH,
+    roleStartX = 222,
+    roleSummaryX = {220, 248, 276},
+}
+
+local SEARCH_LAYOUT_COLLAPSED_RAID = {
+    dungeonX = 15, dungeonWidth = 132,
+    modeX = 151, modeWidth = 56,
+    setupX = 211, setupWidth = 92,
+    titleX = 307, titleWidth = 86,
+    ratingX = 397, ratingWidth = 30,
+    ageX = 431, ageWidth = 35,
+    notesX = 473, notesWidth = SEARCH_NOTE_COLLAPSED_WIDTH,
+    roleStartX = 222,
+    roleSummaryX = {220, 248, 276},
 }
 
 local function GetSearchRoleStartX(layout)
@@ -1308,7 +1337,7 @@ local function GetSearchActionRightInset()
     return -15
 end
 
-ShouldHostNativeSearchBox = function()
+nativeSearchHost.ShouldHostNativeSearchBox = function()
     return SearchModeUsesHostedSearch(currentSearchMode)
 end
 
@@ -1316,7 +1345,18 @@ local function GetCollapsedSearchActionCenterX(layout)
     return layout.notesX + math.floor(layout.notesWidth / 2) - SEARCH_ROW_X_OFFSET
 end
 
+local function SearchUsesRaidColumns()
+    return currentSearchMode == "raid" or currentSearchMode == "legacy_raid"
+end
+
 local function GetSearchLayout()
+    if SearchUsesRaidColumns() then
+        if OakLFGSorterDB and OakLFGSorterDB.searchHideNotes then
+            return SEARCH_LAYOUT_COLLAPSED_RAID
+        end
+        return SEARCH_LAYOUT_EXPANDED_RAID
+    end
+
     if OakLFGSorterDB and OakLFGSorterDB.searchHideNotes then
         return SEARCH_LAYOUT_COLLAPSED
     end
@@ -1334,6 +1374,25 @@ local function GetPinnedRowPriority(group)
     return priority
 end
 
+local function GetRaidDungeonSortKey(grp)
+    local raidName = tostring((grp and grp.dungeon) or (grp and grp.activityFilterLabel) or (grp and grp.activityName) or "--")
+    local difficultyLabel = tostring((grp and grp.raidListing and grp.raidListing.difficultyLabel) or "")
+    return string.lower(raidName .. "\t" .. difficultyLabel)
+end
+
+local function GetRaidDifficultySortKey(grp)
+    local token = tostring((grp and grp.difficultyToken) or "")
+    local tokenOrder = {
+        NORMAL = 1,
+        HEROIC = 2,
+        MYTHIC = 3,
+    }
+
+    local baseOrder = tokenOrder[token] or tonumber(grp and grp.difficulty) or 0
+    local label = tostring((grp and grp.raidListing and grp.raidListing.difficultyLabel) or token or "")
+    return string.format("%03d\t%s", baseOrder, string.lower(label))
+end
+
 local function SortGroups(grpA, grpB, sortBy, isAscending)
     local priorityA = GetPinnedRowPriority(grpA)
     local priorityB = GetPinnedRowPriority(grpB)
@@ -1342,9 +1401,26 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
     end
 
     local valA, valB
-    if sortBy == "dungeon" then valA, valB = grpA.dungeon, grpB.dungeon
+    if sortBy == "dungeon" then
+        if grpA.mode == "raid" or grpA.mode == "legacy_raid" or grpB.mode == "raid" or grpB.mode == "legacy_raid" then
+            valA, valB = GetRaidDungeonSortKey(grpA), GetRaidDungeonSortKey(grpB)
+        else
+            valA, valB = grpA.dungeon, grpB.dungeon
+        end
+    elseif sortBy == "mode" then
+        if grpA.mode == "raid" or grpA.mode == "legacy_raid" or grpB.mode == "raid" or grpB.mode == "legacy_raid" then
+            valA, valB = GetRaidDifficultySortKey(grpA), GetRaidDifficultySortKey(grpB)
+        else
+            valA, valB = grpA.mode or "", grpB.mode or ""
+        end
     elseif sortBy == "title" then valA, valB = grpA.titleStr or "", grpB.titleStr or ""
-    elseif sortBy == "rating" then valA, valB = grpA.rating, grpB.rating
+    elseif sortBy == "rating" then
+        if grpA.mode == "raid" or grpA.mode == "legacy_raid" or grpB.mode == "raid" or grpB.mode == "legacy_raid" then
+            valA = tonumber(grpA.raidListing and grpA.raidListing.bossesKilled) or 0
+            valB = tonumber(grpB.raidListing and grpB.raidListing.bossesKilled) or 0
+        else
+            valA, valB = grpA.rating, grpB.rating
+        end
     elseif sortBy == "age" then valA, valB = grpA.age, grpB.age
     else valA, valB = grpA.id, grpB.id end 
     
@@ -1358,6 +1434,7 @@ local headers = {}
 local dungeonHeader
 local setupHeader
 local titleHeader
+local modeHeader
 local ratingHeader
 local ageHeader
 
@@ -1376,10 +1453,14 @@ function OAK_SEARCH.UpdateHeaderVisuals()
         if currentSearchMode == "rated_pvp" or currentSearchMode == "pvp" then
             ratingHeader.baseText = "PVP Rating"
         elseif currentSearchMode == "raid" or currentSearchMode == "legacy_raid" then
-            ratingHeader.baseText = "Progress"
+            ratingHeader.baseText = "Kills"
         else
             ratingHeader.baseText = "Rating"
         end
+    end
+
+    if modeHeader then
+        modeHeader.baseText = SearchUsesRaidColumns() and "Difficulty" or ""
     end
 
     for _, header in ipairs(headers) do
@@ -1394,7 +1475,7 @@ end
 local function CreateHeader(label, sortKey, width, xOffset)
     local btn = CreateFrame("Button", nil, OAK_SEARCH, "BackdropTemplate")
     btn:SetSize(width, 22)
-    btn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", xOffset, -43)
+    btn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", xOffset, SEARCH_COLUMN_HEADER_Y)
     btn:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
     btn:SetBackdropColor(unpack(OAK_COLOR_PANE))
     btn:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
@@ -1416,12 +1497,13 @@ end
 dungeonHeader = CreateHeader("Dungeon", "dungeon", SEARCH_LAYOUT_EXPANDED.dungeonWidth, SEARCH_LAYOUT_EXPANDED.dungeonX)
 setupHeader = CreateHeader("Comp", "members", SEARCH_LAYOUT_EXPANDED.setupWidth, SEARCH_LAYOUT_EXPANDED.setupX)
 titleHeader = CreateHeader("Title", "title", SEARCH_LAYOUT_EXPANDED.titleWidth, SEARCH_LAYOUT_EXPANDED.titleX)
+modeHeader = CreateHeader("Mode", "mode", 1, SEARCH_LAYOUT_EXPANDED.titleX + SEARCH_LAYOUT_EXPANDED.titleWidth + 4)
 ratingHeader = CreateHeader("Rating", "rating", SEARCH_LAYOUT_EXPANDED.ratingWidth, SEARCH_LAYOUT_EXPANDED.ratingX)
 ageHeader = CreateHeader("Age", "age", SEARCH_LAYOUT_EXPANDED.ageWidth, SEARCH_LAYOUT_EXPANDED.ageX)
 
 local notesToggleBtn = CreateFlatButton(OAK_SEARCH, "Notes", SEARCH_NOTE_FULL_WIDTH)
 notesToggleBtn:SetHeight(22)
-notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", SEARCH_LAYOUT_EXPANDED.notesX, -43)
+notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", SEARCH_LAYOUT_EXPANDED.notesX, SEARCH_COLUMN_HEADER_Y)
 notesToggleBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -1444,28 +1526,39 @@ local function UpdateSearchHeaderVisuals()
     OAK_SEARCH.UpdateHeaderVisuals()
     dungeonHeader:SetWidth(layout.dungeonWidth)
     dungeonHeader:ClearAllPoints()
-    dungeonHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.dungeonX, -43)
+    dungeonHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.dungeonX, SEARCH_COLUMN_HEADER_Y)
 
     setupHeader:SetWidth(layout.setupWidth)
     setupHeader:ClearAllPoints()
-    setupHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.setupX, -43)
+    setupHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.setupX, SEARCH_COLUMN_HEADER_Y)
 
     titleHeader:SetWidth(layout.titleWidth)
     titleHeader:ClearAllPoints()
-    titleHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.titleX, -43)
+    titleHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.titleX, SEARCH_COLUMN_HEADER_Y)
+
+    if modeHeader then
+        if layout.modeWidth and layout.modeWidth > 0 and layout.modeX then
+            modeHeader:SetWidth(layout.modeWidth)
+            modeHeader:ClearAllPoints()
+            modeHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.modeX, SEARCH_COLUMN_HEADER_Y)
+            modeHeader:Show()
+        else
+            modeHeader:Hide()
+        end
+    end
 
     ratingHeader:SetWidth(layout.ratingWidth)
     ratingHeader:ClearAllPoints()
-    ratingHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.ratingX, -43)
+    ratingHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.ratingX, SEARCH_COLUMN_HEADER_Y)
 
     ageHeader:SetWidth(layout.ageWidth)
     ageHeader:ClearAllPoints()
-    ageHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.ageX, -43)
+    ageHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.ageX, SEARCH_COLUMN_HEADER_Y)
 
     notesToggleBtn:SetWidth(layout.notesWidth)
     notesToggleBtn.text:SetText((OakLFGSorterDB and OakLFGSorterDB.searchHideNotes) and "Notes" or "Hide Notes")
     notesToggleBtn:ClearAllPoints()
-    notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.notesX, -43)
+    notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.notesX, SEARCH_COLUMN_HEADER_Y)
 end
 
 -- ==========================================
@@ -1595,6 +1688,76 @@ local function GetPreferredScoreColor(score, defaultR, defaultG, defaultB)
         end
     end
     return defaultR, defaultG, defaultB
+end
+
+local function GetRaidEncounterListText(grp)
+    local raidListing = grp and grp.raidListing
+    if type(raidListing) ~= "table" then
+        return nil
+    end
+
+    if type(raidListing.defeatedBossList) == "table" and #raidListing.defeatedBossList > 0 then
+        return table.concat(raidListing.defeatedBossList, ", ")
+    end
+
+    if type(raidListing.defeatedBossNames) ~= "table" then
+        return nil
+    end
+
+    local names = {}
+    for bossName in pairs(raidListing.defeatedBossNames) do
+        table.insert(names, bossName)
+    end
+    table.sort(names)
+
+    if #names == 0 then
+        return nil
+    end
+
+    return table.concat(names, ", ")
+end
+
+local function GetRaidRowTitle(grp)
+    local baseTitle = tostring(grp.displayTitle or grp.titleStr or "")
+    if baseTitle == "" then
+        return "--"
+    end
+
+    return baseTitle
+end
+
+local function GetRaidDungeonDisplay(grp)
+    local raidName = tostring((grp and grp.dungeon) or "")
+    if raidName == "" then
+        raidName = tostring((grp and grp.activityFilterLabel) or (grp and grp.activityName) or "--")
+    end
+    raidName = raidName:gsub("%s*%((Normal|Heroic|Mythic)%)$", "")
+    return raidName ~= "" and raidName or "--"
+end
+
+local function GetRaidModeDisplay(grp)
+    local difficultyLabel = grp and grp.raidListing and grp.raidListing.difficultyLabel or nil
+    if type(difficultyLabel) ~= "string" or difficultyLabel == "" then
+        return "--"
+    end
+    return difficultyLabel
+end
+
+local function GetRaidKillsDisplay(grp)
+    local raidListing = grp and grp.raidListing
+    if type(raidListing) ~= "table" then
+        return "--"
+    end
+
+    if raidListing.progressText and raidListing.progressText ~= "" and raidListing.progressText ~= "--" then
+        return raidListing.progressText
+    end
+
+    if raidListing.bossesKilled ~= nil then
+        return tostring(tonumber(raidListing.bossesKilled) or 0)
+    end
+
+    return "--"
 end
 
 local function GetSearchListingMode(activityInfo)
@@ -1731,12 +1894,27 @@ local function GetSearchFilterLabel(mode, activityInfo, pvpBracket)
 end
 
 local function GetNeedsMyClassLabel()
-    local localizedClassName = select(1, UnitClass("player"))
-    if localizedClassName and localizedClassName ~= "" then
-        return string.format("No %s in group", localizedClassName)
+    local _, classToken = UnitClass("player")
+    local pluralLabel = ({
+        DEATHKNIGHT = "DKs",
+        DEMONHUNTER = "DHs",
+        DRUID = "Druids",
+        EVOKER = "Evokers",
+        HUNTER = "Hunters",
+        MAGE = "Mages",
+        MONK = "Monks",
+        PALADIN = "Pallies",
+        PRIEST = "Priests",
+        ROGUE = "Rogues",
+        SHAMAN = "Shamans",
+        WARLOCK = "Warlocks",
+        WARRIOR = "Warriors",
+    })[classToken or ""]
+    if pluralLabel and pluralLabel ~= "" then
+        return "No " .. pluralLabel
     end
 
-    return "No duplicate class"
+    return "No class dupes"
 end
 
 local function GetNativeDungeonActivityEntries()
@@ -2021,7 +2199,7 @@ local function GetResultRatingData(searchResultInfo, activityInfo)
         rating = pvpRating
         ratingLabel = "PVP Rating"
     elseif mode == "raid" or mode == "legacy_raid" then
-        ratingLabel = "Progress"
+        ratingLabel = "Kills"
     end
 
     return mode, rating, ratingLabel, pvpRating, pvpBracket
@@ -2186,14 +2364,14 @@ UpdateSearchFilterPane = function()
     SetControlVisible(keyRangeLabel, showSearchQuery)
     SetControlVisible(keyRangeHint, showSearchQuery)
     SetControlVisible(keyQueryBox, showSearchQuery)
-    SetControlVisible(searchQueryBtn, showSearchQuery)
+    SetControlVisible(addonTable.SearchQueryButton, showSearchQuery)
     if showSearchQuery and filterPanel:IsShown() then
-        if AttachNativeSearchBoxToOak then
-            AttachNativeSearchBoxToOak()
+        if nativeSearchHost.AttachNativeSearchBoxToOak then
+            nativeSearchHost.AttachNativeSearchBoxToOak()
         end
     else
-        if RestoreNativeSearchBox then
-            RestoreNativeSearchBox()
+        if nativeSearchHost.RestoreNativeSearchBox then
+            nativeSearchHost.RestoreNativeSearchBox()
         end
     end
 
@@ -2218,15 +2396,15 @@ UpdateSearchFilterPane = function()
     keyRangeHint:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryHintTopY)
     keyQueryBox:ClearAllPoints()
     keyQueryBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY)
-    searchQueryBtn:ClearAllPoints()
-    resetFiltersBtn:ClearAllPoints()
+    addonTable.SearchQueryButton:ClearAllPoints()
+    addonTable.SearchResetButton:ClearAllPoints()
 
     if showNativeDungeonFilters then
-        searchQueryBtn:SetWidth(84)
-        searchQueryBtn.text:SetText("Refresh")
-        searchQueryBtn:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, searchButtonTopY)
-        resetFiltersBtn:SetPoint("TOPLEFT", searchQueryBtn, "TOPRIGHT", 7, 0)
-        resetFiltersBtn:Show()
+        addonTable.SearchQueryButton:SetWidth(84)
+        addonTable.SearchQueryButton.text:SetText("Refresh")
+        addonTable.SearchQueryButton:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, searchButtonTopY)
+        addonTable.SearchResetButton:SetPoint("TOPLEFT", addonTable.SearchQueryButton, "TOPRIGHT", 7, 0)
+        addonTable.SearchResetButton:Show()
         SetControlVisible(boxNeedTank, false)
         SetControlVisible(boxNeedHeal, false)
         SetControlVisible(boxNeedDPS, false)
@@ -2264,10 +2442,10 @@ UpdateSearchFilterPane = function()
         nativeBrezBox:Hide(); if nativeBrezBox.labelText then nativeBrezBox.labelText:Hide() end
     end
 
-    searchQueryBtn:SetWidth(175)
-    searchQueryBtn.text:SetText("Search")
-    searchQueryBtn:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, searchButtonTopY)
-    resetFiltersBtn:Hide()
+    addonTable.SearchQueryButton:SetWidth(175)
+    addonTable.SearchQueryButton.text:SetText("Search")
+    addonTable.SearchQueryButton:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, searchButtonTopY)
+    addonTable.SearchResetButton:Hide()
 
     SetControlVisible(boxNeedTank, true)
     SetControlVisible(boxNeedHeal, true)
@@ -2456,7 +2634,7 @@ local function BuildNativeKeyQuery()
 end
 
 ApplyOakSearchQuery = function(triggerSearch)
-    local searchBox = GetNativeSearchBox()
+    local searchBox = nativeSearchHost.GetNativeSearchBox()
     if not searchBox then
         return
     end
@@ -2528,6 +2706,15 @@ ApplySearchNotesLayout = function(preserveLeftEdge)
         row.titleText:SetPoint("LEFT", row, "LEFT", layout.titleX - SEARCH_ROW_X_OFFSET, 0)
         row.titleText:SetWidth(layout.titleWidth)
 
+        row.modeText:ClearAllPoints()
+        if layout.modeWidth and layout.modeWidth > 0 and layout.modeX then
+            row.modeText:SetPoint("CENTER", row, "LEFT", layout.modeX + (layout.modeWidth / 2) - SEARCH_ROW_X_OFFSET, 0)
+            row.modeText:SetWidth(layout.modeWidth)
+            row.modeText:Show()
+        else
+            row.modeText:Hide()
+        end
+
         row.ratingText:ClearAllPoints()
         row.ratingText:SetPoint("CENTER", row, "LEFT", layout.ratingX + (layout.ratingWidth / 2) - SEARCH_ROW_X_OFFSET, 0)
         row.ratingText:SetWidth(layout.ratingWidth)
@@ -2578,9 +2765,13 @@ local function CreateRow(index)
 
     row:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
     row:SetScript("OnDoubleClick", function(self)
-        if self.groupData and self.groupData.id and not self.groupData.isApplied and not self.groupData.isDeclined and LFGListFrame and LFGListFrame.SearchPanel then
-            LFGListSearchPanel_SelectResult(LFGListFrame.SearchPanel, self.groupData.id)
-            LFGListSearchPanel_SignUp(LFGListFrame.SearchPanel)
+        if self.groupData and self.groupData.id and not self.groupData.isApplied and not self.groupData.isDeclined then
+            if addonTable.BeginSearchSignup then
+                addonTable.BeginSearchSignup(self.groupData.id)
+            else
+                LFGListSearchPanel_SelectResult(LFGListFrame.SearchPanel, self.groupData.id)
+                LFGListSearchPanel_SignUp(LFGListFrame.SearchPanel)
+            end
         end
     end)
 
@@ -2593,7 +2784,7 @@ local function CreateRow(index)
             GameTooltip:ClearLines()
 
             if mode == "raid" or mode == "legacy_raid" then
-                GameTooltip:AddLine(string.format("%d/%d/%d", grp.tanks or 0, grp.heals or 0, grp.dps or 0), 1, 1, 1)
+                GameTooltip:AddLine((grp.displayTitle ~= "" and grp.displayTitle) or (grp.titleStr ~= "" and grp.titleStr) or "--", 1, 1, 1)
                 GameTooltip:AddLine(grp.activityName or "Unknown Raid", 1, 0.82, 0)
                 if grp.playstyleLabel and grp.playstyleLabel ~= "" and grp.playstyleLabel ~= "Any" then
                     GameTooltip:AddLine(grp.playstyleLabel, 0.2, 1, 0.2)
@@ -2602,6 +2793,14 @@ local function CreateRow(index)
                 GameTooltip:AddDoubleLine("Leader:", grp.leaderNameRaw or "Unknown", 1, 1, 1, 1, 1, 1)
                 GameTooltip:AddDoubleLine("Members:", string.format("%d (%d/%d/%d)", grp.members or 0, grp.tanks or 0, grp.heals or 0, grp.dps or 0), 1, 1, 1, 1, 1, 1)
                 GameTooltip:AddDoubleLine("Created:", FormatTime(grp.age or 0) .. " ago", 1, 1, 1, 1, 1, 1)
+                if grp.raidListing and grp.raidListing.difficultyLabel and grp.raidListing.difficultyLabel ~= "" then
+                    GameTooltip:AddDoubleLine("Difficulty:", grp.raidListing.difficultyLabel, 1, 1, 1, 1, 1, 1)
+                end
+                if grp.raidListing and grp.raidListing.progressText and grp.raidListing.progressText ~= "--" then
+                    GameTooltip:AddDoubleLine("Progress:", grp.raidListing.progressText, 1, 1, 1, 1, 1, 1)
+                end
+                local defeatedText = GetRaidEncounterListText(grp)
+                GameTooltip:AddDoubleLine("Bosses Defeated:", defeatedText or "--", 1, 1, 1, 1, 0.2, 0.2)
 
                 local roleGroups = BuildRoleClassBreakdown(grp.memberDetails)
                 GameTooltip:AddLine(" ")
@@ -2747,6 +2946,12 @@ local function CreateRow(index)
     row.titleText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     row.titleText:SetPoint("LEFT", row, "LEFT", SEARCH_LAYOUT_EXPANDED.titleX - SEARCH_ROW_X_OFFSET, 0); row.titleText:SetWidth(SEARCH_LAYOUT_EXPANDED.titleWidth); row.titleText:SetJustifyH("LEFT")
 
+    row.modeText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    row.modeText:SetPoint("CENTER", row, "LEFT", SEARCH_LAYOUT_EXPANDED_RAID.modeX + (SEARCH_LAYOUT_EXPANDED_RAID.modeWidth / 2) - SEARCH_ROW_X_OFFSET, 0)
+    row.modeText:SetWidth(SEARCH_LAYOUT_EXPANDED_RAID.modeWidth)
+    row.modeText:SetJustifyH("CENTER")
+    row.modeText:Hide()
+
     row.ratingText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     row.ratingText:SetPoint("CENTER", row, "LEFT", SEARCH_LAYOUT_EXPANDED.ratingX + (SEARCH_LAYOUT_EXPANDED.ratingWidth / 2) - SEARCH_ROW_X_OFFSET, 0); row.ratingText:SetWidth(SEARCH_LAYOUT_EXPANDED.ratingWidth); row.ratingText:SetJustifyH("CENTER")
 
@@ -2776,9 +2981,13 @@ local function CreateRow(index)
     end)
     row.applyBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
     row.applyBtn:SetScript("OnClick", function(self)
-        if row.groupData and row.groupData.id and not row.groupData.isApplied and not row.groupData.isDeclined and LFGListFrame and LFGListFrame.SearchPanel then
-            LFGListSearchPanel_SelectResult(LFGListFrame.SearchPanel, row.groupData.id)
-            LFGListSearchPanel_SignUp(LFGListFrame.SearchPanel)
+        if row.groupData and row.groupData.id and not row.groupData.isApplied and not row.groupData.isDeclined then
+            if addonTable.BeginSearchSignup then
+                addonTable.BeginSearchSignup(row.groupData.id)
+            else
+                LFGListSearchPanel_SelectResult(LFGListFrame.SearchPanel, row.groupData.id)
+                LFGListSearchPanel_SignUp(LFGListFrame.SearchPanel)
+            end
         end
     end)
 
@@ -2957,8 +3166,18 @@ function OAK_SEARCH:UpdateDisplay()
         else
             row.playstyleText:SetText("")
         end
-        
-        row.titleText:SetText(group.titleStr or "")
+
+        if group.mode == "raid" or group.mode == "legacy_raid" then
+            row.dungeonText:SetText(GetRaidDungeonDisplay(group))
+            row.titleText:SetText(GetRaidRowTitle(group))
+            row.modeText:SetText(GetRaidModeDisplay(group))
+            row.modeText:Show()
+        else
+            row.dungeonText:SetText(group.dungeon)
+            row.titleText:SetText(group.titleStr or "")
+            row.modeText:SetText("")
+            row.modeText:Hide()
+        end
         row.notesText:SetText(tostring(group.commentStr or ""))
         
         local setupSlots, setupMode = BuildSetupSlots(group)
@@ -3014,7 +3233,7 @@ function OAK_SEARCH:UpdateDisplay()
         local rNum = math.floor(group.rating or 0)
         local rStr = (rNum > 0 and tostring(rNum)) or "--"
         if group.mode == "raid" or group.mode == "legacy_raid" then
-            rStr = (group.raidProgress and group.raidProgress.displayText) or "--"
+            rStr = GetRaidKillsDisplay(group)
         elseif group.mode == "rated_pvp" or group.mode == "pvp" then
             rStr = (rNum > 0 and tostring(rNum)) or "--"
         elseif rNum > 0 then
@@ -3057,7 +3276,7 @@ local function FetchSearchResults()
     if type(results) ~= "table" then
         currentSearchMode = "generic"
         UpdateSearchFilterPane()
-        OAK_SEARCH.UpdateHeaderVisuals()
+        ApplySearchNotesLayout()
         return
     end
 
@@ -3106,6 +3325,10 @@ local function FetchSearchResults()
                 if rioProfile and addonTable.GetRaidProgressSummary then
                     raidProgress = addonTable.GetRaidProgressSummary(rioProfile, dName)
                 end
+                local raidListing = nil
+                if (mode == "raid" or mode == "legacy_raid") and addonTable.GetRaidListingInfo then
+                    raidListing = addonTable.GetRaidListingInfo(resultID, searchResultInfo, activityInfo)
+                end
 
                 if (mode == "rated_pvp" or mode == "pvp") and not pvpBracket then
                     pvpBracket = GetSearchPvpBracketLabel(nil, activityInfo, searchResultInfo.numMembers)
@@ -3153,6 +3376,7 @@ local function FetchSearchResults()
                     keyLevel = keyLevel,
                     rioProfile = rioProfile,
                     raidProgress = raidProgress,
+                    raidListing = raidListing,
                     numBNetFriends = tonumber(searchResultInfo.numBNetFriends) or 0,
                     numCharFriends = tonumber(searchResultInfo.numCharFriends) or 0,
                     numGuildMates = tonumber(searchResultInfo.numGuildMates) or 0,
@@ -3163,7 +3387,7 @@ local function FetchSearchResults()
 
     currentSearchMode = DetermineSearchMode()
     UpdateSearchFilterPane()
-    OAK_SEARCH.UpdateHeaderVisuals()
+    ApplySearchNotesLayout()
 end
 
 local isUpdating = false
@@ -3202,6 +3426,12 @@ OAK_SEARCH:SetScript("OnShow", function(self)
     AutoPositionSearch()
     ApplySearchScale(OakLFGSorterDB.searchScale or 1.0)
     ApplySearchNotesLayout()
+    if addonTable.UpdateSearchQuickSignupControls then
+        addonTable.UpdateSearchQuickSignupControls()
+    end
+    if addonTable.EnsureSearchSignupHooks then
+        addonTable.EnsureSearchSignupHooks()
+    end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
     elseif addonTable.AnchorRIOPanelToOak then
@@ -3213,8 +3443,8 @@ end)
 OAK_SEARCH:SetScript("OnHide", function()
     if filterPanel then filterPanel:Hide() end
     if supportersPanel then supportersPanel:Hide() end
-    if RestoreNativeSearchBox then
-        RestoreNativeSearchBox()
+    if nativeSearchHost.RestoreNativeSearchBox then
+        nativeSearchHost.RestoreNativeSearchBox()
     end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
@@ -3237,6 +3467,10 @@ local EventFrame = CreateFrame("Frame")
 EventFrame:RegisterEvent("ADDON_LOADED")
 EventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
     if loadedAddon == addonName or loadedAddon == "Blizzard_LookingForGroupUI" then
+        if addonTable.EnsureSearchSignupHooks then
+            addonTable.EnsureSearchSignupHooks()
+        end
+
         if addonTable.OAK_LFG and not addonTable.OAK_LFG.OakSearchMutualHooked then
             addonTable.OAK_LFG:HookScript("OnShow", function()
                 if OAK_SEARCH:IsShown() then
@@ -3292,10 +3526,6 @@ EventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
                 end
             end)
 
-            LFGListFrame.SearchPanel:HookScript("OnHide", function()
-                OAK_SEARCH:Hide()
-            end)
-            
             LFGListFrame.SearchPanel.OakSearchToggleHooked = true
         end
     end

@@ -7,16 +7,19 @@ addonTable.CurrentIsAscending = false
 local ROW_HEIGHT = 22 
 local FULL_FRAME_WIDTH = 660
 local COLLAPSED_FRAME_WIDTH = 460
-local HEADER_TOP_OFFSET = -43
-local SCROLL_TOP_OFFSET = -70
+local BASE_HEADER_TOP_OFFSET = -43
+local BASE_SCROLL_TOP_OFFSET = -70
+local APPLICANT_CONTEXT_BAR_HEIGHT = 24
+local HEADER_TOP_OFFSET = BASE_HEADER_TOP_OFFSET
+local SCROLL_TOP_OFFSET = BASE_SCROLL_TOP_OFFSET
 local roleWeights = { ["TANK"] = 1, ["HEALER"] = 2, ["DAMAGER"] = 3 }
 local GetBrowserApplicationPriority
 local MODE_CONFIGS = {
     mythic_plus = { ratingLabel = "M+ Rating", keyLabel = "Key" },
     rated_pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
     pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
-    raid = { ratingLabel = "Progress", keyLabel = "Raid" },
-    legacy_raid = { ratingLabel = "Progress", keyLabel = "Raid" },
+    raid = { ratingLabel = "Raid", keyLabel = "Prog" },
+    legacy_raid = { ratingLabel = "Raid", keyLabel = "Prog" },
     delve = { ratingLabel = "M+ Rating", keyLabel = "Key" },
     open_world = { ratingLabel = "M+ Rating", keyLabel = "Key" },
     generic = { ratingLabel = "M+ Rating", keyLabel = "Key" },
@@ -36,7 +39,7 @@ end
 
 local function UsesSecondaryMetricColumn()
     local listingMode = GetListingMode()
-    return not (listingMode == "rated_pvp" or listingMode == "pvp" or listingMode == "raid" or listingMode == "legacy_raid")
+    return not (listingMode == "rated_pvp" or listingMode == "pvp")
 end
 
 local function IsBrowserMode()
@@ -73,6 +76,60 @@ end
 local scrollChild = CreateFrame("Frame")
 scrollChild:SetSize(scrollFrame:GetWidth(), 1)
 scrollFrame:SetScrollChild(scrollChild)
+
+local applicantContextBar = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
+applicantContextBar:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 1, -31)
+applicantContextBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -1, -31)
+applicantContextBar:SetHeight(APPLICANT_CONTEXT_BAR_HEIGHT)
+applicantContextBar:SetBackdrop({ bgFile = addonTable.FLAT_TEX })
+applicantContextBar:SetBackdropColor(0.08, 0.08, 0.1, 0.75)
+applicantContextBar:Hide()
+
+local applicantListingTitle = applicantContextBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+applicantListingTitle:SetPoint("TOPLEFT", applicantContextBar, "TOPLEFT", 12, -2)
+applicantListingTitle:SetPoint("TOPRIGHT", applicantContextBar, "TOPRIGHT", -12, -2)
+applicantListingTitle:SetJustifyH("LEFT")
+applicantListingTitle:SetJustifyV("TOP")
+applicantListingTitle:SetWordWrap(false)
+
+local applicantListingActivity = applicantContextBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+applicantListingActivity:SetPoint("BOTTOMLEFT", applicantContextBar, "BOTTOMLEFT", 12, 3)
+applicantListingActivity:SetPoint("BOTTOMRIGHT", applicantContextBar, "BOTTOMRIGHT", -12, 3)
+applicantListingActivity:SetJustifyH("LEFT")
+applicantListingActivity:SetJustifyV("BOTTOM")
+applicantListingActivity:SetTextColor(0.75, 0.75, 0.75)
+applicantListingActivity:SetWordWrap(false)
+
+local function UpdateApplicantContextLayout()
+    local contextVisible = applicantContextBar:IsShown()
+    HEADER_TOP_OFFSET = contextVisible and (BASE_HEADER_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_HEADER_TOP_OFFSET
+    SCROLL_TOP_OFFSET = contextVisible and (BASE_SCROLL_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_SCROLL_TOP_OFFSET
+
+    scrollFrame:ClearAllPoints()
+    scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET)
+    scrollFrame:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -25, 35)
+end
+
+local function UpdateApplicantContextBar()
+    local isApplicantMode = not IsBrowserMode()
+    local listingContext = addonTable.UpdateListingContext and addonTable.UpdateListingContext() or addonTable.CurrentListingContext
+    local entryInfo = listingContext and listingContext.entryInfo or nil
+    local activityInfo = listingContext and listingContext.activityInfo or nil
+
+    local titleText = tostring((entryInfo and entryInfo.name) or "")
+    local activityText = tostring((activityInfo and (activityInfo.fullName or activityInfo.shortName)) or "")
+
+    local shouldShow = isApplicantMode and (titleText ~= "" or activityText ~= "")
+    if shouldShow then
+        applicantListingTitle:SetText(titleText ~= "" and titleText or "Current Listing")
+        applicantListingActivity:SetText(activityText)
+        applicantContextBar:Show()
+    else
+        applicantContextBar:Hide()
+    end
+
+    UpdateApplicantContextLayout()
+end
 
 local function GetTargetFrameWidth()
     if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
@@ -159,8 +216,20 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
             local bCounts = grpB.roleCounts or {}
             valA = ((aCounts.TANK or 0) * 100) + ((aCounts.HEALER or 0) * 10) + (aCounts.DAMAGER or 0)
             valB = ((bCounts.TANK or 0) * 100) + ((bCounts.HEALER or 0) * 10) + (bCounts.DAMAGER or 0)
-        elseif sortBy == "rating" then valA, valB = grpA.rating or 0, grpB.rating or 0
-        elseif sortBy == "key" then valA, valB = grpA.keyLevel or 0, grpB.keyLevel or 0
+        elseif sortBy == "rating" then
+            if listingMode == "raid" or listingMode == "legacy_raid" then
+                valA = (grpA.raidProgress and grpA.raidProgress.sortValue) or 0
+                valB = (grpB.raidProgress and grpB.raidProgress.sortValue) or 0
+            else
+                valA, valB = grpA.rating or 0, grpB.rating or 0
+            end
+        elseif sortBy == "key" then
+            if listingMode == "raid" or listingMode == "legacy_raid" then
+                valA = (grpA.raidListing and grpA.raidListing.bossesKilled) or 0
+                valB = (grpB.raidListing and grpB.raidListing.bossesKilled) or 0
+            else
+                valA, valB = grpA.keyLevel or 0, grpB.keyLevel or 0
+            end
         elseif sortBy == "note" then valA, valB = grpA.comment or "", grpB.comment or "" end
     else
         if sortBy == "role" then valA, valB = roleWeights[grpA.leadRole] or 99, roleWeights[grpB.leadRole] or 99
@@ -544,7 +613,7 @@ local function GetMemberRatingDisplay(member)
         local pvpRating = math.floor(member.pvpRating or 0)
         return pvpRating > 0 and tostring(pvpRating) or "--"
     elseif listingMode == "raid" or listingMode == "legacy_raid" then
-        return (member.raidProgress and member.raidProgress.displayText) or "--"
+        return (member.raidProgress and member.raidProgress.raidName) or "--"
     end
 
     local ratingNum = math.floor(member.rating or 0)
@@ -568,13 +637,27 @@ local function GetMemberRatingDisplay(member)
     return ratingStr
 end
 
+local function GetRaidProgressFraction(progress)
+    if type(progress) ~= "table" then
+        return "--"
+    end
+
+    local text = tostring(progress.longText or progress.displayText or "")
+    local fraction = text:match("(%d+/%d+)")
+    if fraction and fraction ~= "" then
+        return fraction
+    end
+
+    return "--"
+end
+
 local function GetMemberSecondaryDisplay(member)
     local listingMode = GetListingMode()
 
     if listingMode == "rated_pvp" or listingMode == "pvp" then
         return member.pvpBracket or "--"
     elseif listingMode == "raid" or listingMode == "legacy_raid" then
-        return (member.raidProgress and member.raidProgress.raidName) or "--"
+        return GetRaidProgressFraction(member.raidProgress)
     end
 
     return member.highestKey > 0 and "+" .. member.highestKey or "--"
@@ -596,13 +679,28 @@ local function GetBrowserRatingDisplay(result)
     return string.format("|cFF%02x%02x%02x%d|r", cR * 255, cG * 255, cB * 255, ratingNum)
 end
 
+local function GetRaidBrowserTitle(result)
+    local title = result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--")
+    local difficultyLabel = result.raidListing and result.raidListing.difficultyLabel or nil
+    if not difficultyLabel or difficultyLabel == "" then
+        return title
+    end
+
+    local loweredTitle = strlower(title or "")
+    if loweredTitle:find(strlower(difficultyLabel), 1, true) then
+        return title
+    end
+
+    return string.format("%s: %s", difficultyLabel, title)
+end
+
 local function GetBrowserSecondaryDisplay(result)
     local listingMode = GetListingMode()
 
     if listingMode == "rated_pvp" or listingMode == "pvp" then
         return result.pvpBracket or "--"
     elseif listingMode == "raid" or listingMode == "legacy_raid" then
-        return "--"
+        return (result.raidListing and result.raidListing.progressText) or "--"
     end
 
     return (result.keyLevel and result.keyLevel > 0) and ("+" .. result.keyLevel) or "--"
@@ -695,6 +793,10 @@ local function CreateRow(index)
                 end
             elseif listingMode == "raid" or listingMode == "legacy_raid" then
                 GameTooltip:AddDoubleLine("Progress:", (result.raidProgress and result.raidProgress.longText) or "--", 1, 1, 1, 1, 1, 1)
+                if result.raidListing then
+                    GameTooltip:AddDoubleLine("Listing Difficulty:", result.raidListing.difficultyLabel or "--", 1, 1, 1, 1, 1, 1)
+                    GameTooltip:AddDoubleLine("Bosses Defeated:", result.raidListing.progressText or "--", 1, 1, 1, 1, 1, 1)
+                end
             else
                 GameTooltip:AddDoubleLine("M+ Rating:", (result.rating and result.rating > 0) and result.rating or "--", 1, 1, 1, 1, 1, 1)
                 if result.keyLevel and result.keyLevel > 0 then
@@ -1021,10 +1123,12 @@ addonTable.ApplyHideNotesLayout()
 
 function addonTable.UpdateDisplay()
     addonTable.UpdateGroupBuffs()
-    addonTable.UpdateHeaderVisuals()
     if addonTable.UpdateTopBarActions then
         addonTable.UpdateTopBarActions()
     end
+    UpdateApplicantContextBar()
+    addonTable.UpdateHeaderVisuals()
+    UpdateNotesToggleLayout()
 
     for _, row in ipairs(rows) do row:Hide() end
 
@@ -1076,7 +1180,11 @@ function addonTable.UpdateDisplay()
                 SetBrowserCompSlot(row.compSlots[index], slotInfo.role, slotInfo.class, slotInfo.filled)
             end
 
-            row.nameText:SetText(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--"))
+            if GetListingMode() == "raid" or GetListingMode() == "legacy_raid" then
+                row.nameText:SetText(GetRaidBrowserTitle(result))
+            else
+                row.nameText:SetText(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--"))
+            end
             row.specText:SetText(result.playstyleShortLabel or "--")
             row.ratingText:SetText(GetBrowserRatingDisplay(result))
             row.keyText:SetText(GetBrowserSecondaryDisplay(result))

@@ -3,13 +3,14 @@
 ## Notes: Sorts LFG applicants by Role, Class, and iLvl.
 ## Author: OAK
 ## IconTexture: Interface\AddOns\OakLFGSorter\Media\icon.png
-## Version: 2.0.0-alpha1
+## Version: 2.0.0-alpha2
 ## X-Wago-ID: 96d2nXGO
 ## SavedVariables: OakLFGSorterDB
 
 Supporters.lua
 Init.lua
 Search.lua
+Search_Signup.lua
 UI_Header.lua
 UI_Filters.lua
 UI_Rows.lua

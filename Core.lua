@@ -385,6 +385,114 @@ local function GetSearchResultDifficultyToken(resultInfo, activityInfo)
     return "ANY"
 end
 
+local function GetDifficultyDisplayInfo(difficultyToken)
+    local labels = {
+        NORMAL = { full = "Normal", short = "N" },
+        HEROIC = { full = "Heroic", short = "H" },
+        MYTHIC = { full = "Mythic", short = "M" },
+        MYTHIC_PLUS = { full = "Mythic+", short = "M+" },
+    }
+
+    return labels[difficultyToken] or { full = "Any", short = "" }
+end
+
+local function BuildEncounterNameData(encounterInfo)
+    local defeatedBosses = {}
+    local defeatedBossList = {}
+    local count = 0
+
+    if type(encounterInfo) ~= "table" then
+        return defeatedBosses, defeatedBossList, count
+    end
+
+    for _, encounterEntry in pairs(encounterInfo) do
+        local bossName = encounterEntry
+        if type(encounterEntry) == "table" then
+            bossName = encounterEntry.name or encounterEntry.bossName or encounterEntry.encounterName
+        end
+
+        if type(bossName) == "string" and bossName ~= "" and not defeatedBosses[bossName] then
+            defeatedBosses[bossName] = true
+            table.insert(defeatedBossList, bossName)
+            count = count + 1
+        end
+    end
+
+    return defeatedBosses, defeatedBossList, count
+end
+
+local function ParseRaidProgressText(...)
+    local sources = { ... }
+    for _, source in ipairs(sources) do
+        local text = tostring(source or "")
+        if text ~= "" then
+            local killed, total = text:match("(%d+)%s*/%s*(%d+)")
+            if not killed then
+                killed, total = text:match("(%d+)%s*[Oo][Ff]%s*(%d+)")
+            end
+            if killed and total then
+                return tonumber(killed) or 0, tonumber(total) or 0
+            end
+        end
+    end
+
+    return 0, 0
+end
+
+local KNOWN_RAID_BOSS_COUNTS = {
+    ["march on quel'danas"] = 9,
+    ["the dreamrift"] = 9,
+    ["the voidspire"] = 9,
+}
+
+local function GetKnownRaidBossCount(raidName)
+    local key = strlower(tostring(raidName or ""))
+    return KNOWN_RAID_BOSS_COUNTS[key] or 0
+end
+
+local function GetRaidListingInfo(searchResultID, resultInfo, activityInfo)
+    if not activityInfo then
+        return nil
+    end
+
+    local difficultyToken = GetSearchResultDifficultyToken(resultInfo, activityInfo)
+    local difficultyInfo = GetDifficultyDisplayInfo(difficultyToken)
+    local raidName = CleanActivityLabel(activityInfo.shortName or activityInfo.fullName or "")
+    local encounterInfo = C_LFGList.GetSearchResultEncounterInfo and C_LFGList.GetSearchResultEncounterInfo(searchResultID) or nil
+    local defeatedBossNames, defeatedBossList, defeatedCount = BuildEncounterNameData(encounterInfo)
+    local parsedKilled, parsedTotal = ParseRaidProgressText(
+        activityInfo.fullName,
+        activityInfo.shortName,
+        resultInfo and resultInfo.name,
+        resultInfo and resultInfo.comment
+    )
+
+    local bossesKilled = math.max(defeatedCount or 0, parsedKilled or 0)
+    local bossCount = math.max(parsedTotal or 0, GetKnownRaidBossCount(raidName))
+    local progressText = "--"
+
+    if bossCount > 0 then
+        progressText = string.format("%d/%d", bossesKilled, bossCount)
+    elseif bossesKilled > 0 then
+        progressText = tostring(bossesKilled)
+    end
+
+    return {
+        raidName = raidName,
+        raidNameKey = strlower(raidName),
+        difficultyToken = difficultyToken,
+        difficultyLabel = difficultyInfo.full,
+        difficultyShort = difficultyInfo.short,
+        bossesKilled = bossesKilled,
+        bossCount = bossCount,
+        progressText = progressText,
+        defeatedBossNames = defeatedBossNames,
+        defeatedBossList = defeatedBossList,
+    }
+end
+
+addonTable.GetRaidListingInfo = GetRaidListingInfo
+
 local function ParseResultPlaystyleText(resultInfo)
     local haystack = strlower((resultInfo and resultInfo.name or "") .. " " .. (resultInfo and resultInfo.comment or ""))
     if haystack:find("carry", 1, true) or haystack:find("boost", 1, true) then
@@ -507,11 +615,29 @@ local function FetchSearchResultData()
                 local ratingValue = tonumber(resultInfo.leaderOverallDungeonScore) or 0
                 local pvpRating = 0
                 local pvpBracket = nil
+                local raidListing = nil
+                local rioProfile = nil
+                local raidProgress = nil
 
                 if (listingMode == "rated_pvp" or listingMode == "pvp") and type(resultInfo.leaderPvpRatingInfo) == "table" then
                     pvpRating = tonumber(resultInfo.leaderPvpRatingInfo.rating) or 0
                     pvpBracket = GetPvpBracketLabel(resultInfo.leaderPvpRatingInfo)
                     ratingValue = pvpRating
+                end
+
+                if resultInfo.leaderName and RaiderIO and RaiderIO.GetProfile then
+                    local charName, charRealm = strsplit("-", resultInfo.leaderName)
+                    if not charRealm or charRealm == "" then
+                        charRealm = GetNormalizedRealmName() or ""
+                    end
+                    rioProfile = RaiderIO.GetProfile(charName, charRealm)
+                end
+
+                if listingMode == "raid" or listingMode == "legacy_raid" then
+                    raidListing = GetRaidListingInfo(searchResultID, resultInfo, activityInfo)
+                    if rioProfile and addonTable.GetRaidProgressSummary then
+                        raidProgress = addonTable.GetRaidProgressSummary(rioProfile, raidListing and raidListing.raidName or activityFilterLabel)
+                    end
                 end
 
                 local leaderClass = "UNKNOWN"
@@ -546,7 +672,8 @@ local function FetchSearchResultData()
                     rating = ratingValue,
                     pvpRating = pvpRating,
                     pvpBracket = pvpBracket,
-                    raidProgress = nil,
+                    raidProgress = raidProgress,
+                    raidListing = raidListing,
                     playstyleValue = playstyleValue,
                     playstyleLabel = playstyleLabel,
                     playstyleShortLabel = playstyleShortLabel,
@@ -574,6 +701,7 @@ local function FetchSearchResultData()
                     numCharFriends = tonumber(resultInfo.numCharFriends) or 0,
                     numGuildMates = tonumber(resultInfo.numGuildMates) or 0,
                     applicationStatus = applicationStatus,
+                    leaderProfile = rioProfile,
                 }
 
                 table.insert(addonTable.SearchResults, entry)
@@ -696,6 +824,11 @@ function addonTable.RunBrowserSearch()
 end
 
 function addonTable.ApplyToSearchResult(searchResultID)
+    if addonTable.BeginSearchSignup then
+        addonTable.BeginSearchSignup(searchResultID)
+        return
+    end
+
     if not (C_LFGList and C_LFGList.ApplyToGroup and searchResultID) then
         return
     end
