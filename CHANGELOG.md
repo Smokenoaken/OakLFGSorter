@@ -1,3 +1,9 @@
+## v2.0.0-alpha3
+
+- Tightened the Blizzard-backed dungeon filter pane so the full season dungeon list fits without scrolling, and added All/None helpers plus refresh guidance
+- Added Mythic+ Gives Score estimates in the dungeon filter list, including score-gain values and richer tooltip breakdowns
+- Restored the simpler applicant Edit button behavior that clicks Blizzard's visible Edit control without the later PVEFrame reopen experiments
+
 ## v2.0.0-alpha2
 
 - Added Oak quick-signup role controls that now correctly sync into Blizzard's signup popup

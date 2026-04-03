@@ -676,8 +676,12 @@ end
 local function GetSearchQueryLabel(mode)
     if mode == "mythic_plus" then
         return "Examples: 12-13, <10, 12 pit", ""
-    elseif mode == "dungeon" or mode == "delve" or mode == "generic" then
-        return "Use Blizzard search terms", ""
+    elseif mode == "dungeon" then
+        return "Examples: 10-11, <10, <12", ""
+    elseif mode == "delve" then
+        return "Examples: tier 8, bountyful, healer", ""
+    elseif mode == "generic" then
+        return "Examples: chill, farm, quest, weekly", ""
     end
 
     return "", ""
@@ -1167,7 +1171,7 @@ end
 
 nativeDungeonFilterScroll = CreateFrame("ScrollFrame", "OakLFGNativeDungeonFilterScroll", filterPanel, "UIPanelScrollFrameTemplate")
 nativeDungeonFilterScroll:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 10, -148)
-nativeDungeonFilterScroll:SetPoint("BOTTOMRIGHT", filterPanel, "BOTTOMRIGHT", -12, 10)
+nativeDungeonFilterScroll:SetPoint("BOTTOMRIGHT", filterPanel, "BOTTOMRIGHT", -6, 10)
 nativeDungeonFilterScroll:Hide()
 
 do
@@ -1190,6 +1194,8 @@ do
             thumb:SetSize(8, 40)
         end
         scrollBar:SetWidth(8)
+        scrollBar:Hide()
+        scrollBar:SetAlpha(0)
     end
 end
 
@@ -1237,10 +1243,10 @@ nativeActivityLabel:SetText("Dungeons")
 nativeActivityLabel:SetTextColor(classColor.r, classColor.g, classColor.b)
 nativeActivityLabel:SetFontObject("OakLFG_FontSmall")
 nativeDungeonFilterContent.activityGroupCache = nativeDungeonFilterContent.activityGroupCache or {}
-nativeDungeonFilterContent.selectAllButton = CreateFlatButton(nativeDungeonFilterContent, "A", 16)
+nativeDungeonFilterContent.selectAllButton = CreateFlatButton(nativeDungeonFilterContent, "A", 14)
 nativeDungeonFilterContent.selectAllButton.text:SetFontObject("OakLFG_FontSmall")
 nativeDungeonFilterContent.selectAllButton.text:SetText("A")
-nativeDungeonFilterContent.selectNoneButton = CreateFlatButton(nativeDungeonFilterContent, "N", 16)
+nativeDungeonFilterContent.selectNoneButton = CreateFlatButton(nativeDungeonFilterContent, "N", 14)
 nativeDungeonFilterContent.selectNoneButton.text:SetFontObject("OakLFG_FontSmall")
 nativeDungeonFilterContent.selectNoneButton.text:SetText("N")
 nativeDungeonFilterContent.selectAllButton:SetScript("OnEnter", function(self)
@@ -1275,7 +1281,7 @@ nativeDungeonFilterContent.scoreHeaderHitbox:SetSize(62, 16)
 nativeDungeonFilterContent.scoreHeaderHitbox:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:SetText("Gives Score", 1, 1, 1)
-    GameTooltip:AddLine("Shows the lowest timed key level that should increase your score for that dungeon.", 1, 1, 1, true)
+    GameTooltip:AddLine("Shows the lowest timed key level that should increase your score for that dungeon, plus the estimated score gain.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
 nativeDungeonFilterContent.scoreHeaderHitbox:SetScript("OnLeave", function()
@@ -2330,6 +2336,23 @@ addonTable.GetMythicPlusScoreTargets = function()
         return baseRating + firstRating + secondRating + affixScore
     end
 
+    local function BuildEstimatedScoreGain(baseLevel, currentOverall)
+        local level = tonumber(baseLevel)
+        if not level or level <= 0 then
+            return nil
+        end
+
+        local timedScore = GetTimedRunScore(level)
+        local twoChestScore = GetTimedRunScore(math.min(30, level + 1))
+        local threeChestScore = GetTimedRunScore(math.min(30, level + 2))
+
+        return {
+            timed = math.max(1, math.floor((timedScore - currentOverall) + 0.5)),
+            plusTwo = math.max(1, math.floor((twoChestScore - currentOverall) + 0.5)),
+            plusThree = math.max(1, math.floor((threeChestScore - currentOverall) + 0.5)),
+        }
+    end
+
     local targets = {}
     local mapIDs = C_ChallengeMode.GetMapTable() or {}
     local missingMapNames = false
@@ -2362,7 +2385,19 @@ addonTable.GetMythicPlusScoreTargets = function()
                 end
             end
 
-            targets[labelKey] = targetLevel
+            if targetLevel then
+                local targetScore = GetTimedRunScore(targetLevel)
+                local estimatedGain = BuildEstimatedScoreGain(targetLevel, currentOverall)
+                targets[labelKey] = {
+                    level = targetLevel,
+                    estimatedGain = estimatedGain and estimatedGain.timed or nil,
+                    estimatedGainBreakdown = estimatedGain,
+                    projectedScore = targetScore,
+                    currentScore = currentOverall,
+                }
+            else
+                targets[labelKey] = nil
+            end
         end
     end
 
@@ -2531,7 +2566,7 @@ local function UpdateNativeDungeonFilterPane(topOffset)
 
     nativeDungeonFilterScroll:ClearAllPoints()
     nativeDungeonFilterScroll:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 10, topOffset)
-    nativeDungeonFilterScroll:SetPoint("BOTTOMRIGHT", filterPanel, "BOTTOMRIGHT", -12, 10)
+    nativeDungeonFilterScroll:SetPoint("BOTTOMRIGHT", filterPanel, "BOTTOMRIGHT", -6, 10)
 
     if type(adv.activities) == "table" then
         for _, groupID in ipairs(adv.activities) do
@@ -2564,14 +2599,14 @@ local function UpdateNativeDungeonFilterPane(topOffset)
 
     for _, entry in ipairs(topGrid) do
         entry.box:ClearAllPoints()
-        entry.box:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", entry.x, y - (entry.row * 22))
+        entry.box:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", entry.x, y - (entry.row * 20))
         entry.box:SetState(entry.active)
         entry.box:Show()
         if entry.box.labelText then
             entry.box.labelText:Show()
         end
     end
-    y = y - 70
+    y = y - 62
 
     nativeMinimumRatingLabel:ClearAllPoints()
     nativeMinimumRatingLabel:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", 5, y - 2)
@@ -2580,7 +2615,7 @@ local function UpdateNativeDungeonFilterPane(topOffset)
     nativeMinimumRatingBox:SetPoint("TOPRIGHT", nativeDungeonFilterContent, "TOPRIGHT", -8, y + 2)
     nativeMinimumRatingBox:SetText((tonumber(adv.minimumRating) or 0) > 0 and tostring(math.floor(adv.minimumRating)) or "")
     nativeMinimumRatingBox:Show()
-    y = y - 28
+    y = y - 24
 
     local localUtilityControls = {
         { box = nativePartyBox, active = OAK_F.PartyFit, x = 5, row = 0 },
@@ -2590,23 +2625,23 @@ local function UpdateNativeDungeonFilterPane(topOffset)
 
     for _, entry in ipairs(localUtilityControls) do
         entry.box:ClearAllPoints()
-        entry.box:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", entry.x, y - (entry.row * 22))
+        entry.box:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", entry.x, y - (entry.row * 20))
         entry.box:SetState(entry.active)
         entry.box:Show()
         if entry.box.labelText then
             entry.box.labelText:Show()
         end
     end
-    y = y - 46
+    y = y - 40
 
     nativeActivityLabel:ClearAllPoints()
     nativeActivityLabel:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", 5, y)
     nativeActivityLabel:Show()
     nativeDungeonFilterContent.selectAllButton:ClearAllPoints()
-    nativeDungeonFilterContent.selectAllButton:SetPoint("LEFT", nativeActivityLabel, "RIGHT", 34, 0)
+    nativeDungeonFilterContent.selectAllButton:SetPoint("LEFT", nativeActivityLabel, "RIGHT", 28, 0)
     nativeDungeonFilterContent.selectAllButton:Show()
     nativeDungeonFilterContent.selectNoneButton:ClearAllPoints()
-    nativeDungeonFilterContent.selectNoneButton:SetPoint("LEFT", nativeDungeonFilterContent.selectAllButton, "RIGHT", 4, 0)
+    nativeDungeonFilterContent.selectNoneButton:SetPoint("LEFT", nativeDungeonFilterContent.selectAllButton, "RIGHT", 3, 0)
     nativeDungeonFilterContent.selectNoneButton:Show()
     nativeDungeonFilterContent.scoreHeader:ClearAllPoints()
     nativeDungeonFilterContent.scoreHeader:SetPoint("TOPRIGHT", nativeDungeonFilterContent, "TOPRIGHT", -8, y)
@@ -2619,7 +2654,7 @@ local function UpdateNativeDungeonFilterPane(topOffset)
         nativeDungeonFilterContent.scoreHeader:Hide()
         nativeDungeonFilterContent.scoreHeaderHitbox:Hide()
     end
-    y = y - 16
+    y = y - 14
 
     local activityEntries = GetNativeDungeonActivityEntries()
     for index, entry in ipairs(activityEntries) do
@@ -2627,13 +2662,13 @@ local function UpdateNativeDungeonFilterPane(topOffset)
         if not button then
             button = CreateStandaloneToggleBox(nativeDungeonFilterContent, "")
             button.labelText:SetFontObject("OakLFG_FontSmall")
-            button.labelText:SetWidth(118)
+            button.labelText:SetWidth(104)
             button.labelText:SetJustifyH("LEFT")
             button.scoreText = nativeDungeonFilterContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-            button.scoreText:SetWidth(32)
+            button.scoreText:SetWidth(48)
             button.scoreText:SetJustifyH("RIGHT")
             button.scoreHitbox = CreateFrame("Button", nil, nativeDungeonFilterContent)
-            button.scoreHitbox:SetSize(36, 16)
+            button.scoreHitbox:SetSize(52, 16)
             button.scoreHitbox:SetScript("OnEnter", function(self)
                 local entryData = self.entryData
                 if not entryData then
@@ -2641,8 +2676,19 @@ local function UpdateNativeDungeonFilterPane(topOffset)
                 end
                 GameTooltip:SetOwner(self, "ANCHOR_LEFT")
                 GameTooltip:SetText(entryData.label or "Gives Score", 1, 1, 1)
-                if tonumber(entryData.scoreTarget) and tonumber(entryData.scoreTarget) > 0 then
-                    GameTooltip:AddLine(string.format("A timed +%d should increase your score for this dungeon.", tonumber(entryData.scoreTarget)), 0.40, 1.00, 0.55, true)
+                local targetLevel = tonumber(entryData.scoreTarget and entryData.scoreTarget.level)
+                local estimatedGain = tonumber(entryData.scoreTarget and entryData.scoreTarget.estimatedGain)
+                local gainBreakdown = entryData.scoreTarget and entryData.scoreTarget.estimatedGainBreakdown
+                if targetLevel and targetLevel > 0 then
+                    if estimatedGain and estimatedGain > 0 then
+                        GameTooltip:AddLine(string.format("A timed +%d should increase your score by about %d points for this dungeon.", targetLevel, estimatedGain), 0.40, 1.00, 0.55, true)
+                    else
+                        GameTooltip:AddLine(string.format("A timed +%d should increase your score for this dungeon.", targetLevel), 0.40, 1.00, 0.55, true)
+                    end
+                    if type(gainBreakdown) == "table" then
+                        GameTooltip:AddLine(" ")
+                        GameTooltip:AddLine(string.format("+%d (%d)  ++%d (%d)  +++%d (%d)", targetLevel, tonumber(gainBreakdown.timed) or 0, targetLevel, tonumber(gainBreakdown.plusTwo) or 0, targetLevel, tonumber(gainBreakdown.plusThree) or 0), 0.75, 1.00, 0.80, true)
+                    end
                 else
                     GameTooltip:AddLine("Oak could not determine a score-gain target for this dungeon yet.", 1, 1, 1, true)
                 end
@@ -2712,8 +2758,14 @@ local function UpdateNativeDungeonFilterPane(topOffset)
                 button.scoreHitbox:SetPoint("CENTER", button, "CENTER", 0, 0)
                 button.scoreHitbox.entryData = entry
             end
-            if SearchModeShowsScoreTargets(currentSearchMode) and tonumber(entry.scoreTarget) and tonumber(entry.scoreTarget) > 0 then
-                button.scoreText:SetText("|cff66ff8a" .. tostring(entry.scoreTarget) .. "|r")
+            local targetLevel = tonumber(entry.scoreTarget and entry.scoreTarget.level)
+            local estimatedGain = tonumber(entry.scoreTarget and entry.scoreTarget.estimatedGain)
+            if SearchModeShowsScoreTargets(currentSearchMode) and targetLevel and targetLevel > 0 then
+                if estimatedGain and estimatedGain > 0 then
+                    button.scoreText:SetText(string.format("|cff66ff8a+%d|r |cff9dffb8(%d)|r", targetLevel, estimatedGain))
+                else
+                    button.scoreText:SetText(string.format("|cff66ff8a+%d|r", targetLevel))
+                end
             elseif SearchModeShowsScoreTargets(currentSearchMode) then
                 button.scoreText:SetText("|cff888888--|r")
             else
@@ -2736,7 +2788,7 @@ local function UpdateNativeDungeonFilterPane(topOffset)
         if button.labelText then
             button.labelText:Show()
         end
-        y = y - 18
+        y = y - 16
     end
 
     for index = #activityEntries + 1, #nativeDungeonActivityButtons do

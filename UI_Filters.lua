@@ -677,48 +677,12 @@ local function FindBlizzardEditListingButton()
 end
 
 local function OpenBlizzardEditListing()
-    local stub = _G.LFGListPVEStub
-
-    if ShowUIPanel and PVEFrame then
-        pcall(ShowUIPanel, PVEFrame)
+    local editButton = FindBlizzardEditListingButton()
+    if TryClickVisibleButton(editButton) then
+        return true
     end
 
-    if PVEFrame_ShowFrame then
-        pcall(PVEFrame_ShowFrame, "GroupFinderFrame", stub)
-        pcall(PVEFrame_ShowFrame, "GroupFinderFrame")
-    end
-    if PVEFrame and PVEFrame.Show then
-        pcall(PVEFrame.Show, PVEFrame)
-    end
-    if GroupFinderFrame and GroupFinderFrame.Show then
-        pcall(GroupFinderFrame.Show, GroupFinderFrame)
-    end
-
-    local premadeButtons = {
-        _G.GroupFinderFrameGroupButton4,
-        _G.GroupFinderFrameGroupButton3,
-    }
-    for _, button in ipairs(premadeButtons) do
-        if button and button.Click and button.IsShown and button:IsShown() then
-            pcall(button.Click, button)
-            break
-        end
-    end
-
-    if LFGListFrame and LFGListFrame.Show then
-        pcall(LFGListFrame.Show, LFGListFrame)
-    end
-
-    local viewer = LFGListFrame and LFGListFrame.ApplicationViewer
-    if viewer and viewer.Show then
-        pcall(viewer.Show, viewer)
-    end
-
-    if PVEFrame and PVEFrame.Raise then
-        pcall(PVEFrame.Raise, PVEFrame)
-    end
-
-    return (PVEFrame and PVEFrame.IsShown and PVEFrame:IsShown()) or (GroupFinderFrame and GroupFinderFrame.IsShown and GroupFinderFrame:IsShown()) or false
+    return false
 end
 
 function addonTable.UpdateTopBarActions()
