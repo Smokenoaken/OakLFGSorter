@@ -1,3 +1,7 @@
+## v2.0.1
+
+- Fixed mute ping taint by removing the unsafe global sound hook.
+
 ## v2.0.0
 
 - Added a full Find Group browser with dedicated sorting, filtering, quick sign-up controls, scalable detached-window support, and a hosted Blizzard search box inside Oak's pane.

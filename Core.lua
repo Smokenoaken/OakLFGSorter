@@ -28,8 +28,8 @@ local function CreateApplicantPingHandler(originalHandler)
             return originalHandler(...)
         end
 
-        if SOUNDKIT and SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION then
-            PlaySound(SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION, "master")
+        if SOUNDKIT and SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION and type(originalPlaySound) == "function" then
+            originalPlaySound(SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION, "master")
         end
     end
 end
@@ -45,16 +45,6 @@ local function SetupApplicantPingMuteHook()
 
     QueueStatusButton.EyeHighlightAnim:SetScript("OnPlay", CreateApplicantPingHandler(originalApplicantPingOnPlay))
     QueueStatusButton.EyeHighlightAnim:SetScript("OnLoop", CreateApplicantPingHandler(originalApplicantPingOnLoop))
-end
-
-if type(originalPlaySound) == "function" then
-    PlaySound = function(soundKitID, ...)
-        local mutedKit = SOUNDKIT and SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION
-        if mutedKit and soundKitID == mutedKit and ShouldMuteApplicantPing() then
-            return false
-        end
-        return originalPlaySound(soundKitID, ...)
-    end
 end
 
 local function GetActiveListingActivityID()
