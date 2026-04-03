@@ -2,7 +2,7 @@ local addonName, addonTable = ...
 
 addonTable.Socials = { 
     {name="YouTube", url="https://www.youtube.com/oakensoul"}, 
-    {name="Discord", url="https://discord.gg/fu4zQSGXp9"}, 
+    {name="Discord", url="https://discord.gg/FRGUFaEEVd"}, 
     {name="Twitch", url="https://www.twitch.tv/oakensoul"}, 
     {name="Patreon", url="https://www.patreon.com/Oakensoul"}, 
     {name="Ko-Fi", url="https://ko-fi.com/oakensoul"} 
@@ -19,5 +19,6 @@ addonTable.Patreons = {
 	"Borja Santos",
 	"Emil Sundström",
 	"Tony",
-	"Mills Guild"
+	"Mills Guild",
+	"Tony (2)"
 }

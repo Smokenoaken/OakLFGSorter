@@ -11,6 +11,7 @@ OAK_LFG:EnableMouse(true)
 OAK_LFG:RegisterForDrag("LeftButton")
 OAK_LFG:SetScript("OnDragStart", OAK_LFG.StartMoving)
 OAK_LFG:SetFrameStrata("DIALOG")
+OAK_LFG:SetClampedToScreen(true)
 OAK_LFG:Hide()
 
 _G["OakensoulLFGSorterFrame"] = OAK_LFG
@@ -90,6 +91,9 @@ scaleSlider:SetScript("OnMouseUp", function(self)
     self.isDragging = false
     local rounded = math.floor(self:GetValue() * 100 + 0.5) / 100
     OAK_LFG:SetScale(rounded)
+    if addonTable.ClampFrameToScreen then
+        addonTable.ClampFrameToScreen(OAK_LFG, OakLFGSorterDB, "framePos")
+    end
     if OakLFGSorterDB then OakLFGSorterDB.scale = rounded end
 end)
 
@@ -99,6 +103,9 @@ scaleSlider:SetScript("OnValueChanged", function(self, value)
     
     if not self.isDragging then
         OAK_LFG:SetScale(rounded)
+        if addonTable.ClampFrameToScreen then
+            addonTable.ClampFrameToScreen(OAK_LFG, OakLFGSorterDB, "framePos")
+        end
         if OakLFGSorterDB then OakLFGSorterDB.scale = rounded end
     end
 end)
@@ -144,12 +151,16 @@ function addonTable.AnchorRIOPanelToOak(ownerFrame)
             anchorTarget = addonTable.BrowserFilterPanel
         elseif addonTable.FilterPanel and addonTable.FilterPanel:IsShown() then
             anchorTarget = addonTable.FilterPanel
+        elseif addonTable.OptionsPanel and addonTable.OptionsPanel:IsShown() then
+            anchorTarget = addonTable.OptionsPanel
         elseif addonTable.SupportersPanel and addonTable.SupportersPanel:IsShown() then
             anchorTarget = addonTable.SupportersPanel
         end
     elseif ownerFrame == addonTable.OAK_SEARCH then
         if addonTable.SearchFilterPanel and addonTable.SearchFilterPanel:IsShown() then
             anchorTarget = addonTable.SearchFilterPanel
+        elseif addonTable.SearchOptionsPanel and addonTable.SearchOptionsPanel:IsShown() then
+            anchorTarget = addonTable.SearchOptionsPanel
         elseif addonTable.SearchSupportersPanel and addonTable.SearchSupportersPanel:IsShown() then
             anchorTarget = addonTable.SearchSupportersPanel
         end
@@ -161,6 +172,51 @@ function addonTable.AnchorRIOPanelToOak(ownerFrame)
     RaiderIO_ProfileTooltip:ClearAllPoints()
     RaiderIO_ProfileTooltip:SetPoint("TOPLEFT", anchorTarget, "TOPRIGHT", 2, 0)
     RaiderIO_ProfileTooltip:Raise()
+end
+
+function addonTable.ClampFrameToScreen(frame, dbTable, positionKey)
+    if not (frame and frame.GetLeft and frame.GetBottom and frame.GetRight and frame.GetTop and UIParent) then
+        return
+    end
+
+    local left = frame:GetLeft()
+    local right = frame:GetRight()
+    local bottom = frame:GetBottom()
+    local top = frame:GetTop()
+    local parentWidth = UIParent:GetWidth() or 0
+    local parentHeight = UIParent:GetHeight() or 0
+
+    if not (left and right and bottom and top and parentWidth > 0 and parentHeight > 0) then
+        return
+    end
+
+    local offsetX = 0
+    local offsetY = 0
+
+    if left < 0 then
+        offsetX = -left
+    elseif right > parentWidth then
+        offsetX = parentWidth - right
+    end
+
+    if bottom < 0 then
+        offsetY = -bottom
+    elseif top > parentHeight then
+        offsetY = parentHeight - top
+    end
+
+    if offsetX == 0 and offsetY == 0 then
+        return
+    end
+
+    local newLeft = left + offsetX
+    local newBottom = bottom + offsetY
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", newLeft, newBottom)
+
+    if dbTable and positionKey then
+        dbTable[positionKey] = { "BOTTOMLEFT", "BOTTOMLEFT", newLeft, newBottom }
+    end
 end
 
 function addonTable.RefreshRIOAnchor()
@@ -186,6 +242,37 @@ function addonTable.RefreshRIOAnchor()
     end
 end
 
+function addonTable.TryShowRaiderIOProfileTooltip(tooltip, name, realm)
+    if not (tooltip and RaiderIO and RaiderIO.ShowProfile and IsShiftKeyDown and IsShiftKeyDown()) then
+        return false
+    end
+
+    local fullName = tostring(name or "")
+    local charName = fullName
+    local charRealm = realm
+
+    if fullName ~= "" and (not charRealm or charRealm == "") then
+        local splitName, splitRealm = strsplit("-", fullName, 2)
+        if splitName and splitName ~= "" then
+            charName = splitName
+            charRealm = splitRealm
+        end
+    end
+
+    if not charName or charName == "" then
+        return false
+    end
+
+    local RIO_PROFILE_PRESET = 16056
+    local ok, shown = pcall(RaiderIO.ShowProfile, tooltip, charName, charRealm, RIO_PROFILE_PRESET)
+    if ok and shown then
+        addonTable.RefreshRIOAnchor()
+        return true
+    end
+
+    return false
+end
+
 local rioHooked = false
 function addonTable.CheckRIOHook()
     if not rioHooked and RaiderIO_ProfileTooltip then
@@ -205,6 +292,12 @@ end)
 
 OAK_LFG:HookScript("OnHide", function()
     addonTable.RefreshRIOAnchor()
+end)
+
+OAK_LFG:HookScript("OnSizeChanged", function(self)
+    if self:IsShown() and addonTable.ClampFrameToScreen then
+        addonTable.ClampFrameToScreen(self, OakLFGSorterDB, "framePos")
+    end
 end)
 
 scaleReset:SetScript("OnClick", function()
@@ -235,7 +328,7 @@ addonTable.CloseButton = closeBtn
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
-VersionText:SetText("|cff888888v2.0.0-alpha3|r")
+VersionText:SetText("|cff888888v2.0.0|r")
 VersionText:Hide()
 
 local resizeGrip = CreateFrame("Button", nil, OAK_LFG, "PanelResizeButtonTemplate")

@@ -206,7 +206,7 @@ lustText:SetPoint("LEFT", footer, "LEFT", 10, 0)
 local brezText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 brezText:SetPoint("LEFT", lustText, "RIGHT", 20, 0)
 
-local suppBtn = addonTable.CreateFlatButton(footer, "Supporters and Social Links", 190)
+local suppBtn = addonTable.CreateFlatButton(footer, "Supporters & Links", 150)
 suppBtn:SetPoint("LEFT", brezText, "RIGHT", 20, 0)
 suppBtn:SetScript("OnClick", function()
     if addonTable.SupportersPanel:IsShown() then
@@ -214,10 +214,30 @@ suppBtn:SetScript("OnClick", function()
     else
         if addonTable.FilterPanel then addonTable.FilterPanel:Hide() end
         if addonTable.BrowserFilterPanel then addonTable.BrowserFilterPanel:Hide() end
+        if addonTable.OptionsPanel then addonTable.OptionsPanel:Hide() end
         addonTable.SupportersPanel:Show()
     end
     if addonTable.AnchorRIOPanelToOak then
         addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end)
+
+local optionsBtn = addonTable.CreateCogButton(footer, 22)
+optionsBtn:SetPoint("LEFT", suppBtn, "RIGHT", 6, 0)
+optionsBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Options", 1, 1, 1)
+    GameTooltip:AddLine("Open shared Oak display options.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+optionsBtn:SetScript("OnClick", function()
+    if addonTable.ToggleOptionsPanel then
+        addonTable.ToggleOptionsPanel()
     end
 end)
 
@@ -349,6 +369,7 @@ local B_RATING  = { x = 432, w = 78,  align = "CENTER" }
 local B_KEY     = { x = 510, w = 44,  align = "CENTER" }
 local B_NOTE    = { x = 554, w = 76,  align = "LEFT" }
 local ROW_X_OFFSET = 10
+local REGION_TAG_WIDTH = 42
 
 local function RowColumn(column)
     return { x = column.x - ROW_X_OFFSET, w = column.w, align = column.align }
@@ -638,6 +659,10 @@ local function SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
     elseif math.abs(OAK_LFG:GetWidth() - targetWidth) > 0.5 then
         OAK_LFG:SetWidth(targetWidth)
     end
+
+    if addonTable.ClampFrameToScreen then
+        addonTable.ClampFrameToScreen(OAK_LFG, OakLFGSorterDB, "framePos")
+    end
 end
 
 local function ConfigureTextColumn(fontString, row, column, padding)
@@ -645,6 +670,35 @@ local function ConfigureTextColumn(fontString, row, column, padding)
     fontString:ClearAllPoints()
     fontString:SetPoint("LEFT", row, "LEFT", column.x + padding, 0)
     fontString:SetPoint("RIGHT", row, "LEFT", column.x + column.w - padding, 0)
+    if column.align == "LEFT" then
+        fontString:SetJustifyH("LEFT")
+    else
+        fontString:SetJustifyH("CENTER")
+    end
+    fontString:SetWordWrap(false)
+end
+
+local function ConfigureTextColumnWithTrailingTag(fontString, tagFontString, row, column, padding, tagMarkup)
+    padding = padding or 0
+    fontString:ClearAllPoints()
+    fontString:SetPoint("LEFT", row, "LEFT", column.x + padding, 0)
+
+    if tagFontString and tagMarkup and tagMarkup ~= "" then
+        tagFontString:ClearAllPoints()
+        tagFontString:SetPoint("RIGHT", row, "LEFT", column.x + column.w - 4, 0)
+        tagFontString:SetWidth(REGION_TAG_WIDTH)
+        tagFontString:SetJustifyH("RIGHT")
+        tagFontString:SetText(tagMarkup)
+        tagFontString:Show()
+        fontString:SetPoint("RIGHT", tagFontString, "LEFT", -4, 0)
+    else
+        if tagFontString then
+            tagFontString:SetText("")
+            tagFontString:Hide()
+        end
+        fontString:SetPoint("RIGHT", row, "LEFT", column.x + column.w - padding, 0)
+    end
+
     if column.align == "LEFT" then
         fontString:SetJustifyH("LEFT")
     else
@@ -744,6 +798,19 @@ local function GetBrowserRatingDisplay(result)
     return string.format("|cFF%02x%02x%02x%d|r", cR * 255, cG * 255, cB * 255, ratingNum)
 end
 
+local function GetColoredRaidDifficultyLabel(label)
+    local text = tostring(label or "")
+    local lowered = strlower(text)
+    if lowered == "normal" then
+        return "|cff0070dd" .. text .. "|r"
+    elseif lowered == "heroic" then
+        return "|cffa335ee" .. text .. "|r"
+    elseif lowered == "mythic" then
+        return "|cffff8000" .. text .. "|r"
+    end
+    return text
+end
+
 local function GetRaidBrowserTitle(result)
     local title = result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--")
     local difficultyLabel = result.raidListing and result.raidListing.difficultyLabel or nil
@@ -756,7 +823,7 @@ local function GetRaidBrowserTitle(result)
         return title
     end
 
-    return string.format("%s: %s", difficultyLabel, title)
+    return string.format("%s: %s", GetColoredRaidDifficultyLabel(difficultyLabel), title)
 end
 
 local function GetBrowserSecondaryDisplay(result)
@@ -772,7 +839,8 @@ local function GetBrowserSecondaryDisplay(result)
 end
 
 local function ConfigureBrowserRowLayout(row)
-    ConfigureTextColumn(row.dungeonText, row, BR_DUNGEON, 5)
+    local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_DUNGEON, 5, regionMarkup)
     ConfigureTextColumn(row.nameText, row, BR_TITLE, 5)
     ConfigureTextColumn(row.specText, row, BR_STYLE, 4)
     ConfigureTextColumn(row.ratingText, row, BR_RATING)
@@ -781,7 +849,8 @@ local function ConfigureBrowserRowLayout(row)
 end
 
 local function ConfigureApplicantRowLayout(row)
-    ConfigureTextColumn(row.nameText, row, R_CLASS, 5)
+    local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
+    ConfigureTextColumnWithTrailingTag(row.nameText, row.regionText, row, R_CLASS, 5, regionMarkup)
     ConfigureTextColumn(row.specText, row, R_SPEC, 5)
     ConfigureTextColumn(row.ilvlText, row, R_ILVL)
     ConfigureTextColumn(row.ratingText, row, R_RATING)
@@ -833,16 +902,36 @@ local function CreateRow(index)
         if self.searchResultID and self.searchResult then
             GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
             GameTooltip:ClearLines()
+            self._oakShiftTooltipState = IsShiftKeyDown and IsShiftKeyDown() or false
+            self:SetScript("OnUpdate", function(widget)
+                local shiftDown = IsShiftKeyDown and IsShiftKeyDown() or false
+                if widget._oakShiftTooltipState ~= shiftDown then
+                    widget._oakShiftTooltipState = shiftDown
+                    local onEnter = widget:GetScript("OnEnter")
+                    if onEnter then
+                        onEnter(widget)
+                    end
+                end
+            end)
 
             local result = self.searchResult
             local listingMode = GetListingMode()
 
-            GameTooltip:AddLine(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "Group Listing"), 1, 1, 1)
+            if addonTable.TryShowRaiderIOProfileTooltip and addonTable.TryShowRaiderIOProfileTooltip(GameTooltip, result.leaderName, result.leaderRealm) then
+                return
+            end
+
+            local regionBadge = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(result.regionInfo) or ""
+            local titleText = result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "Group Listing")
+            GameTooltip:AddLine((regionBadge ~= "" and (regionBadge .. " " .. titleText)) or titleText, 1, 1, 1)
             if result.leaderName and result.leaderName ~= "" then
                 GameTooltip:AddDoubleLine("Leader:", addonTable.ApplyClassColor(result.leaderName, result.leaderClass), 1, 1, 1, 1, 1, 1)
             end
             if result.activityName and result.activityName ~= "" then
                 GameTooltip:AddDoubleLine("Activity:", result.activityName, 1, 1, 1, 1, 1, 1)
+            end
+            if addonTable.AddRegionTooltipLine then
+                addonTable.AddRegionTooltipLine(GameTooltip, result.regionInfo)
             end
             if (result.numBNetFriends or 0) > 0 or (result.numCharFriends or 0) > 0 then
                 GameTooltip:AddDoubleLine("Friends:", string.format("%d BNet / %d WoW", result.numBNetFriends or 0, result.numCharFriends or 0), 0.6, 0.85, 1, 0.6, 0.85, 1)
@@ -892,6 +981,21 @@ local function CreateRow(index)
             GameTooltip:ClearLines()
 
             local name, class, localizedClass, level, itemLevel, honorLevel, tank, healer, damage, assignedRole, relationship, dungeonScore = C_LFGList.GetApplicantMemberInfo(self.applicantID, self.memberIdx)
+            self._oakShiftTooltipState = IsShiftKeyDown and IsShiftKeyDown() or false
+            self:SetScript("OnUpdate", function(widget)
+                local shiftDown = IsShiftKeyDown and IsShiftKeyDown() or false
+                if widget._oakShiftTooltipState ~= shiftDown then
+                    widget._oakShiftTooltipState = shiftDown
+                    local onEnter = widget:GetScript("OnEnter")
+                    if onEnter then
+                        onEnter(widget)
+                    end
+                end
+            end)
+
+            if addonTable.TryShowRaiderIOProfileTooltip and addonTable.TryShowRaiderIOProfileTooltip(GameTooltip, name) then
+                return
+            end
             
             if name then
                 GameTooltip:AddLine(addonTable.ApplyClassColor(name, class or ""), 1, 1, 1)
@@ -1019,6 +1123,8 @@ local function CreateRow(index)
     
     row:SetScript("OnLeave", function(self) 
         self.hoverBg:Hide() 
+        self._oakShiftTooltipState = nil
+        self:SetScript("OnUpdate", nil)
         GameTooltip:Hide()
     end)
 
@@ -1045,6 +1151,9 @@ local function CreateRow(index)
     row.roleIcon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
 
     row.nameText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    row.regionText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.regionText:SetJustifyH("RIGHT")
+    row.regionText:Hide()
     row.dungeonText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
     row.specText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     row.ilvlText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
@@ -1213,6 +1322,7 @@ function addonTable.UpdateDisplay()
             row.memberPvpRating = result.pvpRating
             row.memberPvpBracket = result.pvpBracket
             row.memberRaidProgress = result.raidProgress
+            row.regionInfo = result.regionInfo
 
             row.bg:SetColorTexture(GetBrowserRowColor(result, isAltColor))
 
@@ -1308,6 +1418,7 @@ function addonTable.UpdateDisplay()
                 row.memberPvpRating = member.pvpRating
                 row.memberPvpBracket = member.pvpBracket
                 row.memberRaidProgress = member.raidProgress
+                row.regionInfo = addonTable.GetRegionInfoFromLeaderName and addonTable.GetRegionInfoFromLeaderName(member.name) or nil
 
                 row.bg:SetColorTexture(unpack(bgColor))
                 ConfigureApplicantRowLayout(row)

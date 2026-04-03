@@ -16,6 +16,7 @@ end
 local applicantPingWrapped = false
 local originalApplicantPingOnPlay = nil
 local originalApplicantPingOnLoop = nil
+local originalPlaySound = PlaySound
 
 local function CreateApplicantPingHandler(originalHandler)
     return function(...)
@@ -44,6 +45,16 @@ local function SetupApplicantPingMuteHook()
 
     QueueStatusButton.EyeHighlightAnim:SetScript("OnPlay", CreateApplicantPingHandler(originalApplicantPingOnPlay))
     QueueStatusButton.EyeHighlightAnim:SetScript("OnLoop", CreateApplicantPingHandler(originalApplicantPingOnLoop))
+end
+
+if type(originalPlaySound) == "function" then
+    PlaySound = function(soundKitID, ...)
+        local mutedKit = SOUNDKIT and SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION
+        if mutedKit and soundKitID == mutedKit and ShouldMuteApplicantPing() then
+            return false
+        end
+        return originalPlaySound(soundKitID, ...)
+    end
 end
 
 local function GetActiveListingActivityID()
@@ -648,6 +659,7 @@ local function FetchSearchResultData()
                 local raidListing = nil
                 local rioProfile = nil
                 local raidProgress = nil
+                local regionInfo = addonTable.GetRegionInfoFromLeaderName and addonTable.GetRegionInfoFromLeaderName(resultInfo.leaderName) or nil
 
                 if (listingMode == "rated_pvp" or listingMode == "pvp") and type(resultInfo.leaderPvpRatingInfo) == "table" then
                     pvpRating = tonumber(resultInfo.leaderPvpRatingInfo.rating) or 0
@@ -732,6 +744,7 @@ local function FetchSearchResultData()
                     numGuildMates = tonumber(resultInfo.numGuildMates) or 0,
                     applicationStatus = applicationStatus,
                     leaderProfile = rioProfile,
+                    regionInfo = regionInfo,
                 }
 
                 table.insert(addonTable.SearchResults, entry)
@@ -1289,6 +1302,9 @@ end)
 
 OAK_LFG:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
+    if addonTable.ClampFrameToScreen then
+        addonTable.ClampFrameToScreen(self, OakLFGSorterDB, "framePos")
+    end
     if OakLFGSorterDB then
         local point, _, relativePoint, xOfs, yOfs = self:GetPoint()
         OakLFGSorterDB.framePos = { point, relativePoint, xOfs, yOfs }
@@ -1298,6 +1314,9 @@ end)
 
 addonTable.ResizeGrip:SetScript("OnMouseUp", function(self, button) 
     OAK_LFG:StopMovingOrSizing() 
+    if addonTable.ClampFrameToScreen then
+        addonTable.ClampFrameToScreen(OAK_LFG, OakLFGSorterDB, "framePos")
+    end
     if OakLFGSorterDB then OakLFGSorterDB.frameSize = { OAK_LFG:GetWidth(), OAK_LFG:GetHeight() } end
 end)
 

@@ -11,6 +11,10 @@ local browserActivityButtons = {}
 local BrowserFilterState
 local BROWSER_FILTER_VERSION = 5
 local GetPartyRoleSupply
+local applicantRegionToggleBox
+local applicantRegionToggleLabel
+local browserRegionToggleBox
+local browserRegionToggleLabel
 
 local function GetBrowserMode()
     return (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
@@ -554,141 +558,69 @@ local function CreateOakToggleBox(parent, sortKey, globalFiltersTable)
     return box
 end
 
+local function ApplySharedRegionToggleVisual(box, label, isActive)
+    if not box then
+        return
+    end
+
+    if isActive then
+        box:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        box:SetBackdropBorderColor(0, 0, 0, 1)
+        if label then label:SetTextColor(1, 1, 1) end
+    else
+        box:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        box:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
+        if label then label:SetTextColor(0.84, 0.84, 0.84) end
+    end
+end
+
+local function SyncSharedRegionToggleBoxes()
+    local isActive = OakLFGSorterDB and OakLFGSorterDB.showRegions == true
+    ApplySharedRegionToggleVisual(applicantRegionToggleBox, applicantRegionToggleLabel, isActive)
+    ApplySharedRegionToggleVisual(browserRegionToggleBox, browserRegionToggleLabel, isActive)
+    if addonTable.RefreshOptionsPanel then
+        addonTable.RefreshOptionsPanel()
+    end
+    if addonTable.SyncSearchRegionToggle then
+        addonTable.SyncSearchRegionToggle()
+    end
+    if addonTable.RefreshSearchOptionsPanel then
+        addonTable.RefreshSearchOptionsPanel()
+    end
+end
+
+addonTable.SyncSharedRegionToggles = SyncSharedRegionToggleBoxes
+
+local function ShowRegionToggleTooltip(owner)
+    GameTooltip:SetOwner(owner, "ANCHOR_TOP")
+    GameTooltip:SetText("Regions", 1, 1, 1)
+    GameTooltip:AddLine("Show visible region tags in Oak rows and region details in tooltips. Region is derived from the leader realm, similar to Premade Regions.", 1, 1, 1, true)
+    GameTooltip:Show()
+end
+
+local function ToggleSharedRegionSetting()
+    OakLFGSorterDB.showRegions = not (OakLFGSorterDB and OakLFGSorterDB.showRegions == true)
+    SyncSharedRegionToggleBoxes()
+    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH.UpdateDisplay then
+        addonTable.OAK_SEARCH:UpdateDisplay()
+    end
+    if addonTable.UpdateDisplay then
+        addonTable.UpdateDisplay()
+    end
+end
+
 local toggleFiltersBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Filters", 60)
 toggleFiltersBtn:SetPoint("RIGHT", addonTable.CloseButton, "LEFT", -10, 0)
 
 local refreshBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Refresh", 60)
 refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
 
-local relistBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Edit", 60)
-relistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
-
 local delistBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Delist", 60)
-delistBtn:SetPoint("RIGHT", relistBtn, "LEFT", -5, 0)
-
-local function BuildActiveListingCreateData()
-    if not (C_LFGList and C_LFGList.GetActiveEntryInfo) then
-        return nil
-    end
-
-    local entryInfo = C_LFGList.GetActiveEntryInfo()
-    if type(entryInfo) ~= "table" then
-        return nil
-    end
-
-    local activityIDs = entryInfo.activityIDs
-    if type(activityIDs) ~= "table" or #activityIDs == 0 then
-        local activityID = tonumber(entryInfo.activityID)
-        if activityID and activityID > 0 then
-            activityIDs = { activityID }
-        end
-    end
-
-    if type(activityIDs) ~= "table" or #activityIDs == 0 then
-        return nil
-    end
-
-    return {
-        activityIDs = activityIDs,
-        activityID = tonumber(entryInfo.activityID) or nil,
-        name = entryInfo.name,
-        comment = entryInfo.comment,
-        voiceChat = entryInfo.voiceChat,
-        questID = entryInfo.questID,
-        isAutoAccept = entryInfo.isAutoAccept or entryInfo.autoAccept or false,
-        isCrossFactionListing = entryInfo.isCrossFactionListing or false,
-        isPrivateGroup = entryInfo.isPrivateGroup or entryInfo.privateGroup or false,
-        newPlayerFriendly = entryInfo.newPlayerFriendly or false,
-        playstyle = entryInfo.playstyle or 0,
-        generalPlaystyle = entryInfo.generalPlaystyle or 0,
-        requiredDungeonScore = tonumber(entryInfo.requiredDungeonScore) or 0,
-        requiredItemLevel = tonumber(entryInfo.requiredItemLevel) or 0,
-        requiredPvpRating = tonumber(entryInfo.requiredPvpRating) or 0,
-        requiredHonorLevel = tonumber(entryInfo.requiredHonorLevel) or 0,
-    }
-end
-
-local function GetButtonDisplayText(button)
-    if not button then
-        return nil
-    end
-
-    if button.GetText then
-        local ok, text = pcall(button.GetText, button)
-        if ok and type(text) == "string" and text ~= "" then
-            return text
-        end
-    end
-
-    local textRegion = button.text or button.Text or button.Label or button.Name
-    if textRegion and textRegion.GetText then
-        local ok, text = pcall(textRegion.GetText, textRegion)
-        if ok and type(text) == "string" and text ~= "" then
-            return text
-        end
-    end
-
-    return nil
-end
-
-local function TryClickVisibleButton(button)
-    if not (button and button.Click and button.IsShown and button:IsShown()) then
-        return false
-    end
-
-    if button.IsEnabled and not button:IsEnabled() then
-        return false
-    end
-
-    return pcall(button.Click, button)
-end
-
-local function FindBlizzardEditListingButton()
-    local candidates = {}
-    local viewer = LFGListFrame and LFGListFrame.ApplicationViewer
-    local entryCreation = LFGListFrame and (LFGListFrame.EntryCreation or LFGListFrame.EntryCreationFrame)
-
-    if type(viewer) == "table" then
-        table.insert(candidates, viewer.EditButton)
-        table.insert(candidates, viewer.EntryCreationButton)
-        for _, value in pairs(viewer) do
-            table.insert(candidates, value)
-        end
-    end
-
-    if type(entryCreation) == "table" then
-        table.insert(candidates, entryCreation.EditButton)
-        table.insert(candidates, entryCreation.CancelButton)
-        for _, value in pairs(entryCreation) do
-            table.insert(candidates, value)
-        end
-    end
-
-    for _, button in ipairs(candidates) do
-        if button and button.GetObjectType and button:GetObjectType() == "Button" then
-            local label = GetButtonDisplayText(button)
-            if label and string.lower(label) == "edit" then
-                return button
-            end
-        end
-    end
-
-    return nil
-end
-
-local function OpenBlizzardEditListing()
-    local editButton = FindBlizzardEditListingButton()
-    if TryClickVisibleButton(editButton) then
-        return true
-    end
-
-    return false
-end
+delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
 
 function addonTable.UpdateTopBarActions()
     if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
         delistBtn:Hide()
-        relistBtn:Hide()
 
         refreshBtn.text:SetText("Refresh")
         refreshBtn:SetScript("OnClick", function()
@@ -701,12 +633,6 @@ function addonTable.UpdateTopBarActions()
         end)
     else
         delistBtn:Show()
-        relistBtn:Show()
-
-        relistBtn.text:SetText("Edit")
-        relistBtn:SetScript("OnClick", function()
-            OpenBlizzardEditListing()
-        end)
 
         delistBtn.text:SetText("Delist")
         delistBtn:SetScript("OnClick", function()
@@ -739,7 +665,6 @@ function addonTable.UpdateTopBarLayout()
 
     toggleFiltersBtn:ClearAllPoints()
     refreshBtn:ClearAllPoints()
-    relistBtn:ClearAllPoints()
     delistBtn:ClearAllPoints()
     scaleSlider:ClearAllPoints()
     scaleEdit:ClearAllPoints()
@@ -759,14 +684,12 @@ function addonTable.UpdateTopBarLayout()
 
         toggleFiltersBtn:SetWidth(54)
         refreshBtn:SetWidth(58)
-        relistBtn:SetWidth(54)
         delistBtn:SetWidth(54)
 
         toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -6, 0)
         refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -4, 0)
         if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() ~= "browser" then
-            relistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -4, 0)
-            delistBtn:SetPoint("RIGHT", relistBtn, "LEFT", -4, 0)
+            delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -4, 0)
         end
     else
         title:SetText(addonTable.FullTitleText or "OAK LFG Sorter")
@@ -783,14 +706,12 @@ function addonTable.UpdateTopBarLayout()
 
         toggleFiltersBtn:SetWidth(60)
         refreshBtn:SetWidth(60)
-        relistBtn:SetWidth(60)
         delistBtn:SetWidth(60)
 
         toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -10, 0)
         refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
         if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() ~= "browser" then
-            relistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
-            delistBtn:SetPoint("RIGHT", relistBtn, "LEFT", -5, 0)
+            delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
         end
     end
 
@@ -1032,7 +953,7 @@ browserFilterPanel:SetBackdrop({
     edgeSize = 1,
     insets = { left = 1, right = 1, top = 1, bottom = 1 },
 })
-browserFilterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+    browserFilterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 browserFilterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 browserFilterPanel:HookScript("OnShow", function()
     if addonTable.RefreshRIOAnchor then
@@ -1055,8 +976,8 @@ browserTitle:SetText("Search Filters")
 browserTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
 
 local browserContent = CreateFrame("Frame", nil, browserFilterPanel)
-browserContent:SetPoint("TOPLEFT", browserFilterPanel, "TOPLEFT", 14, -42)
-browserContent:SetPoint("TOPRIGHT", browserFilterPanel, "TOPRIGHT", -14, -42)
+browserContent:SetPoint("TOPLEFT", browserFilterPanel, "TOPLEFT", 14, -32)
+browserContent:SetPoint("TOPRIGHT", browserFilterPanel, "TOPRIGHT", -14, -32)
 browserContent:SetHeight(396)
 
 local activeBrowserDropdowns = {}
@@ -1606,10 +1527,185 @@ supportersPanel:HookScript("OnHide", function()
     end
 end)
 
+local optionsPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
+addonTable.OptionsPanel = optionsPanel
+optionsPanel:SetSize(205, 410)
+optionsPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
+optionsPanel:Hide()
+optionsPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1)
+optionsPanel:SetBackdrop({
+    bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, tile = false, edgeSize = 1,
+    insets = { left = 1, right = 1, top = 1, bottom = 1 }
+})
+optionsPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+optionsPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+optionsPanel:HookScript("OnShow", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end)
+optionsPanel:HookScript("OnHide", function()
+    if addonTable.RefreshRIOAnchor then
+        addonTable.RefreshRIOAnchor()
+    elseif addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end)
+
+local optionsTitle = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
+optionsTitle:SetPoint("TOP", optionsPanel, "TOP", 0, -10)
+optionsTitle:SetText("Options")
+optionsTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+
+local optionsRegionBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
+optionsRegionBox:SetSize(16, 16)
+optionsRegionBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+optionsRegionBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -42)
+local optionsRegionLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsRegionLabel:SetPoint("LEFT", optionsRegionBox, "RIGHT", 8, 0)
+optionsRegionLabel:SetText("Show Regions")
+optionsRegionBox:SetScript("OnClick", ToggleSharedRegionSetting)
+optionsRegionBox:SetScript("OnEnter", function(self)
+    ApplySharedRegionToggleVisual(self, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
+    ShowRegionToggleTooltip(self)
+end)
+optionsRegionBox:SetScript("OnLeave", function()
+    ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
+    GameTooltip:Hide()
+end)
+
+local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -74)
+optionsFontLabel:SetText("Addon Font")
+local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
+optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -94)
+
+local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -130)
+optionsFontSizeLabel:SetText("Font Size")
+local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -130)
+
+local optionsFontSizeSlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
+optionsFontSizeSlider:SetSize(170, 10)
+optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -152)
+optionsFontSizeSlider:SetMinMaxValues(10, 18)
+optionsFontSizeSlider:SetValueStep(1)
+optionsFontSizeSlider:SetObeyStepOnDrag(true)
+optionsFontSizeSlider:SetOrientation("HORIZONTAL")
+optionsFontSizeSlider:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+optionsFontSizeSlider:SetBackdropColor(0.05, 0.05, 0.05, 1)
+optionsFontSizeSlider:SetBackdropBorderColor(0, 0, 0, 1)
+local optionsFontSizeThumb = optionsFontSizeSlider:CreateTexture(nil, "ARTWORK")
+optionsFontSizeThumb:SetTexture(addonTable.FLAT_TEX)
+optionsFontSizeThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+optionsFontSizeThumb:SetSize(10, 14)
+optionsFontSizeSlider:SetThumbTexture(optionsFontSizeThumb)
+optionsFontSizeSlider:SetScript("OnValueChanged", function(self, value)
+    local rounded = math.floor((value or 12) + 0.5)
+    optionsFontSizeValue:SetText(tostring(rounded))
+    if addonTable.SetFontSize then
+        addonTable.SetFontSize(rounded)
+        addonTable.RefreshRegisteredFontDropdowns()
+    end
+end)
+optionsFontSizeSlider:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Font Size", 1, 1, 1)
+    GameTooltip:AddLine("Adjust the base Oak font size used throughout the addon.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsFontSizeSlider:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
+
+local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -188)
+optionsOpacityLabel:SetText("Window Opacity")
+local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -188)
+
+local optionsOpacitySlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
+optionsOpacitySlider:SetSize(170, 10)
+optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -210)
+optionsOpacitySlider:SetMinMaxValues(0.35, 1.0)
+optionsOpacitySlider:SetValueStep(0.05)
+optionsOpacitySlider:SetObeyStepOnDrag(true)
+optionsOpacitySlider:SetOrientation("HORIZONTAL")
+optionsOpacitySlider:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+optionsOpacitySlider:SetBackdropColor(0.05, 0.05, 0.05, 1)
+optionsOpacitySlider:SetBackdropBorderColor(0, 0, 0, 1)
+local optionsOpacityThumb = optionsOpacitySlider:CreateTexture(nil, "ARTWORK")
+optionsOpacityThumb:SetTexture(addonTable.FLAT_TEX)
+optionsOpacityThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+optionsOpacityThumb:SetSize(10, 14)
+optionsOpacitySlider:SetThumbTexture(optionsOpacityThumb)
+optionsOpacitySlider:SetScript("OnValueChanged", function(self, value)
+    local rounded = math.floor(value * 100 + 0.5) / 100
+    optionsOpacityValue:SetText(string.format("%d%%", rounded * 100))
+    if addonTable.SetWindowOpacity then
+        addonTable.SetWindowOpacity(rounded)
+    end
+end)
+optionsOpacitySlider:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Window Opacity", 1, 1, 1)
+    GameTooltip:AddLine("Adjust the background opacity used by Oak's windows and side panels.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsOpacitySlider:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWindowOpacity() or 0.85)
+
+local function RefreshOptionsPanel()
+    ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
+    if optionsFontButton and optionsFontButton.RefreshSelection then
+        optionsFontButton:RefreshSelection()
+    end
+    if addonTable.GetFontSize then
+        optionsFontSizeSlider:SetValue(addonTable.GetFontSize())
+    end
+    if addonTable.GetWindowOpacity then
+        optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity())
+    end
+end
+
+addonTable.RefreshOptionsPanel = RefreshOptionsPanel
+
+function addonTable.ToggleOptionsPanel()
+    if optionsPanel:IsShown() then
+        optionsPanel:Hide()
+    else
+        if addonTable.FilterPanel then addonTable.FilterPanel:Hide() end
+        if addonTable.BrowserFilterPanel then addonTable.BrowserFilterPanel:Hide() end
+        if addonTable.SupportersPanel then addonTable.SupportersPanel:Hide() end
+        HideAllBrowserDropdowns()
+        RefreshOptionsPanel()
+        optionsPanel:Show()
+    end
+    if addonTable.AnchorRIOPanelToOak then
+        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end
+
+if addonTable.ApplyWindowOpacity then
+    addonTable.ApplyWindowOpacity()
+end
+
 local suppTitle = supportersPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 suppTitle:SetPoint("TOP", supportersPanel, "TOP", 0, -10)
 suppTitle:SetText("Supporters")
 suppTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+
+local fontPickerLabel = supportersPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+fontPickerLabel:SetPoint("TOPLEFT", supportersPanel, "TOPLEFT", 15, -250)
+fontPickerLabel:SetText("Addon Font")
+fontPickerLabel:SetTextColor(1, 1, 1)
+fontPickerLabel:Hide()
 
 local suppScroll = CreateFrame("ScrollFrame", "OakLFGSupportersScroll", supportersPanel, "UIPanelScrollFrameTemplate")
 suppScroll:SetPoint("TOPLEFT", supportersPanel, "TOPLEFT", 10, -35)
@@ -1654,7 +1750,7 @@ if addonTable.Patreons then
 end
 suppScrollChild:SetHeight(math.max(1, math.abs(syOffset)))
 
-local socialY = -275
+local socialY = -250
 if addonTable.Socials then
     for _, social in ipairs(addonTable.Socials) do
         local btn = addonTable.CreateFlatButton(supportersPanel, social.name, 160)
@@ -1665,6 +1761,83 @@ if addonTable.Socials then
         socialY = socialY - 25
     end
 end
+
+local fontPickerButton = addonTable.CreateFlatButton(supportersPanel, addonTable.GetActiveFontName and addonTable.GetActiveFontName() or "OakUI Font", 160)
+fontPickerButton:SetPoint("TOP", supportersPanel, "TOP", 0, -270)
+fontPickerButton:Hide()
+
+local fontPickerList = CreateFrame("Frame", nil, supportersPanel, "BackdropTemplate")
+fontPickerList:SetWidth(160)
+fontPickerList:SetBackdrop({
+    bgFile = addonTable.FLAT_TEX,
+    edgeFile = addonTable.FLAT_TEX,
+    edgeSize = 1,
+    insets = { left = 1, right = 1, top = 1, bottom = 1 },
+})
+fontPickerList:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+fontPickerList:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+fontPickerList:SetFrameStrata("FULLSCREEN_DIALOG")
+fontPickerList:SetFrameLevel(supportersPanel:GetFrameLevel() + 20)
+fontPickerList:Hide()
+
+local fontPickerButtons = {}
+local function RefreshFontPickerOptions()
+    local fontNames = addonTable.GetAvailableFontNames and addonTable.GetAvailableFontNames() or { "OakUI Font" }
+    fontPickerList:SetHeight((math.min(#fontNames, 8) * 22) + 2)
+    for _, button in ipairs(fontPickerButtons) do
+        button:Hide()
+    end
+
+    for index, fontName in ipairs(fontNames) do
+        local optionButton = fontPickerButtons[index]
+        if not optionButton then
+            optionButton = CreateFrame("Button", nil, fontPickerList, "BackdropTemplate")
+            optionButton.bg = optionButton:CreateTexture(nil, "BACKGROUND")
+            optionButton.bg:SetAllPoints()
+            optionButton.text = optionButton:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+            optionButton.text:SetPoint("LEFT", optionButton, "LEFT", 8, 0)
+            optionButton.text:SetPoint("RIGHT", optionButton, "RIGHT", -8, 0)
+            optionButton.text:SetJustifyH("LEFT")
+            fontPickerButtons[index] = optionButton
+        end
+
+        optionButton:ClearAllPoints()
+        optionButton:SetPoint("TOPLEFT", fontPickerList, "TOPLEFT", 1, -((index - 1) * 22) - 1)
+        optionButton:SetSize(158, 22)
+        optionButton.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
+        optionButton.text:SetText(fontName)
+        optionButton:SetScript("OnClick", function()
+            if addonTable.SetActiveFont then
+                addonTable.SetActiveFont(fontName)
+            end
+            fontPickerButton.text:SetText(fontName)
+            fontPickerList:Hide()
+        end)
+        optionButton:Show()
+    end
+end
+
+fontPickerButton:SetScript("OnClick", function(self)
+    RefreshFontPickerOptions()
+    if fontPickerList:IsShown() then
+        fontPickerList:Hide()
+    else
+        fontPickerList:ClearAllPoints()
+        fontPickerList:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -1)
+        fontPickerList:Show()
+    end
+end)
+fontPickerButton:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Addon Font", 1, 1, 1)
+    GameTooltip:AddLine("Choose which SharedMedia font Oak uses for its custom text.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+fontPickerButton:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
 
 toggleFiltersBtn:SetScript("OnClick", function()
     local isBrowser = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
@@ -1679,6 +1852,7 @@ toggleFiltersBtn:SetScript("OnClick", function()
             addonTable.UpdateFilterPaneMode()
         end
         supportersPanel:Hide()
+        if optionsPanel then optionsPanel:Hide() end
         inactivePanel:Hide()
         activePanel:Show()
     end
@@ -1686,6 +1860,8 @@ toggleFiltersBtn:SetScript("OnClick", function()
         addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
     end
 end)
+
+SyncSharedRegionToggleBoxes()
 
 local lfgToggleBox
 function addonTable.SetupBlizzardLFGHook()

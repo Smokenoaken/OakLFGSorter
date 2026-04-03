@@ -1,3 +1,14 @@
+## v2.0.0
+
+- Added a full Find Group browser with dedicated sorting, filtering, quick sign-up controls, scalable detached-window support, and a hosted Blizzard search box inside Oak's pane.
+- Added Blizzard-backed dungeon filters, mode-aware search panels for dungeons, raids, delves, PvP, custom, and legacy content, plus cleaner compact layouts across the addon.
+- Added Mythic+ Gives Score forecasting with per-dungeon key targets, estimated score gains, +/++/+++ tooltip breakdowns, and season-dungeon All/None controls.
+- Added major raid browser improvements including difficulty-aware columns, rarity-colored raid difficulties, kills tracking, boss-kill expression filtering, and lockout matching.
+- Added optional visible region tags and region-aware tooltips across finder and applicant rows, with the toggle moved into a shared options panel.
+- Added a shared options panel in both browsers with SharedMedia font selection, live font previews, font size, opacity controls, and improved footer/options layout.
+- Added richer Raider.IO integration including anchored profile panels, detailed Shift-hover profile tooltips, score-aware styling, and stronger group/applicant context.
+- Added quick sign-up role syncing, improved friend detection, better tooltip polish, safer detached-window clamping, and many search/filter stability fixes.
+
 ## v2.0.0-alpha3
 
 - Tightened the Blizzard-backed dungeon filter pane so the full season dungeon list fits without scrolling, and added All/None helpers plus refresh guidance
