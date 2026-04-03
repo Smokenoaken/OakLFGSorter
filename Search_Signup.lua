@@ -208,9 +208,7 @@ local function QueueApplySavedQuickSignupRoles(dialog, onApplied)
         end
     end
 
-    C_Timer.After(0, function()
-        applyRoles(true)
-    end)
+    applyRoles(true)
 end
 
 local function ApplySavedRolesToVisibleDialog()
@@ -271,7 +269,7 @@ local function CreateQuickSignupToggle(parent)
             self:SetBackdropBorderColor(0, 0, 0, 1)
         else
             self:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
-            self:SetBackdropBorderColor(0, 0, 0, 1)
+            self:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
         end
     end
 

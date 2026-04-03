@@ -249,13 +249,41 @@ local function GetSearchResultPlayers(searchResultID, numMembers)
     local players = {}
 
     for memberIndex = 1, numMembers or 0 do
-        local success, role, classFile = pcall(C_LFGList.GetSearchResultMemberInfo, searchResultID, memberIndex)
-        if success and classFile then
+        local playerInfo = C_LFGList.GetSearchResultPlayerInfo and C_LFGList.GetSearchResultPlayerInfo(searchResultID, memberIndex)
+        local role
+        local classFile
+        local playerName
+
+        if type(playerInfo) == "table" then
+            playerName = playerInfo.name
+            classFile = playerInfo.classFilename or playerInfo.classFileName
+            role = playerInfo.assignedRole
+            if type(playerInfo.lfgRoles) == "table" then
+                if playerInfo.lfgRoles.tank then
+                    role = "TANK"
+                elseif playerInfo.lfgRoles.healer then
+                    role = "HEALER"
+                elseif playerInfo.lfgRoles.dps then
+                    role = "DAMAGER"
+                end
+            end
+        end
+
+        if not classFile then
+            local success, legacyRole, legacyClassFile = pcall(C_LFGList.GetSearchResultMemberInfo, searchResultID, memberIndex)
+            if success then
+                role = legacyRole
+                classFile = legacyClassFile
+            end
+        end
+
+        if classFile then
             if role ~= "TANK" and role ~= "HEALER" then
                 role = "DAMAGER"
             end
 
             table.insert(players, {
+                name = playerName,
                 role = role,
                 class = classFile or "UNKNOWN",
             })
@@ -264,6 +292,8 @@ local function GetSearchResultPlayers(searchResultID, numMembers)
 
     return players
 end
+
+addonTable.GetSearchResultPlayers = GetSearchResultPlayers
 
 local function NormalizeApplicantRole(tank, healer, specID)
     if tank then
@@ -597,7 +627,7 @@ local function FetchSearchResultData()
 
     for _, searchResultID in ipairs(resultIDs) do
         local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
-        if resultInfo and not resultInfo.isDelisted then
+        if resultInfo then
             local activityID = GetSearchResultActivityID(resultInfo)
             local activityInfo = activityID and C_LFGList.GetActivityInfoTable(activityID) or nil
 
@@ -997,6 +1027,28 @@ function addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName)
     return bestSummary
 end
 
+function addonTable.AppendMythicPlusMilestonesToTooltip(tooltip, rioProfile)
+    local mPlus = rioProfile and rioProfile.mythicKeystoneProfile
+    if type(tooltip) ~= "table" or type(mPlus) ~= "table" then
+        return false
+    end
+
+    local milestones = mPlus.sortedMilestones
+    if type(milestones) ~= "table" or #milestones == 0 then
+        return false
+    end
+
+    tooltip:AddLine(" ")
+    tooltip:AddLine("Raider.IO M+ Score", 1, 0.82, 0)
+    for _, milestone in ipairs(milestones) do
+        if type(milestone) == "table" and milestone.label and milestone.text then
+            tooltip:AddDoubleLine(milestone.label, milestone.text, 1, 1, 1, 1, 1, 1)
+        end
+    end
+
+    return true
+end
+
 local function FetchApplicantData()
     local listingContext = addonTable.UpdateListingContext()
     local listingMode = listingContext and listingContext.mode or "generic"
@@ -1189,8 +1241,10 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             if addonTable.LFGToggleBox then
                 if OakLFGSorterDB.autoOpen then
                     addonTable.LFGToggleBox:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1) 
+                    addonTable.LFGToggleBox:SetBackdropBorderColor(0, 0, 0, 1)
                 else
-                    addonTable.LFGToggleBox:SetBackdropColor(0.106, 0.106, 0.129, 1) 
+                    addonTable.LFGToggleBox:SetBackdropColor(0.08, 0.08, 0.10, 0.95) 
+                    addonTable.LFGToggleBox:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
                 end
             end
             

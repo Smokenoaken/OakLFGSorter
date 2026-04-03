@@ -313,7 +313,7 @@ local function ResultMatchesRaidLockout(result, filters)
     local lockouts = BuildSavedRaidLockoutMap()
     local myLockout = lockouts[instanceKey] and lockouts[instanceKey][difficultyToken]
     if not myLockout then
-        return false
+        return (tonumber(raidListing.bossesKilled) or 0) == 0
     end
 
     local listingBosses = raidListing.defeatedBossNames or {}
@@ -336,6 +336,8 @@ local function ResultMatchesRaidLockout(result, filters)
     local bossesKilled = tonumber(raidListing.bossesKilled) or 0
     return bossesKilled == (tonumber(myLockout.bossesKilled) or 0)
 end
+
+addonTable.ResultMatchesRaidLockout = ResultMatchesRaidLockout
 
 local function ResultMatchesRoleNeeds(result, filters)
     if filters.hasTank and (result.roleCounts.TANK or 0) == 0 then
@@ -675,66 +677,48 @@ local function FindBlizzardEditListingButton()
 end
 
 local function OpenBlizzardEditListing()
-    local function EnsureBlizzardGroupFinderVisible()
-        if PVEFrame and PVEFrame.IsShown and not PVEFrame:IsShown() then
-            if PVEFrame_ToggleFrame then
-                pcall(PVEFrame_ToggleFrame)
-            end
-            if TogglePVEFrame then
-                pcall(TogglePVEFrame)
-            end
-        end
+    local stub = _G.LFGListPVEStub
 
-        if PVEFrame and PVEFrame.IsShown and not PVEFrame:IsShown() and ShowUIPanel then
-            pcall(ShowUIPanel, PVEFrame)
-        end
+    if ShowUIPanel and PVEFrame then
+        pcall(ShowUIPanel, PVEFrame)
+    end
 
-        if PVEFrame_ShowFrame and GroupFinderFrame then
-            pcall(PVEFrame_ShowFrame, GroupFinderFrame)
-        end
-        if PVEFrame and PVEFrame.Show then
-            pcall(PVEFrame.Show, PVEFrame)
-        end
-        if GroupFinderFrame and GroupFinderFrame.Show then
-            pcall(GroupFinderFrame.Show, GroupFinderFrame)
-        end
-        if LFGListFrame and LFGListFrame.Show then
-            pcall(LFGListFrame.Show, LFGListFrame)
-        end
-        if GroupFinderFrameGroupButton4 and GroupFinderFrameGroupButton4.Click then
-            pcall(GroupFinderFrameGroupButton4.Click, GroupFinderFrameGroupButton4)
-        end
+    if PVEFrame_ShowFrame then
+        pcall(PVEFrame_ShowFrame, "GroupFinderFrame", stub)
+        pcall(PVEFrame_ShowFrame, "GroupFinderFrame")
+    end
+    if PVEFrame and PVEFrame.Show then
+        pcall(PVEFrame.Show, PVEFrame)
+    end
+    if GroupFinderFrame and GroupFinderFrame.Show then
+        pcall(GroupFinderFrame.Show, GroupFinderFrame)
+    end
 
-        local viewer = LFGListFrame and LFGListFrame.ApplicationViewer
-        if viewer and viewer.Show then
-            pcall(viewer.Show, viewer)
+    local premadeButtons = {
+        _G.GroupFinderFrameGroupButton4,
+        _G.GroupFinderFrameGroupButton3,
+    }
+    for _, button in ipairs(premadeButtons) do
+        if button and button.Click and button.IsShown and button:IsShown() then
+            pcall(button.Click, button)
+            break
         end
     end
 
-    local editButton = FindBlizzardEditListingButton()
-    if TryClickVisibleButton(editButton) then
-        return true
+    if LFGListFrame and LFGListFrame.Show then
+        pcall(LFGListFrame.Show, LFGListFrame)
     end
 
-    EnsureBlizzardGroupFinderVisible()
+    local viewer = LFGListFrame and LFGListFrame.ApplicationViewer
+    if viewer and viewer.Show then
+        pcall(viewer.Show, viewer)
+    end
 
-    C_Timer.After(0, function()
-        EnsureBlizzardGroupFinderVisible()
-        local retryButton = FindBlizzardEditListingButton()
-        if retryButton then
-            TryClickVisibleButton(retryButton)
-        end
-    end)
+    if PVEFrame and PVEFrame.Raise then
+        pcall(PVEFrame.Raise, PVEFrame)
+    end
 
-    C_Timer.After(0.1, function()
-        EnsureBlizzardGroupFinderVisible()
-    end)
-
-    C_Timer.After(0.2, function()
-        EnsureBlizzardGroupFinderVisible()
-    end)
-
-    return false
+    return (PVEFrame and PVEFrame.IsShown and PVEFrame:IsShown()) or (GroupFinderFrame and GroupFinderFrame.IsShown and GroupFinderFrame:IsShown()) or false
 end
 
 function addonTable.UpdateTopBarActions()
@@ -1763,17 +1747,21 @@ function addonTable.SetupBlizzardLFGHook()
                 OakLFGSorterDB.autoOpen = not OakLFGSorterDB.autoOpen
                 if OakLFGSorterDB.autoOpen then
                     self:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1) 
+                    self:SetBackdropBorderColor(0, 0, 0, 1)
                     OAK_LFG:Show()
                 else
-                    self:SetBackdropColor(0.106, 0.106, 0.129, 1) 
+                    self:SetBackdropColor(0.08, 0.08, 0.10, 0.95) 
+                    self:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
                     OAK_LFG:Hide()
                 end
             end)
             
             if OakLFGSorterDB.autoOpen then
                 lfgToggleBox:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+                lfgToggleBox:SetBackdropBorderColor(0, 0, 0, 1)
             else
-                lfgToggleBox:SetBackdropColor(0.106, 0.106, 0.129, 1)
+                lfgToggleBox:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+                lfgToggleBox:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
             end
 
             LFGListFrame.ApplicationViewer:HookScript("OnShow", function()

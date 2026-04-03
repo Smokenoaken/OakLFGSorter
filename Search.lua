@@ -23,6 +23,7 @@ local ScheduleSearchRefresh
 local ResetSearchFilters
 local AutoPositionSearch
 local UpdateSearchFilterPane
+local GetNativeDungeonActivityEntries
 local nativeSearchHost = {}
 
 local function ApplyClassColor(text, classStr)
@@ -612,6 +613,9 @@ local OAK_F = {
     NeedLust = false,
     NeedBrez = false,
     PartyFit = false,
+    MatchMyRaidLockout = false,
+    RaidBossesMin = "",
+    RaidBossesMax = "",
     SearchQuery = "",
     Activities = {},
 }
@@ -995,11 +999,92 @@ addonTable.SearchQueryButton:SetScript("OnClick", function()
         ApplyOakSearchQuery(true)
     end
 end)
+addonTable.SearchQueryButton:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    if SearchModeUsesNativeDungeonFilters(currentSearchMode) then
+        GameTooltip:SetText("Refresh", 1, 1, 1)
+        GameTooltip:AddLine("After changing Blizzard-backed dungeon filters, click Refresh to request updated results from Blizzard.", 1, 1, 1, true)
+    else
+        GameTooltip:SetText("Search", 1, 1, 1)
+        GameTooltip:AddLine("Run the current Oak search/filter query.", 1, 1, 1, true)
+    end
+    GameTooltip:Show()
+end)
+addonTable.SearchQueryButton:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
 
 addonTable.SearchResetButton = CreateFlatButton(filterPanel, "Reset", 84)
 addonTable.SearchResetButton:SetPoint("TOPLEFT", addonTable.SearchQueryButton, "TOPRIGHT", 7, 0)
 addonTable.SearchResetButton:SetScript("OnClick", function()
     ResetSearchFilters()
+end)
+
+filterPanel.raidBossRangeLabel = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+filterPanel.raidBossRangeLabel:SetText("Boss Kills")
+filterPanel.raidBossRangeLabel:SetTextColor(1, 1, 1)
+
+filterPanel.raidBossRangeMinBox = CreateFrame("EditBox", nil, filterPanel, "BackdropTemplate")
+filterPanel.raidBossRangeMinBox:SetSize(48, 20)
+filterPanel.raidBossRangeMinBox:SetAutoFocus(false)
+filterPanel.raidBossRangeMinBox:SetFontObject("OakLFG_FontRegular")
+filterPanel.raidBossRangeMinBox:SetJustifyH("CENTER")
+filterPanel.raidBossRangeMinBox:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
+filterPanel.raidBossRangeMinBox:SetBackdropColor(unpack(OAK_COLOR_BG))
+filterPanel.raidBossRangeMinBox:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+filterPanel.raidBossRangeMinBox:SetNumeric(true)
+
+filterPanel.raidBossRangeTo = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+filterPanel.raidBossRangeTo:SetText("to")
+
+filterPanel.raidBossRangeMaxBox = CreateFrame("EditBox", nil, filterPanel, "BackdropTemplate")
+filterPanel.raidBossRangeMaxBox:SetSize(48, 20)
+filterPanel.raidBossRangeMaxBox:SetAutoFocus(false)
+filterPanel.raidBossRangeMaxBox:SetFontObject("OakLFG_FontRegular")
+filterPanel.raidBossRangeMaxBox:SetJustifyH("CENTER")
+filterPanel.raidBossRangeMaxBox:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
+filterPanel.raidBossRangeMaxBox:SetBackdropColor(unpack(OAK_COLOR_BG))
+filterPanel.raidBossRangeMaxBox:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+filterPanel.raidBossRangeMaxBox:SetNumeric(true)
+
+filterPanel.raidBossRangeResetButton = CreateFlatButton(filterPanel, "R", 20)
+filterPanel.raidBossRangeResetButton:SetHeight(20)
+
+local function CommitRaidBossRange()
+    OAK_F.RaidBossesMin = filterPanel.raidBossRangeMinBox:GetText() or ""
+    OAK_F.RaidBossesMax = filterPanel.raidBossRangeMaxBox:GetText() or ""
+    OAK_SEARCH:UpdateDisplay()
+end
+
+filterPanel.raidBossRangeMinBox:SetScript("OnEnterPressed", function(self)
+    CommitRaidBossRange()
+    self:ClearFocus()
+end)
+filterPanel.raidBossRangeMinBox:SetScript("OnEditFocusLost", CommitRaidBossRange)
+filterPanel.raidBossRangeMaxBox:SetScript("OnEnterPressed", function(self)
+    CommitRaidBossRange()
+    self:ClearFocus()
+end)
+filterPanel.raidBossRangeMaxBox:SetScript("OnEditFocusLost", CommitRaidBossRange)
+filterPanel.raidBossRangeResetButton:SetScript("OnClick", function()
+    OAK_F.RaidBossesMin = ""
+    OAK_F.RaidBossesMax = ""
+    filterPanel.raidBossRangeMinBox:SetText("")
+    filterPanel.raidBossRangeMaxBox:SetText("")
+    OAK_SEARCH:UpdateDisplay()
+end)
+filterPanel.raidBossRangeResetButton:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Reset Boss Kills", 1, 1, 1)
+    GameTooltip:AddLine("Clears the raid boss min/max range without resetting the rest of your filters.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+filterPanel.raidBossRangeResetButton:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+    GameTooltip:Hide()
 end)
 
 -- Modern 2-Column Exact Layout Match
@@ -1030,6 +1115,9 @@ boxLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY - 66)
 
 boxBrez = CreateOakToggleBox(filterPanel, "Need BRez", "NeedBrez", false)
 boxBrez:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col2X, startY - 66)
+
+filterPanel.matchMyRaidLockoutBox = CreateOakToggleBox(filterPanel, "Match My Lockout", "MatchMyRaidLockout", false)
+filterPanel.matchMyRaidLockoutBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY - 88)
 
 divTexture = filterPanel:CreateTexture(nil, "ARTWORK")
 divTexture:SetColorTexture(classColor.r, classColor.g, classColor.b, 0.5)
@@ -1148,6 +1236,69 @@ nativeActivityLabel = nativeDungeonFilterContent:CreateFontString(nil, "OVERLAY"
 nativeActivityLabel:SetText("Dungeons")
 nativeActivityLabel:SetTextColor(classColor.r, classColor.g, classColor.b)
 nativeActivityLabel:SetFontObject("OakLFG_FontSmall")
+nativeDungeonFilterContent.activityGroupCache = nativeDungeonFilterContent.activityGroupCache or {}
+nativeDungeonFilterContent.selectAllButton = CreateFlatButton(nativeDungeonFilterContent, "A", 16)
+nativeDungeonFilterContent.selectAllButton.text:SetFontObject("OakLFG_FontSmall")
+nativeDungeonFilterContent.selectAllButton.text:SetText("A")
+nativeDungeonFilterContent.selectNoneButton = CreateFlatButton(nativeDungeonFilterContent, "N", 16)
+nativeDungeonFilterContent.selectNoneButton.text:SetFontObject("OakLFG_FontSmall")
+nativeDungeonFilterContent.selectNoneButton.text:SetText("N")
+nativeDungeonFilterContent.selectAllButton:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Select All", 1, 1, 1)
+    GameTooltip:AddLine("Select every dungeon in this list.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+nativeDungeonFilterContent.selectAllButton:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+nativeDungeonFilterContent.selectNoneButton:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Select None", 1, 1, 1)
+    GameTooltip:AddLine("Clear every dungeon in this list.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+nativeDungeonFilterContent.selectNoneButton:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+
+nativeDungeonFilterContent.scoreHeader = nativeDungeonFilterContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+nativeDungeonFilterContent.scoreHeader:SetText("Gives Score")
+nativeDungeonFilterContent.scoreHeader:SetTextColor(0.40, 1.00, 0.55)
+nativeDungeonFilterContent.scoreHeader:SetJustifyH("RIGHT")
+nativeDungeonFilterContent.scoreHeaderHitbox = CreateFrame("Button", nil, nativeDungeonFilterContent)
+nativeDungeonFilterContent.scoreHeaderHitbox:SetSize(62, 16)
+nativeDungeonFilterContent.scoreHeaderHitbox:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Gives Score", 1, 1, 1)
+    GameTooltip:AddLine("Shows the lowest timed key level that should increase your score for that dungeon.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+nativeDungeonFilterContent.scoreHeaderHitbox:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+nativeDungeonFilterContent.selectAllButton:SetScript("OnClick", function()
+    local activityIDs = {}
+    for _, entry in ipairs(GetNativeDungeonActivityEntries()) do
+        local groupID = tonumber(entry.groupID)
+        if groupID and groupID > 0 then
+            table.insert(activityIDs, groupID)
+        end
+    end
+    table.sort(activityIDs)
+    SaveAdvancedSearchFilter(function(state)
+        state.activities = activityIDs
+    end)
+end)
+nativeDungeonFilterContent.selectNoneButton:SetScript("OnClick", function()
+    SaveAdvancedSearchFilter(function(state)
+        state.activities = {}
+    end)
+end)
 
 nativeNeedsTankBox:SetScript("OnClick", function()
     local adv = GetAdvancedSearchFilter()
@@ -1479,17 +1630,50 @@ local function CreateHeader(label, sortKey, width, xOffset)
     btn:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
     btn:SetBackdropColor(unpack(OAK_COLOR_PANE))
     btn:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+    btn:EnableMouse(true)
+    btn:SetFrameLevel(OAK_SEARCH:GetFrameLevel() + 10)
     btn.baseText = label; btn.sortKey = sortKey
     btn.text = btn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     btn.text:SetPoint("CENTER"); btn.text:SetText(label)
-    
-    if sortKey ~= "none" then
-        btn:SetScript("OnClick", function()
+
+    local function HandleClick()
+        if sortKey ~= "none" then
             if currentSortBy == sortKey then currentIsAscending = not currentIsAscending
             else currentSortBy = sortKey; currentIsAscending = false end
             OAK_SEARCH.UpdateHeaderVisuals(); OAK_SEARCH:UpdateDisplay()
-        end)
+        end
     end
+
+    local function HandleEnter(self)
+        local title, description = addonTable.GetSearchHeaderTooltipData and addonTable.GetSearchHeaderTooltipData(self.sortKey, currentSearchMode)
+        if title and description then
+            btn:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(title, 1, 1, 1)
+            GameTooltip:AddLine(description, 1, 1, 1, true)
+            GameTooltip:AddLine("Click to sort. Click again to reverse the order.", 0.75, 0.75, 0.75, true)
+            GameTooltip:Show()
+        end
+    end
+
+    local function HandleLeave()
+        btn:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+        GameTooltip:Hide()
+    end
+
+    btn:SetScript("OnClick", HandleClick)
+    btn:SetScript("OnEnter", HandleEnter)
+    btn:SetScript("OnLeave", HandleLeave)
+
+    btn.hitbox = CreateFrame("Button", nil, OAK_SEARCH)
+    btn.hitbox:SetAllPoints(btn)
+    btn.hitbox:SetFrameStrata("DIALOG")
+    btn.hitbox:SetFrameLevel(btn:GetFrameLevel() + 5)
+    btn.hitbox:EnableMouse(true)
+    btn.hitbox.sortKey = sortKey
+    btn.hitbox:SetScript("OnClick", HandleClick)
+    btn.hitbox:SetScript("OnEnter", HandleEnter)
+    btn.hitbox:SetScript("OnLeave", HandleLeave)
     table.insert(headers, btn)
     return btn
 end
@@ -1559,6 +1743,18 @@ local function UpdateSearchHeaderVisuals()
     notesToggleBtn.text:SetText((OakLFGSorterDB and OakLFGSorterDB.searchHideNotes) and "Notes" or "Hide Notes")
     notesToggleBtn:ClearAllPoints()
     notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.notesX, SEARCH_COLUMN_HEADER_Y)
+
+    for _, header in ipairs(headers) do
+        if header.hitbox then
+            header.hitbox:ClearAllPoints()
+            header.hitbox:SetAllPoints(header)
+            if header:IsShown() then
+                header.hitbox:Show()
+            else
+                header.hitbox:Hide()
+            end
+        end
+    end
 end
 
 -- ==========================================
@@ -1886,6 +2082,312 @@ local function GetRaidFilterLabel(activityInfo)
     return label
 end
 
+local function NormalizeScoreTargetLabel(label)
+    local normalized = strlower(GetRaidFilterLabel({ fullName = tostring(label or "") }))
+    normalized = normalized:gsub("[^%w%s]", " ")
+    normalized = normalized:gsub("%s+", " ")
+    normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+    return normalized
+end
+
+addonTable.GetSearchHeaderTooltipData = function(sortKey, mode)
+    if sortKey == "dungeon" then
+        if mode == "raid" or mode == "legacy_raid" then
+            return "Raid", "Sort by raid name."
+        elseif mode == "rated_pvp" or mode == "pvp" then
+            return "Activity", "Sort by activity or bracket."
+        end
+        return "Dungeon", "Sort by dungeon or activity name."
+    elseif sortKey == "members" then
+        return "Comp", "Sort by party setup and group composition."
+    elseif sortKey == "title" then
+        return "Title", "Sort by the listing title shown by the group leader."
+    elseif sortKey == "mode" then
+        return "Difficulty", "Sort by the raid difficulty on the listing."
+    elseif sortKey == "rating" then
+        if mode == "raid" or mode == "legacy_raid" then
+            return "Kills", "Sort by the number of bosses already defeated in the listed raid."
+        elseif mode == "rated_pvp" or mode == "pvp" then
+            return "PVP Rating", "Sort by the leader's PVP rating."
+        end
+        return "Rating", "Sort by the leader's Mythic+ rating."
+    elseif sortKey == "age" then
+        return "Age", "Sort by how long ago the listing was created."
+    end
+    return nil, nil
+end
+
+addonTable.GetSearchGroupFriendNames = function(group)
+    local names = {}
+    local seen = {}
+    local playerNames = {}
+
+    local function AddPlayerNameVariants(name)
+        local text = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        if text == "" then
+            return
+        end
+        local lowered = strlower(text)
+        playerNames[lowered] = text
+        local short = lowered:match("^([^%-]+)")
+        if short and short ~= "" then
+            playerNames[short] = text
+        end
+    end
+
+    for _, member in ipairs(group and group.memberDetails or {}) do
+        AddPlayerNameVariants(member.name)
+    end
+
+    if next(playerNames) == nil then
+        return names
+    end
+
+    local function AddMatchedName(name)
+        local lowered = strlower(tostring(name or ""))
+        if lowered == "" then
+            return
+        end
+        local matched = playerNames[lowered] or playerNames[(lowered:match("^([^%-]+)") or "")]
+        if matched and not seen[matched] then
+            seen[matched] = true
+            table.insert(names, matched)
+        end
+    end
+
+    if C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetFriendInfoByIndex then
+        for friendIndex = 1, C_FriendList.GetNumFriends() or 0 do
+            local info = C_FriendList.GetFriendInfoByIndex(friendIndex)
+            if type(info) == "table" then
+                AddMatchedName(info.name)
+            end
+        end
+    elseif GetNumFriends and GetFriendInfo then
+        for friendIndex = 1, GetNumFriends() or 0 do
+            AddMatchedName((GetFriendInfo(friendIndex)))
+        end
+    end
+
+    if IsInGuild and IsInGuild() and GetNumGuildMembers and GetGuildRosterInfo then
+        for guildIndex = 1, GetNumGuildMembers() or 0 do
+            AddMatchedName((GetGuildRosterInfo(guildIndex)))
+        end
+    end
+
+    if C_BattleNet and C_BattleNet.GetFriendAccountInfo and BNGetNumFriends then
+        for friendIndex = 1, BNGetNumFriends() or 0 do
+            local accountInfo = C_BattleNet.GetFriendAccountInfo(friendIndex)
+            if type(accountInfo) == "table" then
+                local gameAccountInfo = accountInfo.gameAccountInfo
+                if type(gameAccountInfo) == "table" then
+                    AddMatchedName(gameAccountInfo.characterName)
+                    if gameAccountInfo.characterName and gameAccountInfo.realmName then
+                        AddMatchedName(gameAccountInfo.characterName .. "-" .. gameAccountInfo.realmName)
+                    end
+                end
+                if type(accountInfo.gameAccountInfos) == "table" then
+                    for _, altGameAccount in ipairs(accountInfo.gameAccountInfos) do
+                        if type(altGameAccount) == "table" then
+                            AddMatchedName(altGameAccount.characterName)
+                            if altGameAccount.characterName and altGameAccount.realmName then
+                                AddMatchedName(altGameAccount.characterName .. "-" .. altGameAccount.realmName)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(names)
+    return names
+end
+
+addonTable.GetMythicPlusScoreTargets = function()
+    if not (C_ChallengeMode and C_ChallengeMode.GetMapTable and C_ChallengeMode.GetMapUIInfo and C_MythicPlus and C_MythicPlus.GetSeasonBestAffixScoreInfoForMap) then
+        return {}
+    end
+
+    if C_MythicPlus.RequestMapInfo then
+        pcall(C_MythicPlus.RequestMapInfo)
+    end
+
+    local function GetRatingCalcValues()
+        local seasonCalcValues = {
+            [11] = {
+                baseRating = 20,
+                firstAffixLevel = 2,
+                fistAffixValue = 10,
+                secondAffixLevel = 7,
+                secondAffixValue = 10,
+                thirdAffixLevel = 14,
+                thirdAffixValue = 10,
+                thresholdLevel = 10,
+                preThresholdValue = 5,
+                postThresholdValue = 7,
+            },
+            [12] = {
+                baseRating = 70,
+                firstAffixLevel = 2,
+                fistAffixValue = 10,
+                secondAffixLevel = 5,
+                secondAffixValue = 10,
+                thirdAffixLevel = 10,
+                thirdAffixValue = 10,
+                thresholdLevel = 1,
+                preThresholdValue = 7,
+                postThresholdValue = 7,
+            },
+            [13] = {
+                baseRating = 120,
+                firstAffixLevel = 2,
+                fistAffixValue = 15,
+                secondAffixLevel = 4,
+                secondAffixValue = 10,
+                thirdAffixLevel = 7,
+                thirdAffixValue = 15,
+                fourthAffixLevel = 10,
+                fourthAffixValue = 10,
+                fifthAffixLevel = 12,
+                fifthAffixValue = 15,
+                thresholdLevel = 1,
+                preThresholdValue = 15,
+                postThresholdValue = 15,
+            },
+            [14] = {
+                baseRating = 125,
+                firstAffixLevel = 4,
+                fistAffixValue = 15,
+                secondAffixLevel = 7,
+                secondAffixValue = 15,
+                thirdAffixLevel = 10,
+                thirdAffixValue = 15,
+                fourthAffixLevel = 12,
+                fourthAffixValue = 15,
+                fifthAffixLevel = 12,
+                fifthAffixValue = 0,
+                thresholdLevel = 1,
+                preThresholdValue = 15,
+                postThresholdValue = 15,
+            },
+        }
+
+        local currentSeason = tonumber(C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetCurrentSeason()) or 0
+        if seasonCalcValues[currentSeason] then
+            return seasonCalcValues[currentSeason]
+        end
+
+        local fallbackSeason = 0
+        for seasonID in pairs(seasonCalcValues) do
+            if seasonID > fallbackSeason then
+                fallbackSeason = seasonID
+            end
+        end
+        return seasonCalcValues[fallbackSeason]
+    end
+
+    local seasonVars = GetRatingCalcValues()
+    if not seasonVars then
+        return {}
+    end
+
+    local function GetTimedRunScore(level)
+        level = tonumber(level) or 0
+        if level < 2 then
+            return 0
+        end
+
+        local baseRating = seasonVars.baseRating
+        local firstRating
+        if level >= seasonVars.thresholdLevel then
+            firstRating = seasonVars.thresholdLevel * seasonVars.preThresholdValue
+        else
+            firstRating = level * seasonVars.preThresholdValue
+        end
+
+        local secondRating = 0
+        if level > seasonVars.thresholdLevel then
+            secondRating = (level - seasonVars.thresholdLevel) * seasonVars.postThresholdValue
+        end
+
+        local affixScore = 0
+        if level >= seasonVars.firstAffixLevel then
+            affixScore = affixScore + seasonVars.fistAffixValue
+        end
+        if level >= seasonVars.secondAffixLevel then
+            affixScore = affixScore + seasonVars.secondAffixValue
+        end
+        if level >= seasonVars.thirdAffixLevel then
+            affixScore = affixScore + seasonVars.thirdAffixValue
+        end
+        if seasonVars.fourthAffixLevel and seasonVars.fourthAffixValue and level >= seasonVars.fourthAffixLevel then
+            affixScore = affixScore + seasonVars.fourthAffixValue
+        end
+        if seasonVars.fifthAffixLevel and seasonVars.fifthAffixValue and level >= seasonVars.fifthAffixLevel then
+            affixScore = affixScore + seasonVars.fifthAffixValue
+        end
+
+        return baseRating + firstRating + secondRating + affixScore
+    end
+
+    local targets = {}
+    local mapIDs = C_ChallengeMode.GetMapTable() or {}
+    local missingMapNames = false
+    local missingMapData = #mapIDs == 0
+
+    for _, mapID in ipairs(mapIDs) do
+        local name = C_ChallengeMode.GetMapUIInfo(mapID)
+        if not name or name == "" then
+            missingMapNames = true
+        end
+
+        local labelKey = NormalizeScoreTargetLabel(name)
+        if labelKey ~= "" then
+            local mapScores, bestOverallScore = C_MythicPlus.GetSeasonBestAffixScoreInfoForMap(mapID)
+            local currentOverall = tonumber(bestOverallScore) or 0
+
+            if currentOverall <= 0 and type(mapScores) == "table" then
+                for _, info in ipairs(mapScores) do
+                    if type(info) == "table" then
+                        currentOverall = math.max(currentOverall, tonumber(info.score) or 0)
+                    end
+                end
+            end
+
+            local targetLevel
+            for level = 2, 30 do
+                if GetTimedRunScore(level) > currentOverall then
+                    targetLevel = level
+                    break
+                end
+            end
+
+            targets[labelKey] = targetLevel
+        end
+    end
+
+    if next(targets) == nil and (missingMapNames or missingMapData) and not addonTable.PendingScoreTargetRefresh then
+        addonTable.PendingScoreTargetRefresh = true
+        C_Timer.After(0.5, function()
+            addonTable.PendingScoreTargetRefresh = false
+            if OAK_SEARCH and OAK_SEARCH:IsShown() then
+                if UpdateSearchFilterPane then
+                    UpdateSearchFilterPane()
+                end
+                if OAK_SEARCH.UpdateDisplay then
+                    OAK_SEARCH:UpdateDisplay()
+                end
+            end
+        end)
+    end
+
+    return targets
+end
+
+local function SearchModeShowsScoreTargets(mode)
+    return mode == "mythic_plus" or mode == "dungeon"
+end
+
 local function GetSearchFilterLabel(mode, activityInfo, pvpBracket)
     if mode == "rated_pvp" or mode == "pvp" then
         return pvpBracket or GetRaidFilterLabel(activityInfo)
@@ -1917,33 +2419,45 @@ local function GetNeedsMyClassLabel()
     return "No class dupes"
 end
 
-local function GetNativeDungeonActivityEntries()
+GetNativeDungeonActivityEntries = function()
     local entries = {}
     local seen = {}
     local defaultOrder = {}
+    local cachedGroups = nativeDungeonFilterContent and nativeDungeonFilterContent.activityGroupCache or {}
+    local scoreTargets = SearchModeShowsScoreTargets(currentSearchMode) and addonTable.GetMythicPlusScoreTargets and addonTable.GetMythicPlusScoreTargets() or nil
 
-    if currentSearchMode == "mythic_plus" then
+    if currentSearchMode == "mythic_plus" or currentSearchMode == "dungeon" then
         for index, label in ipairs(DEFAULT_SEASON_DUNGEONS) do
-            defaultOrder[strlower(label)] = index
-            seen[strlower(label)] = { label = label, groupID = nil }
-            table.insert(entries, seen[strlower(label)])
+            local normalizedLabel = NormalizeScoreTargetLabel(label)
+            defaultOrder[normalizedLabel] = index
+            seen[normalizedLabel] = {
+                label = label,
+                groupID = cachedGroups[normalizedLabel],
+                scoreTarget = scoreTargets and scoreTargets[normalizedLabel] or nil,
+            }
+            table.insert(entries, seen[normalizedLabel])
         end
     end
 
     for _, group in ipairs(searchResults) do
         if group.mode == "mythic_plus" or group.mode == "dungeon" then
             local label = GetRaidFilterLabel({ fullName = group.filterLabel })
-            local key = strlower(label or "")
+            local key = NormalizeScoreTargetLabel(label)
             if key ~= "" then
+                local groupID = tonumber(group.activityGroupID)
+                if groupID and groupID > 0 then
+                    cachedGroups[key] = groupID
+                end
                 local existing = seen[key]
                 if existing then
-                    if not existing.groupID and group.activityGroupID and group.activityGroupID > 0 then
-                        existing.groupID = group.activityGroupID
+                    if not existing.groupID and cachedGroups[key] then
+                        existing.groupID = cachedGroups[key]
                     end
                 else
                     local entry = {
                         label = label,
-                        groupID = group.activityGroupID,
+                        groupID = cachedGroups[key] or group.activityGroupID,
+                        scoreTarget = scoreTargets and scoreTargets[key] or nil,
                     }
                     seen[key] = entry
                     table.insert(entries, entry)
@@ -1953,8 +2467,8 @@ local function GetNativeDungeonActivityEntries()
     end
 
     table.sort(entries, function(a, b)
-        local aKey = strlower(a.label or "")
-        local bKey = strlower(b.label or "")
+        local aKey = NormalizeScoreTargetLabel(a.label)
+        local bKey = NormalizeScoreTargetLabel(b.label)
         local aOrder = defaultOrder[aKey]
         local bOrder = defaultOrder[bKey]
         if aOrder and bOrder then
@@ -1980,6 +2494,9 @@ ResetSearchFilters = function()
     OAK_F.NeedLust = false
     OAK_F.NeedBrez = false
     OAK_F.PartyFit = false
+    OAK_F.MatchMyRaidLockout = false
+    OAK_F.RaidBossesMin = ""
+    OAK_F.RaidBossesMax = ""
 
     for activityName in pairs(OAK_F.Activities) do
         OAK_F.Activities[activityName] = false
@@ -2085,6 +2602,23 @@ local function UpdateNativeDungeonFilterPane(topOffset)
     nativeActivityLabel:ClearAllPoints()
     nativeActivityLabel:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", 5, y)
     nativeActivityLabel:Show()
+    nativeDungeonFilterContent.selectAllButton:ClearAllPoints()
+    nativeDungeonFilterContent.selectAllButton:SetPoint("LEFT", nativeActivityLabel, "RIGHT", 34, 0)
+    nativeDungeonFilterContent.selectAllButton:Show()
+    nativeDungeonFilterContent.selectNoneButton:ClearAllPoints()
+    nativeDungeonFilterContent.selectNoneButton:SetPoint("LEFT", nativeDungeonFilterContent.selectAllButton, "RIGHT", 4, 0)
+    nativeDungeonFilterContent.selectNoneButton:Show()
+    nativeDungeonFilterContent.scoreHeader:ClearAllPoints()
+    nativeDungeonFilterContent.scoreHeader:SetPoint("TOPRIGHT", nativeDungeonFilterContent, "TOPRIGHT", -8, y)
+    nativeDungeonFilterContent.scoreHeaderHitbox:ClearAllPoints()
+    nativeDungeonFilterContent.scoreHeaderHitbox:SetPoint("TOPRIGHT", nativeDungeonFilterContent, "TOPRIGHT", -8, y + 2)
+    if SearchModeShowsScoreTargets(currentSearchMode) then
+        nativeDungeonFilterContent.scoreHeader:Show()
+        nativeDungeonFilterContent.scoreHeaderHitbox:Show()
+    else
+        nativeDungeonFilterContent.scoreHeader:Hide()
+        nativeDungeonFilterContent.scoreHeaderHitbox:Hide()
+    end
     y = y - 16
 
     local activityEntries = GetNativeDungeonActivityEntries()
@@ -2093,6 +2627,30 @@ local function UpdateNativeDungeonFilterPane(topOffset)
         if not button then
             button = CreateStandaloneToggleBox(nativeDungeonFilterContent, "")
             button.labelText:SetFontObject("OakLFG_FontSmall")
+            button.labelText:SetWidth(118)
+            button.labelText:SetJustifyH("LEFT")
+            button.scoreText = nativeDungeonFilterContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+            button.scoreText:SetWidth(32)
+            button.scoreText:SetJustifyH("RIGHT")
+            button.scoreHitbox = CreateFrame("Button", nil, nativeDungeonFilterContent)
+            button.scoreHitbox:SetSize(36, 16)
+            button.scoreHitbox:SetScript("OnEnter", function(self)
+                local entryData = self.entryData
+                if not entryData then
+                    return
+                end
+                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                GameTooltip:SetText(entryData.label or "Gives Score", 1, 1, 1)
+                if tonumber(entryData.scoreTarget) and tonumber(entryData.scoreTarget) > 0 then
+                    GameTooltip:AddLine(string.format("A timed +%d should increase your score for this dungeon.", tonumber(entryData.scoreTarget)), 0.40, 1.00, 0.55, true)
+                else
+                    GameTooltip:AddLine("Oak could not determine a score-gain target for this dungeon yet.", 1, 1, 1, true)
+                end
+                GameTooltip:Show()
+            end)
+            button.scoreHitbox:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+            end)
             button:SetScript("OnClick", function(self)
                 if not self.activityGroupID or self.activityGroupID <= 0 then
                     return
@@ -2144,6 +2702,28 @@ local function UpdateNativeDungeonFilterPane(topOffset)
         button:SetState(button.activityGroupID > 0 and selectedActivities[button.activityGroupID] == true)
         button:ClearAllPoints()
         button:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", 5, y)
+        if button.scoreText then
+            button.scoreText:ClearAllPoints()
+            button.scoreText:SetPoint("RIGHT", nativeDungeonFilterContent, "RIGHT", -8, 0)
+            button.scoreText:SetPoint("CENTER", button, "CENTER", 0, 0)
+            if button.scoreHitbox then
+                button.scoreHitbox:ClearAllPoints()
+                button.scoreHitbox:SetPoint("RIGHT", nativeDungeonFilterContent, "RIGHT", -6, 0)
+                button.scoreHitbox:SetPoint("CENTER", button, "CENTER", 0, 0)
+                button.scoreHitbox.entryData = entry
+            end
+            if SearchModeShowsScoreTargets(currentSearchMode) and tonumber(entry.scoreTarget) and tonumber(entry.scoreTarget) > 0 then
+                button.scoreText:SetText("|cff66ff8a" .. tostring(entry.scoreTarget) .. "|r")
+            elseif SearchModeShowsScoreTargets(currentSearchMode) then
+                button.scoreText:SetText("|cff888888--|r")
+            else
+                button.scoreText:SetText("")
+            end
+            button.scoreText:Show()
+            if button.scoreHitbox then
+                button.scoreHitbox:SetShown(SearchModeShowsScoreTargets(currentSearchMode))
+            end
+        end
         if button.activityGroupID > 0 then
             button:Enable()
             button.labelText:SetTextColor(1, 1, 1)
@@ -2163,6 +2743,12 @@ local function UpdateNativeDungeonFilterPane(topOffset)
         local button = nativeDungeonActivityButtons[index]
         if button then
             button:Hide()
+            if button.scoreText then
+                button.scoreText:Hide()
+            end
+            if button.scoreHitbox then
+                button.scoreHitbox:Hide()
+            end
             if button.labelText then
                 button.labelText:Hide()
             end
@@ -2346,6 +2932,7 @@ UpdateSearchFilterPane = function()
     local showNativeDungeonFilters = SearchModeUsesNativeDungeonFilters(currentSearchMode)
     local showDifficulty = SearchModeUsesDifficulty(currentSearchMode)
     local showActivityFilters = SearchModeUsesActivityFilters(currentSearchMode)
+    local showRaidBossRange = currentSearchMode == "raid" or currentSearchMode == "legacy_raid"
 
     if not showSearchQuery then
         OAK_F.SearchQuery = ""
@@ -2365,6 +2952,11 @@ UpdateSearchFilterPane = function()
     SetControlVisible(keyRangeHint, showSearchQuery)
     SetControlVisible(keyQueryBox, showSearchQuery)
     SetControlVisible(addonTable.SearchQueryButton, showSearchQuery)
+    SetControlVisible(filterPanel.raidBossRangeLabel, showRaidBossRange)
+    SetControlVisible(filterPanel.raidBossRangeMinBox, showRaidBossRange)
+    SetControlVisible(filterPanel.raidBossRangeTo, showRaidBossRange)
+    SetControlVisible(filterPanel.raidBossRangeMaxBox, showRaidBossRange)
+    SetControlVisible(filterPanel.raidBossRangeResetButton, showRaidBossRange)
     if showSearchQuery and filterPanel:IsShown() then
         if nativeSearchHost.AttachNativeSearchBoxToOak then
             nativeSearchHost.AttachNativeSearchBoxToOak()
@@ -2396,6 +2988,22 @@ UpdateSearchFilterPane = function()
     keyRangeHint:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryHintTopY)
     keyQueryBox:ClearAllPoints()
     keyQueryBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY)
+    filterPanel.raidBossRangeLabel:ClearAllPoints()
+    filterPanel.raidBossRangeLabel:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryLabelTopY)
+    filterPanel.raidBossRangeMinBox:ClearAllPoints()
+    filterPanel.raidBossRangeMinBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY)
+    if not filterPanel.raidBossRangeMinBox:HasFocus() then
+        filterPanel.raidBossRangeMinBox:SetText(OAK_F.RaidBossesMin or "")
+    end
+    filterPanel.raidBossRangeTo:ClearAllPoints()
+    filterPanel.raidBossRangeTo:SetPoint("LEFT", filterPanel.raidBossRangeMinBox, "RIGHT", 6, 0)
+    filterPanel.raidBossRangeMaxBox:ClearAllPoints()
+    filterPanel.raidBossRangeMaxBox:SetPoint("LEFT", filterPanel.raidBossRangeTo, "RIGHT", 6, 0)
+    if not filterPanel.raidBossRangeMaxBox:HasFocus() then
+        filterPanel.raidBossRangeMaxBox:SetText(OAK_F.RaidBossesMax or "")
+    end
+    filterPanel.raidBossRangeResetButton:ClearAllPoints()
+    filterPanel.raidBossRangeResetButton:SetPoint("LEFT", filterPanel.raidBossRangeMaxBox, "RIGHT", 6, 0)
     addonTable.SearchQueryButton:ClearAllPoints()
     addonTable.SearchResetButton:ClearAllPoints()
 
@@ -2413,6 +3021,7 @@ UpdateSearchFilterPane = function()
         SetControlVisible(boxParty, false)
         SetControlVisible(boxLust, false)
         SetControlVisible(boxBrez, false)
+        SetControlVisible(filterPanel.matchMyRaidLockoutBox, false)
         SetControlVisible(divTexture, false)
         SetControlVisible(filterActivityTitle, false)
         SetControlVisible(filterDungeonContainer, false)
@@ -2427,6 +3036,8 @@ UpdateSearchFilterPane = function()
         nativeMinimumRatingLabel:Hide()
         nativeMinimumRatingBox:Hide()
         nativeActivityLabel:Hide()
+        nativeDungeonFilterContent.selectAllButton:Hide()
+        nativeDungeonFilterContent.selectNoneButton:Hide()
         for _, box in ipairs(nativeDungeonActivityButtons) do
             box:Hide()
             if box.labelText then box.labelText:Hide() end
@@ -2455,6 +3066,16 @@ UpdateSearchFilterPane = function()
     SetControlVisible(boxParty, true)
     SetControlVisible(boxLust, true)
     SetControlVisible(boxBrez, true)
+    SetControlVisible(filterPanel.matchMyRaidLockoutBox, showRaidBossRange)
+    boxNeedTank:SetState(OAK_F.NeedTank)
+    boxHasTank:SetState(OAK_F.HasTank)
+    boxNeedHeal:SetState(OAK_F.NeedHeal)
+    boxHasHeal:SetState(OAK_F.HasHeal)
+    boxNeedDPS:SetState(OAK_F.NeedDPS)
+    boxParty:SetState(OAK_F.PartyFit)
+    boxLust:SetState(OAK_F.NeedLust)
+    boxBrez:SetState(OAK_F.NeedBrez)
+    filterPanel.matchMyRaidLockoutBox:SetState(OAK_F.MatchMyRaidLockout)
     SetControlVisible(divTexture, showActivityFilters)
     SetControlVisible(filterActivityTitle, showActivityFilters)
     SetControlVisible(filterDungeonContainer, showActivityFilters)
@@ -2463,6 +3084,10 @@ UpdateSearchFilterPane = function()
         baseY = showDifficulty and -148 or -116
     else
         baseY = showDifficulty and -78 or -46
+    end
+    if showRaidBossRange then
+        baseY = baseY - 36
+        baseY = baseY - 22
     end
 
     boxNeedTank:ClearAllPoints()
@@ -2481,12 +3106,14 @@ UpdateSearchFilterPane = function()
     boxLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 66)
     boxBrez:ClearAllPoints()
     boxBrez:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 116, baseY - 66)
+    filterPanel.matchMyRaidLockoutBox:ClearAllPoints()
+    filterPanel.matchMyRaidLockoutBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 88)
     divTexture:ClearAllPoints()
-    divTexture:SetPoint("TOP", filterPanel, "TOP", 0, baseY - 84)
+    divTexture:SetPoint("TOP", filterPanel, "TOP", 0, baseY - (showRaidBossRange and 106 or 84))
     filterActivityTitle:ClearAllPoints()
-    filterActivityTitle:SetPoint("TOP", filterPanel, "TOPLEFT", 95, baseY - 94)
+    filterActivityTitle:SetPoint("TOP", filterPanel, "TOPLEFT", 95, baseY - (showRaidBossRange and 116 or 94))
     filterDungeonContainer:ClearAllPoints()
-    filterDungeonContainer:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 10, baseY - 106)
+    filterDungeonContainer:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 10, baseY - (showRaidBossRange and 128 or 106))
     filterDungeonContainer:SetPoint("BOTTOMRIGHT", filterPanel, "BOTTOMRIGHT", -10, 10)
 
     currentActivityFilters = showActivityFilters and GetCurrentSearchActivityLabels() or {}
@@ -2792,6 +3419,19 @@ local function CreateRow(index)
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddDoubleLine("Leader:", grp.leaderNameRaw or "Unknown", 1, 1, 1, 1, 1, 1)
                 GameTooltip:AddDoubleLine("Members:", string.format("%d (%d/%d/%d)", grp.members or 0, grp.tanks or 0, grp.heals or 0, grp.dps or 0), 1, 1, 1, 1, 1, 1)
+                if grp.isFriend then
+                    local friendNames = addonTable.GetSearchGroupFriendNames and addonTable.GetSearchGroupFriendNames(grp) or {}
+                    GameTooltip:AddLine("Friends in this group", 0.40, 0.85, 1)
+                    if #friendNames > 0 then
+                        for _, friendName in ipairs(friendNames) do
+                            GameTooltip:AddLine(friendName, 1, 1, 1)
+                        end
+                    elseif (grp.numBNetFriends or 0) > 0 then
+                        GameTooltip:AddLine("Battle.net friend detected", 1, 1, 1)
+                    else
+                        GameTooltip:AddLine("Friend detected", 1, 1, 1)
+                    end
+                end
                 GameTooltip:AddDoubleLine("Created:", FormatTime(grp.age or 0) .. " ago", 1, 1, 1, 1, 1, 1)
                 if grp.raidListing and grp.raidListing.difficultyLabel and grp.raidListing.difficultyLabel ~= "" then
                     GameTooltip:AddDoubleLine("Difficulty:", grp.raidListing.difficultyLabel, 1, 1, 1, 1, 1, 1)
@@ -2822,6 +3462,19 @@ local function CreateRow(index)
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddDoubleLine("Leader:", grp.leaderNameRaw or "Unknown", 1, 1, 1, 1, 1, 1)
                 GameTooltip:AddDoubleLine("Members:", string.format("%d (%d/%d/%d)", grp.members or 0, grp.tanks or 0, grp.heals or 0, grp.dps or 0), 1, 1, 1, 1, 1, 1)
+                if grp.isFriend then
+                    local friendNames = addonTable.GetSearchGroupFriendNames and addonTable.GetSearchGroupFriendNames(grp) or {}
+                    GameTooltip:AddLine("Friends in this group", 0.40, 0.85, 1)
+                    if #friendNames > 0 then
+                        for _, friendName in ipairs(friendNames) do
+                            GameTooltip:AddLine(friendName, 1, 1, 1)
+                        end
+                    elseif (grp.numBNetFriends or 0) > 0 then
+                        GameTooltip:AddLine("Battle.net friend detected", 1, 1, 1)
+                    else
+                        GameTooltip:AddLine("Friend detected", 1, 1, 1)
+                    end
+                end
                 GameTooltip:AddDoubleLine("Created:", FormatTime(grp.age or 0) .. " ago", 1, 1, 1, 1, 1, 1)
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine("PVP Profile (Leader)", 0.2, 1, 0.2)
@@ -2880,25 +3533,26 @@ local function CreateRow(index)
                 local roleGroups = BuildRoleClassBreakdown(grp.memberDetails)
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddDoubleLine("Members:", string.format("%d (%d/%d/%d)", grp.members or 0, grp.tanks or 0, grp.heals or 0, grp.dps or 0), 1, 1, 1, 1, 1, 1)
+                if grp.isFriend then
+                    local friendNames = addonTable.GetSearchGroupFriendNames and addonTable.GetSearchGroupFriendNames(grp) or {}
+                    GameTooltip:AddLine("Friends in this group", 0.40, 0.85, 1)
+                    if #friendNames > 0 then
+                        for _, friendName in ipairs(friendNames) do
+                            GameTooltip:AddLine(friendName, 1, 1, 1)
+                        end
+                    elseif (grp.numBNetFriends or 0) > 0 then
+                        GameTooltip:AddLine("Battle.net friend detected", 1, 1, 1)
+                    else
+                        GameTooltip:AddLine("Friend detected", 1, 1, 1)
+                    end
+                end
                 GameTooltip:AddLine("Members", 1, 0.82, 0)
                 AddRoleClassLines(GameTooltip, "Tank", "TANK", roleGroups)
                 AddRoleClassLines(GameTooltip, "Healer", "HEALER", roleGroups)
                 AddRoleClassLines(GameTooltip, "Damage", "DAMAGER", roleGroups)
 
-                if grp.rioProfile and type(grp.rioProfile.mythicKeystoneProfile) == "table" and type(grp.rioProfile.mythicKeystoneProfile.sortedDungeons) == "table" then
-                    local dungeons = grp.rioProfile.mythicKeystoneProfile.sortedDungeons
-                    if #dungeons > 0 then
-                        GameTooltip:AddLine(" ")
-                        GameTooltip:AddLine("Top R.IO Runs", 1, 0.82, 0)
-                        for i = 1, math.min(3, #dungeons) do
-                            local dungeon = dungeons[i]
-                            if type(dungeon) == "table" and type(dungeon.level) == "number" and dungeon.level > 0 then
-                                local upgrades = (type(dungeon.numUpgrades) == "number" and dungeon.numUpgrades > 0) and string.rep("+", dungeon.numUpgrades) or ""
-                                local dungeonName = (type(dungeon.dungeon) == "table" and (dungeon.dungeon.shortName or dungeon.dungeon.name)) or "Unknown"
-                                GameTooltip:AddDoubleLine(dungeonName, "+" .. dungeon.level .. upgrades, 1, 1, 1, 0.2, 1, 0.2)
-                            end
-                        end
-                    end
+                if grp.rioProfile and addonTable.AppendMythicPlusMilestonesToTooltip then
+                    addonTable.AppendMythicPlusMilestonesToTooltip(GameTooltip, grp.rioProfile)
                 end
 
                 GameTooltip:AddDoubleLine("Created:", FormatTime(grp.age or 0) .. " ago", 1, 1, 1, 1, 1, 1)
@@ -3110,6 +3764,21 @@ function OAK_SEARCH:UpdateDisplay()
             if OAK_F.Difficulty == "MYTHIC_PLUS" and group.difficultyToken ~= "MYTHIC_PLUS" then skip = true end
         end
 
+        if not skip and (currentSearchMode == "raid" or currentSearchMode == "legacy_raid") then
+            local bossesKilled = tonumber(group.raidListing and group.raidListing.bossesKilled) or 0
+            local minBosses = tonumber(OAK_F.RaidBossesMin)
+            local maxBosses = tonumber(OAK_F.RaidBossesMax)
+            if minBosses and bossesKilled < minBosses then
+                skip = true
+            end
+            if maxBosses and bossesKilled > maxBosses then
+                skip = true
+            end
+            if not skip and OAK_F.MatchMyRaidLockout and addonTable.ResultMatchesRaidLockout then
+                skip = not addonTable.ResultMatchesRaidLockout(group, { matchMyRaidLockout = true })
+            end
+        end
+
         local rowMode = group.mode or currentSearchMode
         local isKeyListing = rowMode == "mythic_plus" or rowMode == "generic" or rowMode == "delve" or group.difficultyToken == "MYTHIC_PLUS" or (tonumber(group.keyLevel) or 0) > 0
         local isPvpListing = rowMode == "rated_pvp" or rowMode == "pvp"
@@ -3234,6 +3903,8 @@ function OAK_SEARCH:UpdateDisplay()
         local rStr = (rNum > 0 and tostring(rNum)) or "--"
         if group.mode == "raid" or group.mode == "legacy_raid" then
             rStr = GetRaidKillsDisplay(group)
+        elseif currentSearchMode == "raid" or currentSearchMode == "legacy_raid" then
+            rStr = "N/A"
         elseif group.mode == "rated_pvp" or group.mode == "pvp" then
             rStr = (rNum > 0 and tostring(rNum)) or "--"
         elseif rNum > 0 then
@@ -3283,7 +3954,7 @@ local function FetchSearchResults()
     for _, resultID in ipairs(results) do
         local searchResultInfo = C_LFGList.GetSearchResultInfo(resultID)
         
-        if searchResultInfo and not searchResultInfo.isDelisted then
+        if searchResultInfo then
             local activityID = GetSearchResultActivityID(searchResultInfo)
             local activityInfo = activityID and C_LFGList.GetActivityInfoTable(activityID) or nil
             local memberCounts = C_LFGList.GetSearchResultMemberCounts(resultID) or {}
@@ -3296,17 +3967,13 @@ local function FetchSearchResults()
                 local mode, rating, ratingLabel, pvpRating, pvpBracket = GetResultRatingData(searchResultInfo, activityInfo)
 
                 local hasLust, hasBrez = false, false
-                local memberDetails = {}
+                local memberDetails = (addonTable.GetSearchResultPlayers and addonTable.GetSearchResultPlayers(resultID, tonumber(searchResultInfo.numMembers) or 0)) or {}
                 local playstyleValue, playstyleLabel = GetSearchPlaystyle(searchResultInfo, activityInfo)
 
-                for i = 1, tonumber(searchResultInfo.numMembers) or 0 do
-                    local role, classStr = C_LFGList.GetSearchResultMemberInfo(resultID, i)
-                    if classStr and role then
-                        table.insert(memberDetails, {role = role, class = classStr})
-                        local c = string.upper(classStr)
-                        if c == "MAGE" or c == "SHAMAN" or c == "HUNTER" or c == "EVOKER" then hasLust = true end
-                        if c == "DEATHKNIGHT" or c == "DRUID" or c == "WARLOCK" or c == "PALADIN" then hasBrez = true end
-                    end
+                for _, member in ipairs(memberDetails) do
+                    local c = member.class and string.upper(member.class)
+                    if c == "MAGE" or c == "SHAMAN" or c == "HUNTER" or c == "EVOKER" then hasLust = true end
+                    if c == "DEATHKNIGHT" or c == "DRUID" or c == "WARLOCK" or c == "PALADIN" then hasBrez = true end
                 end
                 
                 local isFriend = (searchResultInfo.numBNetFriends or 0) > 0 or (searchResultInfo.numCharFriends or 0) > 0 or (searchResultInfo.numGuildMates or 0) > 0
@@ -3502,8 +4169,8 @@ EventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
                     toggleBox:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
                     toggleBox:SetBackdropBorderColor(0, 0, 0, 1)
                 else
-                    toggleBox:SetBackdropColor(0.106, 0.106, 0.129, 1)
-                    toggleBox:SetBackdropBorderColor(0, 0, 0, 1)
+                    toggleBox:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+                    toggleBox:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
                 end
             end
             

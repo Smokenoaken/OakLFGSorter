@@ -37,6 +37,54 @@ local function GetModeConfig()
     return MODE_CONFIGS[GetListingMode()] or MODE_CONFIGS.generic
 end
 
+local function GetHeaderTooltipData(sortKey)
+    local isBrowser = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
+    local listingMode = GetListingMode()
+
+    if sortKey == "role" then
+        if isBrowser then
+            return "Dungeon", "Sort by dungeon, raid, or activity name."
+        end
+        return "Role", "Sort by the applicant's primary role."
+    elseif sortKey == "class" then
+        if isBrowser then
+            return "Title", "Sort by the listing title."
+        end
+        return "Class", "Sort by the applicant's class."
+    elseif sortKey == "spec" then
+        if isBrowser then
+            if listingMode == "raid" or listingMode == "legacy_raid" then
+                return "Comp", "Sort by the listing composition summary."
+            end
+            return "Style", "Sort by the listing playstyle."
+        end
+        return "Spec", "Sort by the applicant's specialization."
+    elseif sortKey == "ilvl" then
+        if isBrowser then
+            return "Setup", "Sort by the current party setup shown on the listing."
+        end
+        return "iLvl", "Sort by item level."
+    elseif sortKey == "rating" then
+        local modeConfig = GetModeConfig()
+        if listingMode == "raid" or listingMode == "legacy_raid" then
+            return modeConfig.ratingLabel, isBrowser and "Sort by raid difficulty or raid metric for the listing." or "Sort by raid progress for the applicant."
+        elseif listingMode == "rated_pvp" or listingMode == "pvp" then
+            return modeConfig.ratingLabel, "Sort by PVP rating."
+        end
+        return modeConfig.ratingLabel, "Sort by Mythic+ rating."
+    elseif sortKey == "key" then
+        local modeConfig = GetModeConfig()
+        if listingMode == "raid" or listingMode == "legacy_raid" then
+            return modeConfig.keyLabel, isBrowser and "Sort by raid progress or bosses defeated on the listing." or "Sort by the applicant's raid progress."
+        elseif listingMode == "rated_pvp" or listingMode == "pvp" then
+            return modeConfig.keyLabel, "Sort by bracket type."
+        end
+        return modeConfig.keyLabel, "Sort by best key level or key-related metric."
+    end
+
+    return nil, nil
+end
+
 local function UsesSecondaryMetricColumn()
     local listingMode = GetListingMode()
     return not (listingMode == "rated_pvp" or listingMode == "pvp")
@@ -400,6 +448,8 @@ local function CreateHeader(label, sortKey, column)
     btn:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
     btn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
     btn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    btn:EnableMouse(true)
+    btn:SetFrameLevel(OAK_LFG:GetFrameLevel() + 10)
     
     btn.baseText = label; btn.sortKey = sortKey
     btn.text = btn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
@@ -424,6 +474,21 @@ local function CreateHeader(label, sortKey, column)
         if addonTable.CurrentSortBy == sortKey then addonTable.CurrentIsAscending = not addonTable.CurrentIsAscending
         else addonTable.CurrentSortBy = sortKey; addonTable.CurrentIsAscending = false end
         addonTable.UpdateHeaderVisuals(); addonTable.UpdateDisplay()
+    end)
+    btn:SetScript("OnEnter", function(self)
+        local title, description = GetHeaderTooltipData(self.sortKey)
+        if title and description then
+            self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(title, 1, 1, 1)
+            GameTooltip:AddLine(description, 1, 1, 1, true)
+            GameTooltip:AddLine("Click to sort. Click again to reverse the order.", 0.75, 0.75, 0.75, true)
+            GameTooltip:Show()
+        end
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+        GameTooltip:Hide()
     end)
     table.insert(headers, btn)
     if sortKey == "key" then
@@ -881,24 +946,8 @@ local function CreateRow(index)
                         GameTooltip:AddDoubleLine("Best Run:", "+" .. bestOverall.bestRunLevel .. " (" .. (bestOverall.mapName or "Unknown") .. ")", 1, 1, 1, 1, 1, 1)
                     end
 
-                    if self.rioProfile and type(self.rioProfile.mythicKeystoneProfile) == "table" and type(self.rioProfile.mythicKeystoneProfile.sortedDungeons) == "table" then
-                        local dungeons = self.rioProfile.mythicKeystoneProfile.sortedDungeons
-                        if #dungeons > 0 then
-                            local hasRun = false
-                            for i = 1, math.min(3, #dungeons) do
-                                local d = dungeons[i]
-                                if type(d) == "table" and type(d.level) == "number" and d.level > 0 then
-                                    if not hasRun then
-                                        GameTooltip:AddLine(" ")
-                                        GameTooltip:AddLine("Top R.IO Runs:", 0.8, 0.8, 0.8)
-                                        hasRun = true
-                                    end
-                                    local pluses = (type(d.numUpgrades) == "number" and d.numUpgrades > 0) and string.rep("+", d.numUpgrades) or ""
-                                    local dName = (type(d.dungeon) == "table" and d.dungeon.shortName) or "Unknown"
-                                    GameTooltip:AddDoubleLine(dName, "+" .. d.level .. pluses, 1, 1, 1, 0.2, 1, 0.2)
-                                end
-                            end
-                        end
+                    if self.rioProfile and addonTable.AppendMythicPlusMilestonesToTooltip then
+                        addonTable.AppendMythicPlusMilestonesToTooltip(GameTooltip, self.rioProfile)
                     end
                 end
 
