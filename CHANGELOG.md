@@ -1,3 +1,8 @@
+## v2.0.7
+
+- Restored browser results for listings where Blizzard delays the direct activityID field.
+- Kept the taint fix by resolving fallback activityIDs through a fresh secure lookup instead of addon-owned secret tables.
+
 ## v2.0.6
 
 - Fixed Blizzard LFG taint caused by touching protected activityIDs on search/listing data.
