@@ -1,3 +1,9 @@
+## v2.0.3
+
+- Added a Filled state for applied groups that no longer fit your role or party
+- keeping them pinned so they can be cancelled faster.
+- Added a Low Latency option to show only groups from your region.
+
 ## v2.0.2
 
 - Fixed Party Fit filtering so it no longer filters out valid groups incorrectly.
