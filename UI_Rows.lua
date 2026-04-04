@@ -535,6 +535,9 @@ local function GetCurrentRowNoteColumn()
 end
 
 GetBrowserApplicationPriority = function(result)
+    if result.isRoleFilled then
+        return 4
+    end
     if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
         return 3
     end
@@ -583,6 +586,9 @@ local function GetBrowserSetupSummary(result)
 end
 
 local function GetBrowserRowColor(result, isAltColor)
+    if result.isRoleFilled then
+        return 0.46, 0.30, 0.10, 0.60
+    end
     if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
         return 0.12, 0.32, 0.16, 0.55
     end
@@ -1298,6 +1304,7 @@ function addonTable.UpdateDisplay()
     if isBrowser then
         local activeResults = {}
         for _, result in ipairs(addonTable.SearchResults or {}) do
+            result.isRoleFilled = addonTable.IsAppliedRoleFilled and addonTable.IsAppliedRoleFilled(result) or false
             if not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result) then
                 table.insert(activeResults, result)
             end
@@ -1362,10 +1369,19 @@ function addonTable.UpdateDisplay()
                 end)
                 row.inviteBtn:SetScript("OnEnter", function(self)
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText("Cancel", 1, 0.2, 0.2)
+                    if result.isRoleFilled then
+                        GameTooltip:SetText("Role Filled - Cancel", 1, 0.82, 0.30)
+                    else
+                        GameTooltip:SetText("Cancel", 1, 0.2, 0.2)
+                    end
                     GameTooltip:Show()
                 end)
                 row.inviteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                if result.isRoleFilled then
+                    row.statusText:SetText("Filled")
+                    row.statusText:SetTextColor(1.0, 0.82, 0.30)
+                    row.statusText:Show()
+                end
             else
                 row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
                 row.inviteBtn:SetScript("OnClick", function()

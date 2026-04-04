@@ -1335,6 +1335,9 @@ end
 
 local function GetPinnedRowPriority(group)
     local priority = 0
+    if group.isRoleFilled then
+        priority = priority + 200
+    end
     if group.isApplied then
         priority = priority + 100
     end
@@ -1579,78 +1582,10 @@ end
 -- ==========================================
 -- 6. Logic Helpers
 -- ==========================================
-local ROLE_REMAINING_KEYS = {
-    TANK = "TANK_REMAINING",
-    HEALER = "HEALER_REMAINING",
-    DAMAGER = "DAMAGER_REMAINING",
-}
-
-local function GetPartyRoleCounts()
-    local counts = { TANK = 0, HEALER = 0, DAMAGER = 0 }
-    local total = 1
-
-    local playerRole = UnitGroupRolesAssigned("player")
-    if not playerRole or playerRole == "NONE" then
-        local specIndex = GetSpecialization and GetSpecialization()
-        local specID = specIndex and GetSpecializationInfo(specIndex)
-        playerRole = specID and GetSpecializationRoleByID and GetSpecializationRoleByID(specID) or "DAMAGER"
-    end
-    counts[playerRole] = (counts[playerRole] or 0) + 1
-
-    if IsInGroup() then
-        total = GetNumGroupMembers()
-        for i = 1, total do
-            local unit = IsInRaid() and ("raid" .. i) or ("party" .. i)
-            if UnitExists(unit) and not UnitIsUnit(unit, "player") then
-                local role = UnitGroupRolesAssigned(unit)
-                if not role or role == "NONE" then
-                    role = "DAMAGER"
-                end
-                counts[role] = (counts[role] or 0) + 1
-            end
-        end
-    end
-
-    return counts, total
-end
-
 local function GroupMatchesPartyFit(group)
-    local partyRoles, partySize = GetPartyRoleCounts()
-    local maxPlayers = tonumber(group.maxPlayers) or 0
-    local members = tonumber(group.members or group.numMembers) or 0
-
-    if maxPlayers > 0 and members + partySize > maxPlayers then
-        return false
+    if addonTable.DoesResultFitCurrentParty then
+        return addonTable.DoesResultFitCurrentParty(group)
     end
-
-    local memberCounts = group.memberCounts
-    if type(memberCounts) == "table" then
-        local hasRemainingData = false
-        for role, amount in pairs(partyRoles) do
-            if amount > 0 then
-                local remainingKey = ROLE_REMAINING_KEYS[role]
-                local remaining = remainingKey and tonumber(memberCounts[remainingKey])
-                if remaining ~= nil then
-                    hasRemainingData = true
-                    if remaining < amount then
-                        return false
-                    end
-                end
-            end
-        end
-
-        if hasRemainingData then
-            return true
-        end
-    end
-
-    if maxPlayers == 5 then
-        return (group.tanks + (partyRoles.TANK or 0) <= 1)
-            and (group.heals + (partyRoles.HEALER or 0) <= 1)
-            and (group.dps + (partyRoles.DAMAGER or 0) <= 3)
-            and (members + partySize <= 5)
-    end
-
     return true
 end
 
@@ -3693,8 +3628,13 @@ function OAK_SEARCH:UpdateDisplay()
     
     for _, group in ipairs(searchResults) do
         local skip = false
+        group.isRoleFilled = addonTable.IsAppliedRoleFilled and addonTable.IsAppliedRoleFilled(group) or false
 
-        if useNativeDungeonFilters then
+        if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(group) then
+            skip = true
+        end
+
+        if not skip and useNativeDungeonFilters then
             local selectedCount = 0
             for _ in pairs(selectedActivityGroups) do
                 selectedCount = selectedCount + 1
@@ -3705,7 +3645,7 @@ function OAK_SEARCH:UpdateDisplay()
 
             if adv.hasTank and group.tanks == 0 then skip = true end
             if adv.hasHealer and group.heals == 0 then skip = true end
-        else
+        elseif not skip then
             local anyFilterActive = false
             local matchFound = false
             for _, activityName in ipairs(currentActivityFilters) do
@@ -3723,7 +3663,7 @@ function OAK_SEARCH:UpdateDisplay()
         end
 
         local maxPlayers = tonumber(group.maxPlayers) or 0
-        if useNativeDungeonFilters then
+        if not skip and useNativeDungeonFilters then
             if adv.needsTank and group.tanks >= 1 then skip = true end
             if adv.needsHealer and group.heals >= 1 then skip = true end
             if adv.needsDamage and group.dps >= 3 then skip = true end
@@ -3742,7 +3682,7 @@ function OAK_SEARCH:UpdateDisplay()
                     skip = true
                 end
             end
-        else
+        elseif not skip then
             if currentSearchMode == "mythic_plus" or currentSearchMode == "dungeon" or currentSearchMode == "generic" or currentSearchMode == "delve" or currentSearchMode == "rated_pvp" or currentSearchMode == "pvp" then
                 if OAK_F.NeedTank and group.tanks >= 1 then skip = true end
                 if OAK_F.NeedHeal and group.heals >= 1 then skip = true end
@@ -3758,10 +3698,10 @@ function OAK_SEARCH:UpdateDisplay()
             end
         end
 
-        if OAK_F.NeedLust and group.hasLust then skip = true end
-        if OAK_F.NeedBrez and group.hasBrez then skip = true end
+        if not skip and OAK_F.NeedLust and group.hasLust then skip = true end
+        if not skip and OAK_F.NeedBrez and group.hasBrez then skip = true end
 
-        if SearchModeUsesDifficulty(currentSearchMode) then
+        if not skip and SearchModeUsesDifficulty(currentSearchMode) then
             if OAK_F.Difficulty == "NORMAL" and group.difficultyToken ~= "NORMAL" then skip = true end
             if OAK_F.Difficulty == "HEROIC" and group.difficultyToken ~= "HEROIC" then skip = true end
             if OAK_F.Difficulty == "MYTHIC" and group.difficultyToken ~= "MYTHIC" then skip = true end
@@ -3786,7 +3726,7 @@ function OAK_SEARCH:UpdateDisplay()
         local isKeyListing = rowMode == "mythic_plus" or rowMode == "generic" or rowMode == "delve" or group.difficultyToken == "MYTHIC_PLUS" or (tonumber(group.keyLevel) or 0) > 0
         local isPvpListing = rowMode == "rated_pvp" or rowMode == "pvp"
 
-        if isPvpListing then
+        if not skip and isPvpListing then
             local pvpQuery = TrimString(OAK_F.SearchQuery)
             local exactRating = tonumber(pvpQuery)
             if exactRating and (tonumber(group.pvpRating) or 0) ~= exactRating then
@@ -3794,7 +3734,7 @@ function OAK_SEARCH:UpdateDisplay()
             end
         end
 
-        if OAK_F.PartyFit then
+        if not skip and OAK_F.PartyFit then
             skip = not GroupMatchesPartyFit(group)
         end
 
@@ -3814,7 +3754,9 @@ function OAK_SEARCH:UpdateDisplay()
         
         row.groupData = group
         
-        if group.isApplied then
+        if group.isRoleFilled then
+            row.bg:SetColorTexture(0.58, 0.38, 0.10, 0.62)
+        elseif group.isApplied then
             row.bg:SetColorTexture(0.2, 0.6, 0.2, 0.6) 
         elseif group.isDeclined then
             row.bg:SetColorTexture(0.6, 0.1, 0.1, 0.5) 
@@ -3919,8 +3861,23 @@ function OAK_SEARCH:UpdateDisplay()
         elseif group.isApplied then
             row.applyBtn:Hide()
             row.cancelBtn:Show()
-            row.ageText:SetText("Pending")
-            row.ageText:SetTextColor(0.2, 1, 0.2)
+            if group.isRoleFilled then
+                row.ageText:SetText("Filled")
+                row.ageText:SetTextColor(1.0, 0.82, 0.30)
+                row.cancelBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Role Filled - Cancel Application", 1, 0.82, 0.30)
+                    GameTooltip:Show()
+                end)
+            else
+                row.ageText:SetText("Pending")
+                row.ageText:SetTextColor(0.2, 1, 0.2)
+                row.cancelBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Cancel Application", 1, 0.2, 0.2)
+                    GameTooltip:Show()
+                end)
+            end
         else
             row.applyBtn:Show()
             row.cancelBtn:Hide()

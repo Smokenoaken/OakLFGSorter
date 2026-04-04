@@ -78,6 +78,15 @@ local function BuildRegionInfo(code, realmName)
     }
 end
 
+local function GetFallbackHomeRegionCode()
+    local currentRegion = GetCurrentRegion and tonumber(GetCurrentRegion()) or nil
+    if currentRegion == 3 then
+        return "EU"
+    end
+
+    return "NA"
+end
+
 local function MapPremadeRegionsCode(regionCode)
     local code = strlower(tostring(regionCode or ""))
     if code == "" then
@@ -103,14 +112,13 @@ function addonTable.ShouldShowRegions()
     return OakLFGSorterDB and OakLFGSorterDB.showRegions == true
 end
 
-function addonTable.GetRegionInfoFromLeaderName(leaderName)
-    local realmName = GetRealmFromLeaderName(leaderName)
+local function GetRegionInfoForRealm(realmName, lookupToken)
     if realmName == "" then
         return nil
     end
 
-    if PremadeRegions and type(PremadeRegions.GetRegion) == "function" then
-        local ok, regionCode = pcall(PremadeRegions.GetRegion, leaderName)
+    if lookupToken and PremadeRegions and type(PremadeRegions.GetRegion) == "function" then
+        local ok, regionCode = pcall(PremadeRegions.GetRegion, lookupToken)
         if ok then
             local mappedCode = MapPremadeRegionsCode(regionCode)
             if mappedCode then
@@ -128,7 +136,45 @@ function addonTable.GetRegionInfoFromLeaderName(leaderName)
         return BuildRegionInfo("LATAM", realmName)
     end
 
-    return BuildRegionInfo("NA", realmName)
+    return BuildRegionInfo(GetFallbackHomeRegionCode(), realmName)
+end
+
+function addonTable.GetRegionInfoFromLeaderName(leaderName)
+    local realmName = GetRealmFromLeaderName(leaderName)
+    return GetRegionInfoForRealm(realmName, leaderName)
+end
+
+function addonTable.GetPlayerRegionInfo()
+    local realmName = GetNormalizedRealmName and GetNormalizedRealmName() or ""
+    if realmName == "" then
+        return nil
+    end
+
+    local playerName = UnitName and UnitName("player") or nil
+    local lookupToken = playerName and (playerName .. "-" .. realmName) or realmName
+    return GetRegionInfoForRealm(realmName, lookupToken)
+end
+
+function addonTable.ResultMatchesPlayerRegion(result)
+    if not (OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true) then
+        return true
+    end
+
+    local playerRegion = addonTable.GetPlayerRegionInfo and addonTable.GetPlayerRegionInfo()
+    if not playerRegion then
+        return true
+    end
+
+    local resultRegion = type(result) == "table" and result.regionInfo or nil
+    if not resultRegion and type(result) == "table" and addonTable.GetRegionInfoFromLeaderName then
+        resultRegion = addonTable.GetRegionInfoFromLeaderName(result.leaderName or result.leaderNameRaw)
+    end
+
+    if not resultRegion then
+        return true
+    end
+
+    return tostring(resultRegion.code or "") == tostring(playerRegion.code or "")
 end
 
 function addonTable.GetRegionBadgeMarkup(regionInfo)

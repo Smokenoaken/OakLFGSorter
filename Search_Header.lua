@@ -229,7 +229,7 @@ supportersPanel:HookScript("OnHide", RefreshSearchRIOAnchor)
 
 searchOptions.panel = CreateFrame("Frame", nil, OAK_SEARCH, "BackdropTemplate")
 addonTable.SearchOptionsPanel = searchOptions.panel
-searchOptions.panel:SetSize(205, 444)
+searchOptions.panel:SetSize(205, 476)
 searchOptions.panel:SetPoint("TOPLEFT", OAK_SEARCH, "TOPRIGHT", -2, 0)
 searchOptions.panel:Hide()
 searchOptions.panel:SetFrameLevel(OAK_SEARCH:GetFrameLevel() - 1)
@@ -296,21 +296,67 @@ searchOptions.regionBox:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 
+searchOptions.lowLatencyBox = CreateFrame("Button", nil, searchOptions.panel, "BackdropTemplate")
+searchOptions.lowLatencyBox:SetSize(16, 16)
+searchOptions.lowLatencyBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
+searchOptions.lowLatencyBox:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -74)
+searchOptions.lowLatencyLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+searchOptions.lowLatencyLabel:SetPoint("LEFT", searchOptions.lowLatencyBox, "RIGHT", 8, 0)
+searchOptions.lowLatencyLabel:SetText("Low Latency")
+
+function searchOptions.lowLatencyBox:SetState(isActive)
+    if isActive then
+        self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
+        self:SetBackdropBorderColor(0, 0, 0, 1)
+        searchOptions.lowLatencyLabel:SetTextColor(1, 1, 1)
+    else
+        self:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        self:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
+        searchOptions.lowLatencyLabel:SetTextColor(0.84, 0.84, 0.84)
+    end
+end
+
+searchOptions.lowLatencyBox:SetScript("OnClick", function(self)
+    OakLFGSorterDB.lowLatencyOnly = not (OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true)
+    if addonTable.SyncSharedLowLatencyToggles then
+        addonTable.SyncSharedLowLatencyToggles()
+    else
+        self:SetState(OakLFGSorterDB.lowLatencyOnly == true)
+        if OAK_SEARCH.UpdateDisplay then
+            OAK_SEARCH:UpdateDisplay()
+        end
+        if addonTable.UpdateDisplay then
+            addonTable.UpdateDisplay()
+        end
+    end
+end)
+searchOptions.lowLatencyBox:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Low Latency", 1, 1, 1)
+    GameTooltip:AddLine("Show only groups from your own region to avoid higher-latency listings.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+searchOptions.lowLatencyBox:SetScript("OnLeave", function(self)
+    self:SetState(OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true)
+    GameTooltip:Hide()
+end)
+
 searchOptions.fontLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.fontLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -74)
+searchOptions.fontLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -106)
 searchOptions.fontLabel:SetText("Addon Font")
 searchOptions.fontButton, searchOptions.fontList = addonTable.CreateFontDropdown(searchOptions.panel, 170)
-searchOptions.fontButton:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -94)
+searchOptions.fontButton:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -126)
 
 searchOptions.fontSizeLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.fontSizeLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -130)
+searchOptions.fontSizeLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -162)
 searchOptions.fontSizeLabel:SetText("Font Size")
 searchOptions.fontSizeValue = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.fontSizeValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -130)
+searchOptions.fontSizeValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -162)
 
 searchOptions.fontSizeSlider = CreateFrame("Slider", nil, searchOptions.panel, "BackdropTemplate")
 searchOptions.fontSizeSlider:SetSize(170, 10)
-searchOptions.fontSizeSlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -152)
+searchOptions.fontSizeSlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -184)
 searchOptions.fontSizeSlider:SetMinMaxValues(10, 18)
 searchOptions.fontSizeSlider:SetValueStep(1)
 searchOptions.fontSizeSlider:SetObeyStepOnDrag(true)
@@ -342,14 +388,14 @@ searchOptions.fontSizeSlider:SetScript("OnLeave", function()
 end)
 
 searchOptions.opacityLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.opacityLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -188)
+searchOptions.opacityLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -220)
 searchOptions.opacityLabel:SetText("Window Opacity")
 searchOptions.opacityValue = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.opacityValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -188)
+searchOptions.opacityValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -220)
 
 searchOptions.opacitySlider = CreateFrame("Slider", nil, searchOptions.panel, "BackdropTemplate")
 searchOptions.opacitySlider:SetSize(170, 10)
-searchOptions.opacitySlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -210)
+searchOptions.opacitySlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -242)
 searchOptions.opacitySlider:SetMinMaxValues(0.35, 1.0)
 searchOptions.opacitySlider:SetValueStep(0.05)
 searchOptions.opacitySlider:SetObeyStepOnDrag(true)
@@ -384,6 +430,9 @@ searchOptions.fontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetF
 function searchOptions:Refresh()
     if self.regionBox and self.regionBox.SetState then
         self.regionBox:SetState(OakLFGSorterDB and OakLFGSorterDB.showRegions == true)
+    end
+    if self.lowLatencyBox and self.lowLatencyBox.SetState then
+        self.lowLatencyBox:SetState(OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true)
     end
     if self.fontButton and self.fontButton.RefreshSelection then
         self.fontButton:RefreshSelection()

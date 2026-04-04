@@ -447,6 +447,9 @@ function addonTable.ResultPassesBrowserFilters(result)
     if filters.hideDeclined and string.find(result.applicationStatus or "", "declined", 1, true) then
         return false
     end
+    if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(result) then
+        return false
+    end
 
     if not ResultMatchesSelectedActivities(result, filters) then
         return false
@@ -639,6 +642,13 @@ local function ShowRegionToggleTooltip(owner)
     GameTooltip:Show()
 end
 
+local function ShowLowLatencyToggleTooltip(owner)
+    GameTooltip:SetOwner(owner, "ANCHOR_TOP")
+    GameTooltip:SetText("Low Latency", 1, 1, 1)
+    GameTooltip:AddLine("Show only groups from your own region to avoid higher-latency listings.", 1, 1, 1, true)
+    GameTooltip:Show()
+end
+
 local function ToggleSharedRegionSetting()
     OakLFGSorterDB.showRegions = not (OakLFGSorterDB and OakLFGSorterDB.showRegions == true)
     SyncSharedRegionToggleBoxes()
@@ -648,6 +658,28 @@ local function ToggleSharedRegionSetting()
     if addonTable.UpdateDisplay then
         addonTable.UpdateDisplay()
     end
+end
+
+local function SyncSharedLowLatencySetting()
+    if addonTable.RefreshOptionsPanel then
+        addonTable.RefreshOptionsPanel()
+    end
+    if addonTable.RefreshSearchOptionsPanel then
+        addonTable.RefreshSearchOptionsPanel()
+    end
+    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH.UpdateDisplay then
+        addonTable.OAK_SEARCH:UpdateDisplay()
+    end
+    if addonTable.UpdateDisplay then
+        addonTable.UpdateDisplay()
+    end
+end
+
+addonTable.SyncSharedLowLatencyToggles = SyncSharedLowLatencySetting
+
+local function ToggleSharedLowLatencySetting()
+    OakLFGSorterDB.lowLatencyOnly = not (OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true)
+    SyncSharedLowLatencySetting()
 end
 
 local toggleFiltersBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Filters", 60)
@@ -1570,7 +1602,7 @@ end)
 
 local optionsPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.OptionsPanel = optionsPanel
-optionsPanel:SetSize(205, 410)
+optionsPanel:SetSize(205, 442)
 optionsPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
 optionsPanel:Hide()
 optionsPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1)
@@ -1617,21 +1649,38 @@ optionsRegionBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
+local optionsLowLatencyBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
+optionsLowLatencyBox:SetSize(16, 16)
+optionsLowLatencyBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+optionsLowLatencyBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -74)
+local optionsLowLatencyLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsLowLatencyLabel:SetPoint("LEFT", optionsLowLatencyBox, "RIGHT", 8, 0)
+optionsLowLatencyLabel:SetText("Low Latency")
+optionsLowLatencyBox:SetScript("OnClick", ToggleSharedLowLatencySetting)
+optionsLowLatencyBox:SetScript("OnEnter", function(self)
+    ApplySharedRegionToggleVisual(self, optionsLowLatencyLabel, OakLFGSorterDB.lowLatencyOnly == true)
+    ShowLowLatencyToggleTooltip(self)
+end)
+optionsLowLatencyBox:SetScript("OnLeave", function()
+    ApplySharedRegionToggleVisual(optionsLowLatencyBox, optionsLowLatencyLabel, OakLFGSorterDB.lowLatencyOnly == true)
+    GameTooltip:Hide()
+end)
+
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -74)
+optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -106)
 optionsFontLabel:SetText("Addon Font")
 local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
-optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -94)
+optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -126)
 
 local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -130)
+optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -162)
 optionsFontSizeLabel:SetText("Font Size")
 local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -130)
+optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -162)
 
 local optionsFontSizeSlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsFontSizeSlider:SetSize(170, 10)
-optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -152)
+optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -184)
 optionsFontSizeSlider:SetMinMaxValues(10, 18)
 optionsFontSizeSlider:SetValueStep(1)
 optionsFontSizeSlider:SetObeyStepOnDrag(true)
@@ -1664,14 +1713,14 @@ end)
 optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
 
 local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -188)
+optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -220)
 optionsOpacityLabel:SetText("Window Opacity")
 local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -188)
+optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -220)
 
 local optionsOpacitySlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsOpacitySlider:SetSize(170, 10)
-optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -210)
+optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -242)
 optionsOpacitySlider:SetMinMaxValues(0.35, 1.0)
 optionsOpacitySlider:SetValueStep(0.05)
 optionsOpacitySlider:SetObeyStepOnDrag(true)
@@ -1704,6 +1753,7 @@ optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWind
 
 local function RefreshOptionsPanel()
     ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
+    ApplySharedRegionToggleVisual(optionsLowLatencyBox, optionsLowLatencyLabel, OakLFGSorterDB.lowLatencyOnly == true)
     if optionsFontButton and optionsFontButton.RefreshSelection then
         optionsFontButton:RefreshSelection()
     end

@@ -8,6 +8,7 @@ if OakLFGSorterDB.muteApplicantPing == nil then OakLFGSorterDB.muteApplicantPing
 if OakLFGSorterDB.hideNotes == nil then OakLFGSorterDB.hideNotes = false end
 if OakLFGSorterDB.autoHideFilledRoles == nil then OakLFGSorterDB.autoHideFilledRoles = false end
 if OakLFGSorterDB.showRegions == nil then OakLFGSorterDB.showRegions = false end
+if OakLFGSorterDB.lowLatencyOnly == nil then OakLFGSorterDB.lowLatencyOnly = false end
 if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "OakUI Font" end
 if OakLFGSorterDB.fontSize == nil then OakLFGSorterDB.fontSize = 12 end
 if OakLFGSorterDB.windowOpacity == nil then OakLFGSorterDB.windowOpacity = 0.85 end
@@ -141,6 +142,131 @@ function addonTable.SetWindowOpacity(value)
     alpha = math.max(0.35, math.min(1.0, alpha))
     OakLFGSorterDB.windowOpacity = alpha
     addonTable.ApplyWindowOpacity()
+end
+
+local ROLE_REMAINING_KEYS = {
+    TANK = "TANK_REMAINING",
+    HEALER = "HEALER_REMAINING",
+    DAMAGER = "DAMAGER_REMAINING",
+}
+
+local function GetAssignedRoleForUnit(unit)
+    local assignedRole = UnitGroupRolesAssigned(unit)
+    if assignedRole and assignedRole ~= "NONE" then
+        return assignedRole
+    end
+
+    if unit == "player" and GetSpecialization and GetSpecializationInfo and GetSpecializationRoleByID then
+        local specIndex = GetSpecialization()
+        if specIndex then
+            local specID = GetSpecializationInfo(specIndex)
+            local specRole = specID and GetSpecializationRoleByID(specID)
+            if specRole then
+                return specRole
+            end
+        end
+    end
+
+    return "DAMAGER"
+end
+
+function addonTable.GetCurrentPartyRoleCounts()
+    local counts = { TANK = 0, HEALER = 0, DAMAGER = 0 }
+    local total = 1
+
+    local playerRole = GetAssignedRoleForUnit("player")
+    counts[playerRole] = (counts[playerRole] or 0) + 1
+
+    if IsInGroup() then
+        total = GetNumGroupMembers()
+        for i = 1, total do
+            local unit = IsInRaid() and ("raid" .. i) or ("party" .. i)
+            if UnitExists(unit) and not UnitIsUnit(unit, "player") then
+                local role = GetAssignedRoleForUnit(unit)
+                counts[role] = (counts[role] or 0) + 1
+            end
+        end
+    end
+
+    return counts, total
+end
+
+local function GetResultMaxPlayers(result)
+    if type(result) ~= "table" then
+        return 0
+    end
+
+    return tonumber(result.maxPlayers)
+        or tonumber(result.activityInfo and (result.activityInfo.maxNumPlayers or result.activityInfo.maxPlayers))
+        or 0
+end
+
+local function GetResultMemberTotal(result)
+    if type(result) ~= "table" then
+        return 0
+    end
+
+    return tonumber(result.numMembers or result.members) or 0
+end
+
+function addonTable.DoesResultFitCurrentParty(result)
+    if type(result) ~= "table" then
+        return false
+    end
+
+    local partyRoles, partySize = addonTable.GetCurrentPartyRoleCounts()
+    local maxPlayers = GetResultMaxPlayers(result)
+    local memberTotal = GetResultMemberTotal(result)
+
+    if maxPlayers > 0 and memberTotal + partySize > maxPlayers then
+        return false
+    end
+
+    local memberCounts = result.memberCounts
+    local hasRemainingData = false
+    if type(memberCounts) == "table" then
+        for role, amount in pairs(partyRoles) do
+            if amount > 0 then
+                local remaining = tonumber(memberCounts[ROLE_REMAINING_KEYS[role]])
+                if remaining ~= nil then
+                    hasRemainingData = true
+                    if remaining < amount then
+                        return false
+                    end
+                end
+            end
+        end
+    end
+
+    if hasRemainingData then
+        return true
+    end
+
+    if maxPlayers == 5 then
+        local roleCounts = result.roleCounts or {}
+        local tanks = tonumber(roleCounts.TANK) or tonumber(result.tanks) or 0
+        local heals = tonumber(roleCounts.HEALER) or tonumber(result.heals) or 0
+        local dps = tonumber(roleCounts.DAMAGER) or tonumber(result.dps) or 0
+        return (tanks + (partyRoles.TANK or 0) <= 1)
+            and (heals + (partyRoles.HEALER or 0) <= 1)
+            and (dps + (partyRoles.DAMAGER or 0) <= 3)
+            and (memberTotal + partySize <= 5)
+    end
+
+    return true
+end
+
+function addonTable.IsAppliedRoleFilled(result)
+    if type(result) ~= "table" then
+        return false
+    end
+
+    local isApplied = result.isApplied == true
+    if not isApplied and addonTable.IsAppliedStatus then
+        isApplied = addonTable.IsAppliedStatus(result.applicationStatus)
+    end
+
+    return isApplied and not addonTable.DoesResultFitCurrentParty(result)
 end
 
 local registeredFontDropdowns = {}
