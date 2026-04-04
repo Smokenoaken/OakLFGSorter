@@ -3088,13 +3088,6 @@ local function GetSearchResultActivityID(searchResultInfo)
     end
 
     local activityID = tonumber(searchResultInfo.activityID)
-    if not activityID and securecallfunction then
-        activityID = securecallfunction(function(info)
-            local ids = info and info.activityIDs
-            local firstID = type(ids) == "table" and ids[1] or nil
-            return tonumber(firstID)
-        end, searchResultInfo)
-    end
     if activityID == 0 then
         activityID = nil
     end
@@ -3478,6 +3471,90 @@ local function AddRoleClassLines(tooltip, roleLabel, roleKey, members)
     end
 end
 
+local function GetTooltipMemberSpecLabel(member)
+    if type(member) ~= "table" then
+        return ""
+    end
+
+    if member.specID and addonTable.SpecShortNames and addonTable.SpecShortNames[member.specID] then
+        return addonTable.SpecShortNames[member.specID]
+    end
+
+    local specName = tostring(member.specName or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if specName ~= "" then
+        return specName
+    end
+
+    return ""
+end
+
+local function AddDungeonMemberSpecLines(tooltip, group)
+    if type(tooltip) ~= "table" or type(group) ~= "table" then
+        return
+    end
+
+    local members = group.memberDetails or {}
+    if #members == 0 then
+        return
+    end
+
+    local roleOrder = {
+        { key = "TANK", label = "Tank" },
+        { key = "HEALER", label = "Healer" },
+        { key = "DAMAGER", label = "Damage" },
+    }
+
+    local addedAny = false
+    for _, roleInfo in ipairs(roleOrder) do
+        local lines = {}
+        for _, member in ipairs(members) do
+            local role = member.role or "DAMAGER"
+            if role ~= "TANK" and role ~= "HEALER" then
+                role = "DAMAGER"
+            end
+            if role == roleInfo.key then
+                local specLabel = GetTooltipMemberSpecLabel(member)
+                local classLabel = LOCALIZED_CLASS_NAMES_MALE[member.class or ""] or LOCALIZED_CLASS_NAMES_FEMALE[member.class or ""] or (member.class or "")
+                local display = specLabel ~= "" and specLabel or classLabel
+                if display ~= "" then
+                    table.insert(lines, addonTable.ApplyClassColor(display, member.class or ""))
+                end
+            end
+        end
+
+        if #lines > 0 then
+            if not addedAny then
+                tooltip:AddLine(" ")
+                tooltip:AddLine("Members", 1, 0.82, 0)
+                addedAny = true
+            end
+            tooltip:AddLine(roleInfo.label .. ": " .. table.concat(lines, ", "), 1, 1, 1, true)
+        end
+    end
+end
+
+local function TryShowNativeDungeonSearchTooltip(tooltip, owner, group)
+    if type(tooltip) ~= "table" or type(group) ~= "table" then
+        return false
+    end
+
+    if not (group.id and LFGListUtil_SetSearchEntryTooltip) then
+        return false
+    end
+
+    tooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    tooltip:ClearLines()
+
+    local ok = pcall(LFGListUtil_SetSearchEntryTooltip, tooltip, group.id)
+    if not ok or tooltip:NumLines() <= 0 then
+        return false
+    end
+
+    AddDungeonMemberSpecLines(tooltip, group)
+    tooltip:Show()
+    return true
+end
+
 local function GetCondensedSearchTitle(title)
     local text = tostring(title or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if text == "" then
@@ -3769,6 +3846,12 @@ local function CreateRow(index)
                     GameTooltip:AddDoubleLine("Bracket:", grp.pvpBracket, 1, 1, 1, 1, 1, 1)
                 end
             else
+                if (mode == "dungeon" or mode == "mythic_plus") and not (IsShiftKeyDown and IsShiftKeyDown()) then
+                    if TryShowNativeDungeonSearchTooltip(GameTooltip, self, grp) then
+                        return
+                    end
+                end
+
                 local regionBadge = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(grp.regionInfo) or ""
                 local titleText = (grp.displayTitle ~= "" and grp.displayTitle or "--")
                 GameTooltip:AddLine((regionBadge ~= "" and (regionBadge .. " " .. titleText)) or titleText, 1, 1, 1)
@@ -4289,92 +4372,96 @@ local function FetchSearchResults()
             
             if activityInfo then
                 local mode, rating, ratingLabel, pvpRating, pvpBracket = GetResultRatingData(searchResultInfo, activityInfo)
+                local maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or tonumber(searchResultInfo.numMembers) or 0
+                local numMembers = tonumber(searchResultInfo.numMembers) or 0
 
-                local hasLust, hasBrez = false, false
-                local memberDetails = (addonTable.GetSearchResultPlayers and addonTable.GetSearchResultPlayers(resultID, tonumber(searchResultInfo.numMembers) or 0)) or {}
-                local playstyleValue, playstyleLabel = GetSearchPlaystyle(searchResultInfo, activityInfo)
-                local regionInfo = addonTable.GetRegionInfoFromLeaderName and addonTable.GetRegionInfoFromLeaderName(searchResultInfo.leaderName) or nil
+                if not ((mode == "dungeon" or mode == "mythic_plus") and maxPlayers > 0 and numMembers >= maxPlayers) then
+                    local hasLust, hasBrez = false, false
+                    local memberDetails = (addonTable.GetSearchResultPlayers and addonTable.GetSearchResultPlayers(resultID, tonumber(searchResultInfo.numMembers) or 0)) or {}
+                    local playstyleValue, playstyleLabel = GetSearchPlaystyle(searchResultInfo, activityInfo)
+                    local regionInfo = addonTable.GetRegionInfoFromLeaderName and addonTable.GetRegionInfoFromLeaderName(searchResultInfo.leaderName) or nil
 
-                for _, member in ipairs(memberDetails) do
-                    local c = member.class and string.upper(member.class)
-                    if c == "MAGE" or c == "SHAMAN" or c == "HUNTER" or c == "EVOKER" then hasLust = true end
-                    if c == "DEATHKNIGHT" or c == "DRUID" or c == "WARLOCK" or c == "PALADIN" then hasBrez = true end
+                    for _, member in ipairs(memberDetails) do
+                        local c = member.class and string.upper(member.class)
+                        if c == "MAGE" or c == "SHAMAN" or c == "HUNTER" or c == "EVOKER" then hasLust = true end
+                        if c == "DEATHKNIGHT" or c == "DRUID" or c == "WARLOCK" or c == "PALADIN" then hasBrez = true end
+                    end
+                    
+                    local isFriend = (searchResultInfo.numBNetFriends or 0) > 0 or (searchResultInfo.numCharFriends or 0) > 0 or (searchResultInfo.numGuildMates or 0) > 0
+                    local rawFullName = activityInfo.fullName or "Unknown"
+                    local dName = string.gsub(rawFullName, "%s*%(.+%)", "")
+                    local keyLevel = ParseListedKeyLevel(searchResultInfo, activityInfo)
+
+                    local rioProfile = nil
+                    if searchResultInfo.leaderName and RaiderIO and RaiderIO.GetProfile then
+                        local charName, charRealm = strsplit("-", searchResultInfo.leaderName)
+                        if not charRealm or charRealm == "" then charRealm = GetNormalizedRealmName() or "" end
+                        rioProfile = RaiderIO.GetProfile(charName, charRealm)
+                    end
+
+                    local raidProgress = nil
+                    if rioProfile and addonTable.GetRaidProgressSummary then
+                        raidProgress = addonTable.GetRaidProgressSummary(rioProfile, dName)
+                    end
+                    local raidListing = nil
+                    if (mode == "raid" or mode == "legacy_raid") and addonTable.GetRaidListingInfo then
+                        raidListing = addonTable.GetRaidListingInfo(resultID, searchResultInfo, activityInfo)
+                    end
+
+                    if (mode == "rated_pvp" or mode == "pvp") and not pvpBracket then
+                        pvpBracket = GetSearchPvpBracketLabel(nil, activityInfo, searchResultInfo.numMembers)
+                    end
+
+                    local displayActivity = dName
+                    if mode == "rated_pvp" or mode == "pvp" then
+                        displayActivity = pvpBracket or dName
+                    elseif mode == "open_world" then
+                        displayActivity = GetSearchFilterLabel(mode, activityInfo)
+                    end
+
+                    table.insert(searchResults, {
+                        id = resultID,
+                        dungeon = displayActivity,
+                        filterLabel = GetSearchFilterLabel(mode, activityInfo, pvpBracket),
+                        activityGroupID = tonumber(activityInfo.groupFinderActivityGroupID or activityInfo.groupID) or 0,
+                        activityName = rawFullName,
+                        difficulty = activityInfo.difficultyID or 0,
+                        difficultyToken = GetSearchDifficultyToken(activityInfo),
+                        mode = mode,
+                        leaderNameRaw = searchResultInfo.leaderName or "Unknown",
+                        isFriend = isFriend,
+                        isApplied = isApplied,
+                        isDeclined = isDeclined,
+                        tanks = memberCounts.TANK or 0,
+                        heals = memberCounts.HEALER or 0,
+                        dps = memberCounts.DAMAGER or 0,
+                        memberCounts = memberCounts,
+                        hasLust = hasLust,
+                        hasBrez = hasBrez,
+                        members = numMembers,
+                        memberDetails = memberDetails,
+                        maxPlayers = maxPlayers,
+                        ilvl = searchResultInfo.requiredItemLevel or 0,
+                        rating = rating or 0,
+                        ratingLabel = ratingLabel,
+                        pvpRating = pvpRating or 0,
+                        pvpBracket = pvpBracket,
+                        age = searchResultInfo.age or 0,
+                        titleStr = tostring(searchResultInfo.name or searchResultInfo.comment or ""),
+                        displayTitle = GetCondensedSearchTitle(searchResultInfo.name or searchResultInfo.comment or ""),
+                        commentStr = tostring(searchResultInfo.comment or ""),
+                        playstyleValue = playstyleValue,
+                        playstyleLabel = playstyleLabel,
+                        keyLevel = keyLevel,
+                        rioProfile = rioProfile,
+                        raidProgress = raidProgress,
+                        raidListing = raidListing,
+                        regionInfo = regionInfo,
+                        numBNetFriends = tonumber(searchResultInfo.numBNetFriends) or 0,
+                        numCharFriends = tonumber(searchResultInfo.numCharFriends) or 0,
+                        numGuildMates = tonumber(searchResultInfo.numGuildMates) or 0,
+                    })
                 end
-                
-                local isFriend = (searchResultInfo.numBNetFriends or 0) > 0 or (searchResultInfo.numCharFriends or 0) > 0 or (searchResultInfo.numGuildMates or 0) > 0
-                local rawFullName = activityInfo.fullName or "Unknown"
-                local dName = string.gsub(rawFullName, "%s*%(.+%)", "")
-                local keyLevel = ParseListedKeyLevel(searchResultInfo, activityInfo)
-
-                local rioProfile = nil
-                if searchResultInfo.leaderName and RaiderIO and RaiderIO.GetProfile then
-                    local charName, charRealm = strsplit("-", searchResultInfo.leaderName)
-                    if not charRealm or charRealm == "" then charRealm = GetNormalizedRealmName() or "" end
-                    rioProfile = RaiderIO.GetProfile(charName, charRealm)
-                end
-
-                local raidProgress = nil
-                if rioProfile and addonTable.GetRaidProgressSummary then
-                    raidProgress = addonTable.GetRaidProgressSummary(rioProfile, dName)
-                end
-                local raidListing = nil
-                if (mode == "raid" or mode == "legacy_raid") and addonTable.GetRaidListingInfo then
-                    raidListing = addonTable.GetRaidListingInfo(resultID, searchResultInfo, activityInfo)
-                end
-
-                if (mode == "rated_pvp" or mode == "pvp") and not pvpBracket then
-                    pvpBracket = GetSearchPvpBracketLabel(nil, activityInfo, searchResultInfo.numMembers)
-                end
-
-                local displayActivity = dName
-                if mode == "rated_pvp" or mode == "pvp" then
-                    displayActivity = pvpBracket or dName
-                elseif mode == "open_world" then
-                    displayActivity = GetSearchFilterLabel(mode, activityInfo)
-                end
-
-                table.insert(searchResults, {
-                    id = resultID,
-                    dungeon = displayActivity,
-                    filterLabel = GetSearchFilterLabel(mode, activityInfo, pvpBracket),
-                    activityGroupID = tonumber(activityInfo.groupFinderActivityGroupID or activityInfo.groupID) or 0,
-                    activityName = rawFullName,
-                    difficulty = activityInfo.difficultyID or 0,
-                    difficultyToken = GetSearchDifficultyToken(activityInfo),
-                    mode = mode,
-                    leaderNameRaw = searchResultInfo.leaderName or "Unknown",
-                    isFriend = isFriend,
-                    isApplied = isApplied,
-                    isDeclined = isDeclined,
-                    tanks = memberCounts.TANK or 0,
-                    heals = memberCounts.HEALER or 0,
-                    dps = memberCounts.DAMAGER or 0,
-                    memberCounts = memberCounts,
-                    hasLust = hasLust,
-                    hasBrez = hasBrez,
-                    members = searchResultInfo.numMembers or 0,
-                    memberDetails = memberDetails,
-                    maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or tonumber(searchResultInfo.numMembers) or 0,
-                    ilvl = searchResultInfo.requiredItemLevel or 0,
-                    rating = rating or 0,
-                    ratingLabel = ratingLabel,
-                    pvpRating = pvpRating or 0,
-                    pvpBracket = pvpBracket,
-                    age = searchResultInfo.age or 0,
-                    titleStr = tostring(searchResultInfo.name or searchResultInfo.comment or ""),
-                    displayTitle = GetCondensedSearchTitle(searchResultInfo.name or searchResultInfo.comment or ""),
-                    commentStr = tostring(searchResultInfo.comment or ""),
-                    playstyleValue = playstyleValue,
-                    playstyleLabel = playstyleLabel,
-                    keyLevel = keyLevel,
-                    rioProfile = rioProfile,
-                    raidProgress = raidProgress,
-                    raidListing = raidListing,
-                    regionInfo = regionInfo,
-                    numBNetFriends = tonumber(searchResultInfo.numBNetFriends) or 0,
-                    numCharFriends = tonumber(searchResultInfo.numCharFriends) or 0,
-                    numGuildMates = tonumber(searchResultInfo.numGuildMates) or 0,
-                })
             end
         end
     end

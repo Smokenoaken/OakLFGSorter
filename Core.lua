@@ -54,18 +54,16 @@ local function GetActiveListingActivityID()
     end
 
     local activityID = tonumber(entryInfo.activityID)
-    if not activityID and securecallfunction then
-        activityID = securecallfunction(function(info)
-            local ids = info and info.activityIDs
-            local firstID = type(ids) == "table" and ids[1] or nil
-            return tonumber(firstID)
-        end, entryInfo)
-    end
     if activityID == 0 then
         activityID = nil
     end
 
-    return activityID, entryInfo
+    local safeEntryInfo = {
+        activityID = activityID,
+        name = tostring(entryInfo.name or ""),
+    }
+
+    return activityID, safeEntryInfo
 end
 
 local function GetListingMode(activityInfo)
@@ -160,13 +158,6 @@ local function GetSearchResultActivityID(resultInfo)
     end
 
     local activityID = tonumber(resultInfo.activityID)
-    if not activityID and securecallfunction then
-        activityID = securecallfunction(function(info)
-            local ids = info and info.activityIDs
-            local firstID = type(ids) == "table" and ids[1] or nil
-            return tonumber(firstID)
-        end, resultInfo)
-    end
     if activityID == 0 then
         activityID = nil
     end
@@ -254,11 +245,15 @@ local function GetSearchResultPlayers(searchResultID, numMembers)
         local role
         local classFile
         local playerName
+        local specID
+        local specName
 
         if type(playerInfo) == "table" then
             playerName = playerInfo.name
             classFile = playerInfo.classFilename or playerInfo.classFileName
             role = playerInfo.assignedRole
+            specID = tonumber(playerInfo.specID or playerInfo.specializationID or playerInfo.specId)
+            specName = playerInfo.specName or playerInfo.specializationName or playerInfo.localizedSpecName
             if type(playerInfo.lfgRoles) == "table" then
                 if playerInfo.lfgRoles.tank then
                     role = "TANK"
@@ -287,6 +282,8 @@ local function GetSearchResultPlayers(searchResultID, numMembers)
                 name = playerName,
                 role = role,
                 class = classFile or "UNKNOWN",
+                specID = specID,
+                specName = specName,
             })
         end
     end
