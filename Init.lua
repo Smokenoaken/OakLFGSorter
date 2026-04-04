@@ -1,5 +1,47 @@
 local addonName, addonTable = ...
 
+addonTable.Locales = addonTable.Locales or {}
+
+local currentLocale = GetLocale and GetLocale() or "enUS"
+
+function addonTable.NewLocale(localeName, isDefault)
+    if not localeName then
+        return nil
+    end
+
+    if not isDefault and localeName ~= currentLocale then
+        return nil
+    end
+
+    local localeTable = addonTable.Locales[localeName]
+    if not localeTable then
+        localeTable = {}
+        addonTable.Locales[localeName] = localeTable
+    end
+
+    if isDefault then
+        addonTable.DefaultLocale = localeTable
+    end
+
+    return localeTable
+end
+
+addonTable.L = setmetatable({}, {
+    __index = function(_, key)
+        local active = addonTable.Locales[currentLocale]
+        if active and active[key] ~= nil then
+            return active[key]
+        end
+
+        local fallback = addonTable.DefaultLocale
+        if fallback and fallback[key] ~= nil then
+            return fallback[key]
+        end
+
+        return key
+    end,
+})
+
 -- Global Database
 OakLFGSorterDB = OakLFGSorterDB or {}
 if OakLFGSorterDB.autoOpen == nil then OakLFGSorterDB.autoOpen = true end

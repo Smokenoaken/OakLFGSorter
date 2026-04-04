@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = addonTable.L
 
 local OAK_SEARCH = addonTable.OAK_SEARCH
 local theme = addonTable.SearchFrameTheme or {}
@@ -56,7 +57,7 @@ titleHeaderBg:SetColorTexture(unpack(OAK_COLOR_PANE))
 
 OAK_SEARCH.title = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 OAK_SEARCH.title:SetPoint("LEFT", titleHeader, "LEFT", 15, 0)
-OAK_SEARCH.title:SetText(ApplyClassColor("OAK", playerClass) .. " LFG Sorter")
+OAK_SEARCH.title:SetText(ApplyClassColor("OAK", playerClass) .. " " .. L["LFG Sorter"])
 
 local scaleSlider = CreateFrame("Slider", "OakSearchScaleSlider", titleHeader, "BackdropTemplate")
 scaleSlider:SetSize(80, 10)
@@ -75,7 +76,7 @@ scaleThumb:SetSize(10, 14)
 scaleSlider:SetThumbTexture(scaleThumb)
 local scaleLabel = scaleSlider:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 scaleLabel:SetPoint("RIGHT", scaleSlider, "LEFT", -8, 0)
-scaleLabel:SetText("Scale")
+scaleLabel:SetText(L["Scale"])
 
 local scaleEdit = CreateFrame("EditBox", nil, titleHeader, "BackdropTemplate")
 scaleEdit:SetSize(35, 18)
@@ -104,13 +105,13 @@ closeBtn:SetScript("OnLeave", function()
     closeBg:SetColorTexture(0, 0, 0, 0)
 end)
 
-local scaleReset = CreateFlatButton(titleHeader, "Reset", 45)
+local scaleReset = CreateFlatButton(titleHeader, L["Reset"], 45)
 scaleReset:SetPoint("LEFT", scaleEdit, "RIGHT", 5, 0)
 
-local toggleFiltersBtn = CreateFlatButton(titleHeader, "Filters", 60)
+local toggleFiltersBtn = CreateFlatButton(titleHeader, L["Filters"], 60)
 toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -10, 0)
 
-local refreshBtn = CreateFlatButton(titleHeader, "Refresh", 60)
+local refreshBtn = CreateFlatButton(titleHeader, L["Refresh"], 60)
 refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
 
 OAK_SEARCH.footerText = OAK_SEARCH:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
@@ -128,7 +129,7 @@ elseif GetAddOnMetadata then
 end
 OAK_SEARCH.footerVersionText:SetText(string.format("|cff888888v%s|r", addonVersion))
 
-local suppBtn = CreateFlatButton(OAK_SEARCH, "Supporters & Links", 150)
+local suppBtn = CreateFlatButton(OAK_SEARCH, L["Supporters & Links"], 150)
 suppBtn:SetPoint("BOTTOM", OAK_SEARCH, "BOTTOM", -14, 2)
 
 local optionsBtn = addonTable.CreateCogButton(OAK_SEARCH, 22)
@@ -136,8 +137,8 @@ optionsBtn:SetPoint("LEFT", suppBtn, "RIGHT", 6, 0)
 optionsBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Options", 1, 1, 1)
-    GameTooltip:AddLine("Open shared Oak display options.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Options"], 1, 1, 1)
+    GameTooltip:AddLine(L["Open shared Oak display options."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsBtn:SetScript("OnLeave", function(self)
@@ -244,7 +245,7 @@ searchOptions.panel:HookScript("OnHide", RefreshSearchRIOAnchor)
 
 searchOptions.title = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 searchOptions.title:SetPoint("TOP", searchOptions.panel, "TOP", 0, -10)
-searchOptions.title:SetText("Options")
+searchOptions.title:SetText(L["Options"])
 searchOptions.title:SetTextColor(classColor.r, classColor.g, classColor.b)
 
 searchOptions.regionBox = CreateFrame("Button", nil, searchOptions.panel, "BackdropTemplate")
@@ -253,7 +254,7 @@ searchOptions.regionBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, ed
 searchOptions.regionBox:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -42)
 searchOptions.regionLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 searchOptions.regionLabel:SetPoint("LEFT", searchOptions.regionBox, "RIGHT", 8, 0)
-searchOptions.regionLabel:SetText("Show Regions")
+searchOptions.regionLabel:SetText(L["Show Regions"])
 
 function searchOptions.regionBox:SetState(isActive)
     if isActive then
@@ -287,7 +288,7 @@ end)
 searchOptions.regionBox:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Regions", 1, 1, 1)
+    GameTooltip:SetText(L["Regions"], 1, 1, 1)
     GameTooltip:AddLine("Show visible region abbreviations in Oak rows and add region details to tooltips.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
@@ -302,7 +303,7 @@ searchOptions.lowLatencyBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX
 searchOptions.lowLatencyBox:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -74)
 searchOptions.lowLatencyLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 searchOptions.lowLatencyLabel:SetPoint("LEFT", searchOptions.lowLatencyBox, "RIGHT", 8, 0)
-searchOptions.lowLatencyLabel:SetText("Low Latency")
+searchOptions.lowLatencyLabel:SetText(L["Low Latency"])
 
 function searchOptions.lowLatencyBox:SetState(isActive)
     if isActive then
@@ -333,7 +334,7 @@ end)
 searchOptions.lowLatencyBox:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Low Latency", 1, 1, 1)
+    GameTooltip:SetText(L["Low Latency"], 1, 1, 1)
     GameTooltip:AddLine("Show only groups from your own region to avoid higher-latency listings.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
@@ -344,13 +345,13 @@ end)
 
 searchOptions.fontLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 searchOptions.fontLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -106)
-searchOptions.fontLabel:SetText("Addon Font")
+searchOptions.fontLabel:SetText(L["Addon Font"])
 searchOptions.fontButton, searchOptions.fontList = addonTable.CreateFontDropdown(searchOptions.panel, 170)
 searchOptions.fontButton:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -126)
 
 searchOptions.fontSizeLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 searchOptions.fontSizeLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -162)
-searchOptions.fontSizeLabel:SetText("Font Size")
+searchOptions.fontSizeLabel:SetText(L["Font Size"])
 searchOptions.fontSizeValue = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 searchOptions.fontSizeValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -162)
 
@@ -379,7 +380,7 @@ searchOptions.fontSizeSlider:SetScript("OnValueChanged", function(_, value)
 end)
 searchOptions.fontSizeSlider:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Font Size", 1, 1, 1)
+    GameTooltip:SetText(L["Font Size"], 1, 1, 1)
     GameTooltip:AddLine("Adjust the base Oak font size used throughout the addon.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
@@ -389,7 +390,7 @@ end)
 
 searchOptions.opacityLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 searchOptions.opacityLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -220)
-searchOptions.opacityLabel:SetText("Window Opacity")
+searchOptions.opacityLabel:SetText(L["Window Opacity"])
 searchOptions.opacityValue = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 searchOptions.opacityValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -220)
 
@@ -417,7 +418,7 @@ searchOptions.opacitySlider:SetScript("OnValueChanged", function(_, value)
 end)
 searchOptions.opacitySlider:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Window Opacity", 1, 1, 1)
+    GameTooltip:SetText(L["Window Opacity"], 1, 1, 1)
     GameTooltip:AddLine("Adjust the background opacity used by Oak's windows and side panels.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
@@ -478,7 +479,7 @@ end
 
 local suppTitle = supportersPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 suppTitle:SetPoint("TOP", supportersPanel, "TOP", 0, -10)
-suppTitle:SetText("Supporters")
+suppTitle:SetText(L["Supporters"])
 suppTitle:SetTextColor(classColor.r, classColor.g, classColor.b)
 
 local suppScroll = CreateFrame("ScrollFrame", "OakSearchSupportersScroll", supportersPanel, "UIPanelScrollFrameTemplate")

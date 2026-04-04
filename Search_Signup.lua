@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = addonTable.L
 
 local OAK_SEARCH = addonTable and addonTable.OAK_SEARCH
 if not OAK_SEARCH then
@@ -328,12 +329,12 @@ quickSignupToggleBox:SetPoint("LEFT", quickSignupBar, "LEFT", 10, 0)
 
 local quickSignupToggleLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 quickSignupToggleLabel:SetPoint("LEFT", quickSignupToggleBox, "RIGHT", 6, 0)
-quickSignupToggleLabel:SetText("Quick Sign Up")
+quickSignupToggleLabel:SetText(L["Quick Sign Up"])
 quickSignupToggleLabel:SetTextColor(1, 1, 1)
 
 local quickSignupRolesLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 quickSignupRolesLabel:SetPoint("LEFT", quickSignupToggleLabel, "RIGHT", 10, 0)
-quickSignupRolesLabel:SetText("Roles")
+quickSignupRolesLabel:SetText(L["Roles"])
 quickSignupRolesLabel:SetTextColor(0.85, 0.85, 0.85)
 
 quickSignupState.roleButtons.TANK = CreateQuickSignupRoleButton(quickSignupBar, "TANK", "Use Tank for Quick Sign Up and preselect Tank in the Blizzard popup")
@@ -342,7 +343,7 @@ quickSignupState.roleButtons.DAMAGER = CreateQuickSignupRoleButton(quickSignupBa
 
 local persistNoteToggleLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 persistNoteToggleLabel:SetPoint("RIGHT", quickSignupBar, "RIGHT", -12, 0)
-persistNoteToggleLabel:SetText("Persist Note")
+persistNoteToggleLabel:SetText(L["Persist Note"])
 persistNoteToggleLabel:SetTextColor(0.85, 0.85, 0.85)
 
 local persistNoteToggleBox = CreateQuickSignupToggle(quickSignupBar)
@@ -355,7 +356,7 @@ persistNoteTooltipRegion:EnableMouse(true)
 
 local function ShowPersistNoteTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Persist Note", 1, 1, 1)
+    GameTooltip:SetText(L["Persist Note"], 1, 1, 1)
     GameTooltip:AddLine("Oak can preserve Blizzard's last sign-up note between applications.", 1, 1, 1, true)
     GameTooltip:AddLine("To set or change that note, open the normal Blizzard sign-up popup, type your note there, and sign up once.", 0.9, 0.9, 0.9, true)
     GameTooltip:AddLine("Tip: disable Quick Sign Up or hold Shift while clicking Apply to open the popup.", 0.8, 0.8, 0.8, true)
@@ -406,7 +407,7 @@ quickSignupToggleBox:SetScript("OnClick", function(self)
 end)
 quickSignupToggleBox:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Quick Sign Up", 1, 1, 1)
+    GameTooltip:SetText(L["Quick Sign Up"], 1, 1, 1)
     GameTooltip:AddLine("When enabled, clicking Apply will immediately sign up using the roles shown in this bar.", 1, 1, 1, true)
     GameTooltip:AddLine("Hold Shift while clicking Apply to open the normal Blizzard popup instead.", 0.8, 0.8, 0.8, true)
     GameTooltip:Show()

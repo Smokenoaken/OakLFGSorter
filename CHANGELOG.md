@@ -1,3 +1,11 @@
+## v2.0.5
+
+- Added a localization framework with English fallback so contributors can add translations without editing logic files.
+- Added starter locale files for enUS, deDE, frFR, esES, and esMX.
+- Localized the main Oak window, search window, options panel, notes controls, and quick sign-up labels/tooltips to use the new locale system.
+- Improved native dungeon filter behavior so dungeon entries can still be selected even before Blizzard exposes a live activity ID for them.
+- Fixed native Mythic+/Mythic difficulty syncing so Oak's dungeon difficulty selection maps back to Blizzard's advanced filter more reliably.
+
 ## v2.0.4
 
 - Made the Notes column sortable while keeping it hideable in both the applicant/browser and search windows.

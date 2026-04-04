@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = addonTable.L
 
 local OAK_LFG = CreateFrame("Frame", "OakensoulLFGSorterFrame", UIParent, "BackdropTemplate")
 addonTable.OAK_LFG = OAK_LFG 
@@ -36,9 +37,9 @@ thBg:SetColorTexture(unpack(addonTable.OAK_COLOR_PANE))
 
 OAK_LFG.title = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 OAK_LFG.title:SetPoint("LEFT", titleHeader, "LEFT", 15, 0)
-OAK_LFG.title:SetText(addonTable.ApplyClassColor("OAK", addonTable.PlayerClass) .. " LFG Sorter")
-addonTable.FullTitleText = addonTable.ApplyClassColor("OAK", addonTable.PlayerClass) .. " LFG Sorter"
-addonTable.CompactTitleText = addonTable.ApplyClassColor("OAK", addonTable.PlayerClass) .. " LFG"
+OAK_LFG.title:SetText(addonTable.ApplyClassColor("OAK", addonTable.PlayerClass) .. " " .. L["LFG Sorter"])
+addonTable.FullTitleText = addonTable.ApplyClassColor("OAK", addonTable.PlayerClass) .. " " .. L["LFG Sorter"]
+addonTable.CompactTitleText = addonTable.ApplyClassColor("OAK", addonTable.PlayerClass) .. " " .. L["LFG"]
 
 -- Scale UI Elements
 local scaleSlider = CreateFrame("Slider", "OakLFGScaleSlider", titleHeader, "BackdropTemplate")
@@ -60,7 +61,7 @@ scaleSlider:SetThumbTexture(thumb)
 
 local scaleLabel = scaleSlider:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 scaleLabel:SetPoint("RIGHT", scaleSlider, "LEFT", -8, 0)
-scaleLabel:SetText("Scale")
+scaleLabel:SetText(L["Scale"])
 
 local scaleEdit = CreateFrame("EditBox", nil, titleHeader, "BackdropTemplate")
 scaleEdit:SetSize(35, 18)
@@ -72,12 +73,12 @@ scaleEdit:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_
 scaleEdit:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 scaleEdit:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
 
-local scaleReset = addonTable.CreateFlatButton(titleHeader, "Reset", 45)
+local scaleReset = addonTable.CreateFlatButton(titleHeader, L["Reset"], 45)
 scaleReset:SetPoint("LEFT", scaleEdit, "RIGHT", 5, 0)
 scaleReset:SetScript("OnEnter", function(self) 
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Reset Position & Scale", 1, 1, 1)
+    GameTooltip:SetText(L["Reset Position & Scale"], 1, 1, 1)
     GameTooltip:Show()
 end)
 scaleReset:SetScript("OnLeave", function(self) 
@@ -339,7 +340,7 @@ resizeGrip:SetScript("OnMouseDown", function(self, button)
 end)
 
 StaticPopupDialogs["OAK_LFG_URL_COPY"] = {
-    text = "Press Ctrl+C to copy the link",
+    text = L["Press Ctrl+C to copy the link"],
     hasEditBox = 1,
     button1 = OKAY,
     OnShow = function(self, data)

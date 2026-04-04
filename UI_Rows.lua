@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = addonTable.L
 local OAK_LFG = addonTable.OAK_LFG
 
 addonTable.ApplicantGroups = {}
@@ -442,13 +443,13 @@ function addonTable.UpdateHeaderVisuals()
         elseif header.sortKey == "key" then
             header.text:SetText(modeConfig.keyLabel)
         elseif isBrowser and header.sortKey == "role" then
-            header.text:SetText("Dungeon")
+            header.text:SetText(L["Dungeon"])
         elseif isBrowser and header.sortKey == "class" then
-            header.text:SetText("Title")
+            header.text:SetText(L["Title"])
         elseif isBrowser and header.sortKey == "spec" then
-            header.text:SetText("Style")
+            header.text:SetText(L["Style"])
         elseif isBrowser and header.sortKey == "ilvl" then
-            header.text:SetText("Setup")
+            header.text:SetText(L["Setup"])
         else
             header.text:SetText(header.baseText)
         end
@@ -603,16 +604,16 @@ local function GetBrowserRowColor(result, isAltColor)
     return unpack(color)
 end
 
-CreateHeader("Role", "role", C_ROLE)
-CreateHeader("Class", "class", C_CLASS) 
-CreateHeader("Spec", "spec", C_SPEC)
-CreateHeader("iLvl", "ilvl", C_ILVL)
-CreateHeader("Rating", "rating", C_RATING)
-CreateHeader("Key", "key", C_KEY)
+CreateHeader(L["Role"], "role", C_ROLE)
+CreateHeader(L["Class"], "class", C_CLASS)
+CreateHeader(L["Spec"], "spec", C_SPEC)
+CreateHeader(L["iLvl"], "ilvl", C_ILVL)
+CreateHeader(L["Rating"], "rating", C_RATING)
+CreateHeader(L["Key"], "key", C_KEY)
 
-local notesToggleBtn = addonTable.CreateFlatButton(OAK_LFG, "Notes", C_NOTE.w)
+local notesToggleBtn = addonTable.CreateFlatButton(OAK_LFG, L["Notes"], C_NOTE.w)
 notesToggleBtn:SetSize(C_NOTE.w, 22)
-local notesHeader = CreateHeader("Notes", "note", C_NOTE)
+local notesHeader = CreateHeader(L["Notes"], "note", C_NOTE)
 local noteVisibilityBtn = addonTable.CreateFlatButton(OAK_LFG, "-", 20)
 noteVisibilityBtn:SetSize(20, 22)
 
@@ -646,7 +647,7 @@ end
 local function UpdateNotesToggleVisual()
     notesToggleBtn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
     notesToggleBtn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
-    notesToggleBtn.text:SetText("Notes")
+    notesToggleBtn.text:SetText(L["Notes"])
     noteVisibilityBtn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
     noteVisibilityBtn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
     noteVisibilityBtn.text:SetText((OakLFGSorterDB and OakLFGSorterDB.hideNotes) and "+" or "-")
@@ -671,8 +672,8 @@ end)
 noteVisibilityBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Hide Notes", 1, 1, 1)
-    GameTooltip:AddLine("Collapse the Note column and shrink the sorter window.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Hide Notes"], 1, 1, 1)
+    GameTooltip:AddLine(L["Collapse the Note column and shrink the sorter window."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 noteVisibilityBtn:SetScript("OnLeave", function(self)

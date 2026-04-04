@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = addonTable.L
 local OAK_LFG = addonTable.OAK_LFG
 
 addonTable.ClassFilters = {}
@@ -682,20 +683,20 @@ local function ToggleSharedLowLatencySetting()
     SyncSharedLowLatencySetting()
 end
 
-local toggleFiltersBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Filters", 60)
+local toggleFiltersBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Filters"], 60)
 toggleFiltersBtn:SetPoint("RIGHT", addonTable.CloseButton, "LEFT", -10, 0)
 
-local refreshBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Refresh", 60)
+local refreshBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Refresh"], 60)
 refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
 
-local delistBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, "Delist", 60)
+local delistBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Delist"], 60)
 delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
 
 function addonTable.UpdateTopBarActions()
     if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
         delistBtn:Hide()
 
-        refreshBtn.text:SetText("Refresh")
+        refreshBtn.text:SetText(L["Refresh"])
         refreshBtn:SetScript("OnClick", function()
             if addonTable.FetchSearchResultData then
                 addonTable.FetchSearchResultData()
@@ -707,12 +708,12 @@ function addonTable.UpdateTopBarActions()
     else
         delistBtn:Show()
 
-        delistBtn.text:SetText("Delist")
+        delistBtn.text:SetText(L["Delist"])
         delistBtn:SetScript("OnClick", function()
             C_LFGList.RemoveListing()
         end)
 
-        refreshBtn.text:SetText("Refresh")
+        refreshBtn.text:SetText(L["Refresh"])
         refreshBtn:SetScript("OnClick", function()
             C_LFGList.RefreshApplicants()
         end)
@@ -744,7 +745,7 @@ function addonTable.UpdateTopBarLayout()
     scaleReset:ClearAllPoints()
 
     if hideNotes then
-        title:SetText(addonTable.CompactTitleText or "OAK LFG")
+        title:SetText(addonTable.CompactTitleText or ("OAK " .. L["LFG"]))
         scaleLabel:Hide()
         scaleEdit:Hide()
         scaleReset:Show()
@@ -765,7 +766,7 @@ function addonTable.UpdateTopBarLayout()
             delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -4, 0)
         end
     else
-        title:SetText(addonTable.FullTitleText or "OAK LFG Sorter")
+        title:SetText(addonTable.FullTitleText or ("OAK " .. L["LFG Sorter"]))
         scaleLabel:Show()
         scaleEdit:Show()
         scaleReset:Show()
@@ -774,7 +775,7 @@ function addonTable.UpdateTopBarLayout()
         scaleSlider:SetPoint("LEFT", title, "RIGHT", 45, 0)
         scaleEdit:SetPoint("LEFT", scaleSlider, "RIGHT", 10, 0)
         scaleReset:SetWidth(45)
-        scaleReset.text:SetText("Reset")
+        scaleReset.text:SetText(L["Reset"])
         scaleReset:SetPoint("LEFT", scaleEdit, "RIGHT", 5, 0)
 
         toggleFiltersBtn:SetWidth(60)
@@ -822,11 +823,11 @@ end)
 
 local filterTitle = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 filterTitle:SetPoint("TOP", filterPanel, "TOP", 0, -10)
-filterTitle:SetText("Filters")
+filterTitle:SetText(L["Filters"])
 filterTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
 
 local yOffset = -35
-local rolesToFilter = { {"TANK", "Tank"}, {"HEALER", "Healer"}, {"DAMAGER", "DPS"} }
+local rolesToFilter = { {"TANK", L["Tank"]}, {"HEALER", L["Healer"]}, {"DAMAGER", "DPS"} }
 
 for _, rData in ipairs(rolesToFilter) do
     local rKey, rLabel = rData[1], rData[2]
@@ -853,14 +854,14 @@ local function ApplyQuickFilter(filterMap)
 end
 
 local btnWidth = 75
-local btnAll = addonTable.CreateFlatButton(filterPanel, "All", btnWidth)
+local btnAll = addonTable.CreateFlatButton(filterPanel, L["All"], btnWidth)
 quickFilterButtons.all = btnAll
 btnAll:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, yOffset)
 btnAll:SetScript("OnClick", function()
     SetAllClassFilters(true)
 end)
 
-local btnNone = addonTable.CreateFlatButton(filterPanel, "None", btnWidth)
+local btnNone = addonTable.CreateFlatButton(filterPanel, L["None"], btnWidth)
 quickFilterButtons.none = btnNone
 btnNone:SetPoint("LEFT", btnAll, "RIGHT", 10, 0)
 btnNone:SetScript("OnClick", function()
@@ -1629,7 +1630,7 @@ end)
 
 local optionsTitle = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 optionsTitle:SetPoint("TOP", optionsPanel, "TOP", 0, -10)
-optionsTitle:SetText("Options")
+optionsTitle:SetText(L["Options"])
 optionsTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
 
 local optionsRegionBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
@@ -1638,7 +1639,7 @@ optionsRegionBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTabl
 optionsRegionBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -42)
 local optionsRegionLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 optionsRegionLabel:SetPoint("LEFT", optionsRegionBox, "RIGHT", 8, 0)
-optionsRegionLabel:SetText("Show Regions")
+optionsRegionLabel:SetText(L["Show Regions"])
 optionsRegionBox:SetScript("OnClick", ToggleSharedRegionSetting)
 optionsRegionBox:SetScript("OnEnter", function(self)
     ApplySharedRegionToggleVisual(self, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
@@ -1655,7 +1656,7 @@ optionsLowLatencyBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addon
 optionsLowLatencyBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -74)
 local optionsLowLatencyLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 optionsLowLatencyLabel:SetPoint("LEFT", optionsLowLatencyBox, "RIGHT", 8, 0)
-optionsLowLatencyLabel:SetText("Low Latency")
+optionsLowLatencyLabel:SetText(L["Low Latency"])
 optionsLowLatencyBox:SetScript("OnClick", ToggleSharedLowLatencySetting)
 optionsLowLatencyBox:SetScript("OnEnter", function(self)
     ApplySharedRegionToggleVisual(self, optionsLowLatencyLabel, OakLFGSorterDB.lowLatencyOnly == true)
@@ -1667,13 +1668,13 @@ optionsLowLatencyBox:SetScript("OnLeave", function()
 end)
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -106)
-optionsFontLabel:SetText("Addon Font")
+optionsFontLabel:SetText(L["Addon Font"])
 local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
 optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -126)
 
 local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -162)
-optionsFontSizeLabel:SetText("Font Size")
+optionsFontSizeLabel:SetText(L["Font Size"])
 local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -162)
 

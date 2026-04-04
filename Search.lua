@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = addonTable.L
 
 -- ==========================================
 -- 1. Shared Constants & Colors
@@ -237,7 +238,7 @@ end)
 
 local filterTitle = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 filterTitle:SetPoint("TOP", filterPanel, "TOP", 0, -10)
-filterTitle:SetText("Search Filters")
+filterTitle:SetText(L["Search Filters"])
 filterTitle:SetTextColor(classColor.r, classColor.g, classColor.b)
 
 local function CreateOakDropdown(parent, width, defaultText, options, callback)
@@ -409,6 +410,7 @@ local nativeSearchBoxHost
 local nativeSearchBoxOriginalState
 local nativeAutoCompleteOriginalState
 local raidRoleRangeControls = {}
+local pendingNativeActivitySelections = {}
 
 local OAK_F = {
     Difficulty = "ANY",
@@ -434,6 +436,15 @@ for _, dun in ipairs(DEFAULT_SEASON_DUNGEONS) do
 end
 for _, delve in ipairs(DEFAULT_SEASON_DELVES) do
     OAK_F.Activities[delve] = false
+end
+
+local function GetPendingNativeActivityKey(label)
+    local text = strlower(tostring(label or ""))
+    text = text:gsub("%s*%b()", "")
+    text = text:gsub("[^%w%s]", "")
+    text = text:gsub("%s+", " ")
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    return text
 end
 
 local function SearchModeUsesDifficulty(mode)
@@ -472,7 +483,7 @@ end
 
 local function GetSearchActivitySectionTitle(mode)
     if mode == "raid" then
-        return "Filter Raids"
+        return L["Filter Raids"]
     elseif mode == "delve" then
         return "Filter Delves"
     elseif mode == "mythic_plus" or mode == "dungeon" then
@@ -556,6 +567,27 @@ local function SaveAdvancedSearchFilter(mutator)
     if OAK_SEARCH and OAK_SEARCH.UpdateDisplay then
         OAK_SEARCH:UpdateDisplay()
     end
+end
+
+local function SyncNativeDifficultyFilter()
+    SaveAdvancedSearchFilter(function(state)
+        if currentSearchMode == "mythic_plus" then
+            state.difficultyNormal = nil
+            state.difficultyHeroic = nil
+            state.difficultyMythic = nil
+            state.difficultyMythicPlus = true
+            return
+        end
+
+        if currentSearchMode ~= "dungeon" then
+            return
+        end
+
+        state.difficultyNormal = (OAK_F.Difficulty == "NORMAL") and true or nil
+        state.difficultyHeroic = (OAK_F.Difficulty == "HEROIC") and true or nil
+        state.difficultyMythic = (OAK_F.Difficulty == "MYTHIC") and true or nil
+        state.difficultyMythicPlus = (OAK_F.Difficulty == "MYTHIC_PLUS") and true or nil
+    end)
 end
 
 -- Native API Syncer for Advanced Filters
@@ -777,6 +809,7 @@ end
 -- Dropdowns
 local diffDropdown = CreateOakDropdown(filterPanel, 175, "Any Difficulty", GetSearchDifficultyOptions(currentSearchMode), function(value)
     OAK_F.Difficulty = value
+    SyncNativeDifficultyFilter()
     if ApplyOakSearchQuery then
         ApplyOakSearchQuery(false)
     end
@@ -805,7 +838,7 @@ keyQueryBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 }
 keyQueryBox:SetBackdropColor(unpack(OAK_COLOR_PANE))
 keyQueryBox:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
 
-addonTable.SearchQueryButton = CreateFlatButton(filterPanel, "Search", 175)
+addonTable.SearchQueryButton = CreateFlatButton(filterPanel, L["Search"], 175)
 addonTable.SearchQueryButton:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, -116)
 addonTable.SearchQueryButton:SetScript("OnClick", function()
     if ApplyOakSearchQuery then
@@ -829,7 +862,7 @@ addonTable.SearchQueryButton:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 
-addonTable.SearchResetButton = CreateFlatButton(filterPanel, "Reset", 84)
+addonTable.SearchResetButton = CreateFlatButton(filterPanel, L["Reset"], 84)
 addonTable.SearchResetButton:SetPoint("TOPLEFT", addonTable.SearchQueryButton, "TOPRIGHT", 7, 0)
 addonTable.SearchResetButton:SetScript("OnClick", function()
     ResetSearchFilters()
@@ -935,8 +968,8 @@ local function CreateRaidRoleRangeControl(key, labelText, hintText)
     return control
 end
 
-filterPanel.raidTankRange = CreateRaidRoleRangeControl("RaidTankRange", "Tanks", "e.g. 1-2, <2, >0, 1")
-filterPanel.raidHealerRange = CreateRaidRoleRangeControl("RaidHealerRange", "Healers", "e.g. 2-4, <3, >1, 2")
+filterPanel.raidTankRange = CreateRaidRoleRangeControl("RaidTankRange", L["Tanks"], "e.g. 1-2, <2, >0, 1")
+filterPanel.raidHealerRange = CreateRaidRoleRangeControl("RaidHealerRange", L["Healers"], "e.g. 2-4, <3, >1, 2")
 filterPanel.raidDpsRange = CreateRaidRoleRangeControl("RaidDpsRange", "DPS", "e.g. 12-14, <10, >11, 13")
 
 -- Modern 2-Column Exact Layout Match
@@ -944,31 +977,31 @@ local startY = -148
 local col1X = 16
 local col2X = 110
 
-boxNeedTank = CreateOakToggleBox(filterPanel, "Need Tank", "NeedTank", true)
+boxNeedTank = CreateOakToggleBox(filterPanel, L["Need Tank"], "NeedTank", true)
 boxNeedTank:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY)
 
-boxHasTank = CreateOakToggleBox(filterPanel, "Has Tank", "HasTank", false)
+boxHasTank = CreateOakToggleBox(filterPanel, L["Has Tank"], "HasTank", false)
 boxHasTank:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col2X, startY)
 
-boxNeedHeal = CreateOakToggleBox(filterPanel, "Need Heals", "NeedHeal", true)
+boxNeedHeal = CreateOakToggleBox(filterPanel, L["Need Heals"], "NeedHeal", true)
 boxNeedHeal:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY - 22)
 
-boxHasHeal = CreateOakToggleBox(filterPanel, "Has Heals", "HasHeal", false)
+boxHasHeal = CreateOakToggleBox(filterPanel, L["Has Heals"], "HasHeal", false)
 boxHasHeal:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col2X, startY - 22)
 
-boxNeedDPS = CreateOakToggleBox(filterPanel, "Need DPS", "NeedDPS", true)
+boxNeedDPS = CreateOakToggleBox(filterPanel, L["Need DPS"], "NeedDPS", true)
 boxNeedDPS:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY - 44)
 
-boxParty = CreateOakToggleBox(filterPanel, "Party Fit", "PartyFit", false)
+boxParty = CreateOakToggleBox(filterPanel, L["Party Fit"], "PartyFit", false)
 boxParty:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col2X, startY - 44)
 
-boxLust = CreateOakToggleBox(filterPanel, "Need Lust", "NeedLust", false)
+boxLust = CreateOakToggleBox(filterPanel, L["Need Lust"], "NeedLust", false)
 boxLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY - 66)
 
-boxBrez = CreateOakToggleBox(filterPanel, "Need BRez", "NeedBrez", false)
+boxBrez = CreateOakToggleBox(filterPanel, L["Need BRez"], "NeedBrez", false)
 boxBrez:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col2X, startY - 66)
 
-filterPanel.matchMyRaidLockoutBox = CreateOakToggleBox(filterPanel, "Match My Lockout", "MatchMyRaidLockout", false)
+filterPanel.matchMyRaidLockoutBox = CreateOakToggleBox(filterPanel, L["Match My Lockout"], "MatchMyRaidLockout", false)
 filterPanel.matchMyRaidLockoutBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY - 88)
 
 divTexture = filterPanel:CreateTexture(nil, "ARTWORK")
@@ -1066,7 +1099,7 @@ nativePGFWarningText:SetJustifyV("TOP")
 nativePGFWarningText:SetTextColor(1, 0.9, 0.45)
 nativePGFWarningText:SetText("PGF detected. Blizzard dungeon filters are shared, so PGF and Oak may overwrite each other's selections.")
 
-nativeNeedsTankBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need Tank")
+nativeNeedsTankBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, L["Need Tank"])
 nativeNeedsHealBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need Healer")
 nativeNeedsDpsBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need Damage")
 nativeNeedsMyClassBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "")
@@ -1074,11 +1107,11 @@ nativeNeedsMyClassBox.labelText:SetFontObject("OakLFG_FontSmall")
 nativeNeedsMyClassBox.labelText:SetWidth(74)
 nativeNeedsMyClassBox.labelText:SetWordWrap(false)
 nativeNeedsMyClassBox.labelText:SetJustifyH("LEFT")
-nativeHasTankBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Has Tank")
+nativeHasTankBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, L["Has Tank"])
 nativeHasHealBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Has Healer")
-nativePartyBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Party Fit")
-nativeLustBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need Lust")
-nativeBrezBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, "Need BRez")
+nativePartyBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, L["Party Fit"])
+nativeLustBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, L["Need Lust"])
+nativeBrezBox = CreateStandaloneToggleBox(nativeDungeonFilterContent, L["Need BRez"])
 
 nativeMinimumRatingLabel = nativeDungeonFilterContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 nativeMinimumRatingLabel:SetText("Min Rating")
@@ -1139,6 +1172,10 @@ nativeDungeonFilterContent.selectAllButton:SetScript("OnClick", function()
     local activityIDs = {}
     for _, entry in ipairs(GetNativeDungeonActivityEntries()) do
         local groupID = tonumber(entry.groupID)
+        local key = GetPendingNativeActivityKey(entry.label)
+        if key ~= "" then
+            pendingNativeActivitySelections[key] = true
+        end
         if groupID and groupID > 0 then
             table.insert(activityIDs, groupID)
         end
@@ -1149,6 +1186,7 @@ nativeDungeonFilterContent.selectAllButton:SetScript("OnClick", function()
     end)
 end)
 nativeDungeonFilterContent.selectNoneButton:SetScript("OnClick", function()
+    wipe(pendingNativeActivitySelections)
     SaveAdvancedSearchFilter(function(state)
         state.activities = {}
     end)
@@ -1478,11 +1516,11 @@ local notesVisibilityBtn
 function OAK_SEARCH.UpdateHeaderVisuals()
     if dungeonHeader then
         if currentSearchMode == "raid" or currentSearchMode == "legacy_raid" then
-            dungeonHeader.baseText = "Raid"
+            dungeonHeader.baseText = L["Raid"]
         elseif currentSearchMode == "rated_pvp" or currentSearchMode == "pvp" or currentSearchMode == "open_world" then
             dungeonHeader.baseText = "Activity"
         else
-            dungeonHeader.baseText = "Dungeon"
+            dungeonHeader.baseText = L["Dungeon"]
         end
     end
 
@@ -1490,14 +1528,14 @@ function OAK_SEARCH.UpdateHeaderVisuals()
         if currentSearchMode == "rated_pvp" or currentSearchMode == "pvp" then
             ratingHeader.baseText = "PVP Rating"
         elseif currentSearchMode == "raid" or currentSearchMode == "legacy_raid" then
-            ratingHeader.baseText = "Kills"
+            ratingHeader.baseText = L["Kills"]
         else
-            ratingHeader.baseText = "Rating"
+            ratingHeader.baseText = L["Rating"]
         end
     end
 
     if modeHeader then
-        modeHeader.baseText = SearchUsesRaidColumns() and "Difficulty" or ""
+        modeHeader.baseText = SearchUsesRaidColumns() and L["Difficulty"] or ""
     end
 
     for _, header in ipairs(headers) do
@@ -1564,17 +1602,17 @@ local function CreateHeader(label, sortKey, width, xOffset)
     return btn
 end
 
-dungeonHeader = CreateHeader("Dungeon", "dungeon", SEARCH_LAYOUT_EXPANDED.dungeonWidth, SEARCH_LAYOUT_EXPANDED.dungeonX)
-setupHeader = CreateHeader("Comp", "members", SEARCH_LAYOUT_EXPANDED.setupWidth, SEARCH_LAYOUT_EXPANDED.setupX)
-titleHeader = CreateHeader("Title", "title", SEARCH_LAYOUT_EXPANDED.titleWidth, SEARCH_LAYOUT_EXPANDED.titleX)
+dungeonHeader = CreateHeader(L["Dungeon"], "dungeon", SEARCH_LAYOUT_EXPANDED.dungeonWidth, SEARCH_LAYOUT_EXPANDED.dungeonX)
+setupHeader = CreateHeader(L["Comp"], "members", SEARCH_LAYOUT_EXPANDED.setupWidth, SEARCH_LAYOUT_EXPANDED.setupX)
+titleHeader = CreateHeader(L["Title"], "title", SEARCH_LAYOUT_EXPANDED.titleWidth, SEARCH_LAYOUT_EXPANDED.titleX)
 modeHeader = CreateHeader("Mode", "mode", 1, SEARCH_LAYOUT_EXPANDED.titleX + SEARCH_LAYOUT_EXPANDED.titleWidth + 4)
-ratingHeader = CreateHeader("Rating", "rating", SEARCH_LAYOUT_EXPANDED.ratingWidth, SEARCH_LAYOUT_EXPANDED.ratingX)
-ageHeader = CreateHeader("Age", "age", SEARCH_LAYOUT_EXPANDED.ageWidth, SEARCH_LAYOUT_EXPANDED.ageX)
+ratingHeader = CreateHeader(L["Rating"], "rating", SEARCH_LAYOUT_EXPANDED.ratingWidth, SEARCH_LAYOUT_EXPANDED.ratingX)
+ageHeader = CreateHeader(L["Age"], "age", SEARCH_LAYOUT_EXPANDED.ageWidth, SEARCH_LAYOUT_EXPANDED.ageX)
 
-local notesToggleBtn = CreateFlatButton(OAK_SEARCH, "Notes", SEARCH_NOTE_FULL_WIDTH)
+local notesToggleBtn = CreateFlatButton(OAK_SEARCH, L["Notes"], SEARCH_NOTE_FULL_WIDTH)
 notesToggleBtn:SetHeight(22)
 notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", SEARCH_LAYOUT_EXPANDED.notesX, SEARCH_COLUMN_HEADER_Y)
-notesHeader = CreateHeader("Notes", "note", SEARCH_NOTE_FULL_WIDTH - 24, SEARCH_LAYOUT_EXPANDED.notesX)
+notesHeader = CreateHeader(L["Notes"], "note", SEARCH_NOTE_FULL_WIDTH - 24, SEARCH_LAYOUT_EXPANDED.notesX)
 notesVisibilityBtn = CreateFlatButton(OAK_SEARCH, "-", 20)
 notesVisibilityBtn:SetHeight(22)
 notesToggleBtn:SetScript("OnEnter", function(self)
@@ -1584,8 +1622,8 @@ notesToggleBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetText("Show Notes", 1, 1, 1)
         GameTooltip:AddLine("Expand the Notes column and restore the full search window width.", 1, 1, 1, true)
     else
-        GameTooltip:SetText("Hide Notes", 1, 1, 1)
-        GameTooltip:AddLine("Collapse the Notes column to make the search window more compact.", 1, 1, 1, true)
+        GameTooltip:SetText(L["Hide Notes"], 1, 1, 1)
+        GameTooltip:AddLine(L["Collapse the Notes column to make the search window more compact."], 1, 1, 1, true)
     end
     GameTooltip:Show()
 end)
@@ -1596,8 +1634,8 @@ end)
 notesVisibilityBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Hide Notes", 1, 1, 1)
-    GameTooltip:AddLine("Collapse the Notes column to make the search window more compact.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Hide Notes"], 1, 1, 1)
+    GameTooltip:AddLine(L["Collapse the Notes column to make the search window more compact."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 notesVisibilityBtn:SetScript("OnLeave", function(self)
@@ -2064,9 +2102,9 @@ addonTable.GetSearchHeaderTooltipData = function(sortKey, mode)
         end
         return "Rating", "Sort by the leader's Mythic+ rating."
     elseif sortKey == "age" then
-        return "Age", "Sort by how long ago the listing was created."
+        return L["Age"], L["Sort by how long ago the listing was created."]
     elseif sortKey == "note" then
-        return "Notes", "Sort by the listing note text."
+        return L["Notes"], L["Sort by the listing note text."]
     end
     return nil, nil
 end
@@ -2512,6 +2550,7 @@ ResetSearchFilters = function()
     OAK_F.RaidTankRange = ""
     OAK_F.RaidHealerRange = ""
     OAK_F.RaidDpsRange = ""
+    wipe(pendingNativeActivitySelections)
 
     for activityName in pairs(OAK_F.Activities) do
         OAK_F.Activities[activityName] = false
@@ -2527,6 +2566,10 @@ ResetSearchFilters = function()
         adv.hasHealer = nil
         adv.minimumRating = nil
         adv.activities = {}
+        adv.difficultyNormal = nil
+        adv.difficultyHeroic = nil
+        adv.difficultyMythic = nil
+        adv.difficultyMythicPlus = nil
         C_LFGList.SaveAdvancedFilter(adv)
     end
 
@@ -2745,10 +2788,7 @@ local function UpdateNativeDungeonFilterPane(topOffset)
                 GameTooltip:Hide()
             end)
             button:SetScript("OnClick", function(self)
-                if not self.activityGroupID or self.activityGroupID <= 0 then
-                    return
-                end
-
+                local pendingKey = GetPendingNativeActivityKey(self.entryLabel or "")
                 local isSelected = false
                 local current = GetAdvancedSearchFilter()
                 local groups = {}
@@ -2760,7 +2800,11 @@ local function UpdateNativeDungeonFilterPane(topOffset)
                         end
                     end
                 end
-                isSelected = groups[self.activityGroupID] == true
+                if self.activityGroupID and self.activityGroupID > 0 then
+                    isSelected = groups[self.activityGroupID] == true
+                elseif pendingKey ~= "" then
+                    isSelected = pendingNativeActivitySelections[pendingKey] == true
+                end
 
                 SaveAdvancedSearchFilter(function(state)
                     local nextGroups = {}
@@ -2773,10 +2817,24 @@ local function UpdateNativeDungeonFilterPane(topOffset)
                         end
                     end
 
-                    if isSelected then
-                        nextGroups[self.activityGroupID] = nil
-                    else
-                        nextGroups[self.activityGroupID] = true
+                    if self.activityGroupID and self.activityGroupID > 0 then
+                        if isSelected then
+                            nextGroups[self.activityGroupID] = nil
+                            if pendingKey ~= "" then
+                                pendingNativeActivitySelections[pendingKey] = nil
+                            end
+                        else
+                            nextGroups[self.activityGroupID] = true
+                            if pendingKey ~= "" then
+                                pendingNativeActivitySelections[pendingKey] = true
+                            end
+                        end
+                    elseif pendingKey ~= "" then
+                        if isSelected then
+                            pendingNativeActivitySelections[pendingKey] = nil
+                        else
+                            pendingNativeActivitySelections[pendingKey] = true
+                        end
                     end
 
                     state.activities = {}
@@ -2791,8 +2849,9 @@ local function UpdateNativeDungeonFilterPane(topOffset)
         end
 
         button.activityGroupID = tonumber(entry.groupID) or 0
+        button.entryLabel = entry.label
         button:SetLabel(entry.label)
-        button:SetState(button.activityGroupID > 0 and selectedActivities[button.activityGroupID] == true)
+        button:SetState((button.activityGroupID > 0 and selectedActivities[button.activityGroupID] == true) or pendingNativeActivitySelections[GetPendingNativeActivityKey(entry.label)] == true)
         button:ClearAllPoints()
         button:SetPoint("TOPLEFT", nativeDungeonFilterContent, "TOPLEFT", 5, y)
         if button.scoreText then
@@ -2823,13 +2882,11 @@ local function UpdateNativeDungeonFilterPane(topOffset)
                 button.scoreHitbox:SetShown(SearchModeShowsScoreTargets(currentSearchMode))
             end
         end
+        button:Enable()
         if button.activityGroupID > 0 then
-            button:Enable()
             button.labelText:SetTextColor(1, 1, 1)
         else
-            button:Disable()
-            button:SetState(false)
-            button.labelText:SetTextColor(0.55, 0.55, 0.55)
+            button.labelText:SetTextColor(0.65, 0.65, 0.65)
         end
         button:Show()
         if button.labelText then
@@ -2855,6 +2912,43 @@ local function UpdateNativeDungeonFilterPane(topOffset)
     end
 
     nativeDungeonFilterContent:SetHeight(math.max(1, -y + 8))
+
+    local hasPendingResolutions = false
+    for _, entry in ipairs(activityEntries) do
+        local pendingKey = GetPendingNativeActivityKey(entry.label)
+        if pendingNativeActivitySelections[pendingKey] and tonumber(entry.groupID or 0) > 0 then
+            hasPendingResolutions = true
+            break
+        end
+    end
+
+    if hasPendingResolutions then
+        SaveAdvancedSearchFilter(function(state)
+            local nextGroups = {}
+            if type(state.activities) == "table" then
+                for _, groupID in ipairs(state.activities) do
+                    local numericID = tonumber(groupID)
+                    if numericID and numericID > 0 then
+                        nextGroups[numericID] = true
+                    end
+                end
+            end
+
+            for _, entry in ipairs(activityEntries) do
+                local pendingKey = GetPendingNativeActivityKey(entry.label)
+                local groupID = tonumber(entry.groupID) or 0
+                if pendingNativeActivitySelections[pendingKey] and groupID > 0 then
+                    nextGroups[groupID] = true
+                end
+            end
+
+            state.activities = {}
+            for groupID in pairs(nextGroups) do
+                table.insert(state.activities, groupID)
+            end
+            table.sort(state.activities)
+        end)
+    end
 end
 
 local function GetResultRatingData(searchResultInfo, activityInfo)
@@ -3045,6 +3139,9 @@ UpdateSearchFilterPane = function()
     end
     diffDropdown:SetOptions(GetSearchDifficultyOptions(currentSearchMode))
     diffDropdown:SetValue(OAK_F.Difficulty)
+    if SearchModeUsesNativeDungeonFilters(currentSearchMode) then
+        SyncNativeDifficultyFilter()
+    end
     local queryLabel, queryHint = GetSearchQueryLabel(currentSearchMode)
     keyRangeLabel:SetText(queryLabel)
     keyRangeHint:SetText(queryHint)
