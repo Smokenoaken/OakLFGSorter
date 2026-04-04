@@ -1,3 +1,9 @@
+## v2.0.4
+
+- Made the Notes column sortable while keeping it hideable in both the applicant/browser and search windows.
+- Added raid role range filters for Tanks, Healers, and DPS, including friendlier single-number minimum matching.
+- Cleaned up the raid search filter layout so the new role filters fit cleanly in the panel.
+
 ## v2.0.3
 
 - Added a Filled state for applied groups that no longer fit your role or party

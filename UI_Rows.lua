@@ -612,21 +612,44 @@ CreateHeader("Key", "key", C_KEY)
 
 local notesToggleBtn = addonTable.CreateFlatButton(OAK_LFG, "Notes", C_NOTE.w)
 notesToggleBtn:SetSize(C_NOTE.w, 22)
+local notesHeader = CreateHeader("Notes", "note", C_NOTE)
+local noteVisibilityBtn = addonTable.CreateFlatButton(OAK_LFG, "-", 20)
+noteVisibilityBtn:SetSize(20, 22)
 
 local function UpdateNotesToggleLayout()
     local noteColumn = GetCurrentNoteColumn()
-    local toggleWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and 75 or noteColumn.w
     local xOffset = noteColumn.x
+    local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
 
-    notesToggleBtn:ClearAllPoints()
-    notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", xOffset, HEADER_TOP_OFFSET)
-    notesToggleBtn:SetWidth(toggleWidth)
+    if hideNotes then
+        notesToggleBtn:ClearAllPoints()
+        notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", xOffset, HEADER_TOP_OFFSET)
+        notesToggleBtn:SetWidth(75)
+        notesToggleBtn:Show()
+        notesHeader:Hide()
+        noteVisibilityBtn:Hide()
+    else
+        local headerWidth = math.max(40, noteColumn.w - 24)
+        notesHeader:SetWidth(headerWidth)
+        notesHeader:ClearAllPoints()
+        notesHeader:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", xOffset, HEADER_TOP_OFFSET)
+        notesHeader:Show()
+
+        noteVisibilityBtn:ClearAllPoints()
+        noteVisibilityBtn:SetPoint("TOPLEFT", notesHeader, "TOPRIGHT", 4, 0)
+        noteVisibilityBtn:Show()
+
+        notesToggleBtn:Hide()
+    end
 end
 
 local function UpdateNotesToggleVisual()
     notesToggleBtn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
     notesToggleBtn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
-    notesToggleBtn.text:SetText((OakLFGSorterDB and OakLFGSorterDB.hideNotes) and "Notes" or "Hide Notes")
+    notesToggleBtn.text:SetText("Notes")
+    noteVisibilityBtn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
+    noteVisibilityBtn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    noteVisibilityBtn.text:SetText((OakLFGSorterDB and OakLFGSorterDB.hideNotes) and "+" or "-")
 end
 
 notesToggleBtn:SetScript("OnEnter", function(self)
@@ -642,6 +665,17 @@ notesToggleBtn:SetScript("OnEnter", function(self)
     GameTooltip:Show()
 end)
 notesToggleBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+noteVisibilityBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Hide Notes", 1, 1, 1)
+    GameTooltip:AddLine("Collapse the Note column and shrink the sorter window.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+noteVisibilityBtn:SetScript("OnLeave", function(self)
     self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
     GameTooltip:Hide()
 end)
@@ -1278,6 +1312,10 @@ end
 
 notesToggleBtn:SetScript("OnClick", function()
     OakLFGSorterDB.hideNotes = not OakLFGSorterDB.hideNotes
+    addonTable.ApplyHideNotesLayout(true)
+end)
+noteVisibilityBtn:SetScript("OnClick", function()
+    OakLFGSorterDB.hideNotes = true
     addonTable.ApplyHideNotesLayout(true)
 end)
 

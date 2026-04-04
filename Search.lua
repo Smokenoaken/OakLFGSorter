@@ -408,6 +408,7 @@ local nativePGFWarningText
 local nativeSearchBoxHost
 local nativeSearchBoxOriginalState
 local nativeAutoCompleteOriginalState
+local raidRoleRangeControls = {}
 
 local OAK_F = {
     Difficulty = "ANY",
@@ -421,6 +422,9 @@ local OAK_F = {
     PartyFit = false,
     MatchMyRaidLockout = false,
     RaidBossesRange = "",
+    RaidTankRange = "",
+    RaidHealerRange = "",
+    RaidDpsRange = "",
     SearchQuery = "",
     Activities = {},
 }
@@ -877,6 +881,63 @@ filterPanel.raidBossRangeResetButton:SetScript("OnLeave", function(self)
     self:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
     GameTooltip:Hide()
 end)
+
+local function CreateRaidRoleRangeControl(key, labelText, hintText)
+    local control = {}
+    control.label = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    control.label:SetText(labelText)
+    control.label:SetTextColor(1, 1, 1)
+
+    control.hint = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    control.hint:SetText(hintText)
+    control.hint:SetTextColor(0.72, 0.72, 0.72)
+
+    control.box = CreateFrame("EditBox", nil, filterPanel, "BackdropTemplate")
+    control.box:SetSize(120, 20)
+    control.box:SetAutoFocus(false)
+    control.box:SetFontObject("OakLFG_FontRegular")
+    control.box:SetJustifyH("CENTER")
+    control.box:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
+    control.box:SetBackdropColor(unpack(OAK_COLOR_BG))
+    control.box:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+
+    control.resetButton = CreateFlatButton(filterPanel, "R", 20)
+    control.resetButton:SetHeight(20)
+
+    local function Commit()
+        OAK_F[key] = control.box:GetText() or ""
+        OAK_SEARCH:UpdateDisplay()
+    end
+
+    control.box:SetScript("OnEnterPressed", function(self)
+        Commit()
+        self:ClearFocus()
+    end)
+    control.box:SetScript("OnEditFocusLost", Commit)
+    control.resetButton:SetScript("OnClick", function()
+        OAK_F[key] = ""
+        control.box:SetText("")
+        OAK_SEARCH:UpdateDisplay()
+    end)
+    control.resetButton:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("Reset " .. labelText, 1, 1, 1)
+        GameTooltip:AddLine("Clears this raid role range without resetting the rest of your filters.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    control.resetButton:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+        GameTooltip:Hide()
+    end)
+
+    table.insert(raidRoleRangeControls, control)
+    return control
+end
+
+filterPanel.raidTankRange = CreateRaidRoleRangeControl("RaidTankRange", "Tanks", "e.g. 1-2, <2, >0, 1")
+filterPanel.raidHealerRange = CreateRaidRoleRangeControl("RaidHealerRange", "Healers", "e.g. 2-4, <3, >1, 2")
+filterPanel.raidDpsRange = CreateRaidRoleRangeControl("RaidDpsRange", "DPS", "e.g. 12-14, <10, >11, 13")
 
 -- Modern 2-Column Exact Layout Match
 local startY = -148
@@ -1395,6 +1456,7 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
             valA, valB = grpA.rating, grpB.rating
         end
     elseif sortBy == "age" then valA, valB = grpA.age, grpB.age
+    elseif sortBy == "note" then valA, valB = grpA.commentStr or "", grpB.commentStr or ""
     else valA, valB = grpA.id, grpB.id end 
     
     if valA ~= valB then
@@ -1410,6 +1472,8 @@ local titleHeader
 local modeHeader
 local ratingHeader
 local ageHeader
+local notesHeader
+local notesVisibilityBtn
 
 function OAK_SEARCH.UpdateHeaderVisuals()
     if dungeonHeader then
@@ -1510,6 +1574,9 @@ ageHeader = CreateHeader("Age", "age", SEARCH_LAYOUT_EXPANDED.ageWidth, SEARCH_L
 local notesToggleBtn = CreateFlatButton(OAK_SEARCH, "Notes", SEARCH_NOTE_FULL_WIDTH)
 notesToggleBtn:SetHeight(22)
 notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", SEARCH_LAYOUT_EXPANDED.notesX, SEARCH_COLUMN_HEADER_Y)
+notesHeader = CreateHeader("Notes", "note", SEARCH_NOTE_FULL_WIDTH - 24, SEARCH_LAYOUT_EXPANDED.notesX)
+notesVisibilityBtn = CreateFlatButton(OAK_SEARCH, "-", 20)
+notesVisibilityBtn:SetHeight(22)
 notesToggleBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -1523,6 +1590,17 @@ notesToggleBtn:SetScript("OnEnter", function(self)
     GameTooltip:Show()
 end)
 notesToggleBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+notesVisibilityBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Hide Notes", 1, 1, 1)
+    GameTooltip:AddLine("Collapse the Notes column to make the search window more compact.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+notesVisibilityBtn:SetScript("OnLeave", function(self)
     self:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
     GameTooltip:Hide()
 end)
@@ -1561,10 +1639,30 @@ local function UpdateSearchHeaderVisuals()
     ageHeader:ClearAllPoints()
     ageHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.ageX, SEARCH_COLUMN_HEADER_Y)
 
-    notesToggleBtn:SetWidth(layout.notesWidth)
-    notesToggleBtn.text:SetText((OakLFGSorterDB and OakLFGSorterDB.searchHideNotes) and "Notes" or "Hide Notes")
-    notesToggleBtn:ClearAllPoints()
-    notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.notesX, SEARCH_COLUMN_HEADER_Y)
+    if OakLFGSorterDB and OakLFGSorterDB.searchHideNotes then
+        notesToggleBtn:SetWidth(layout.notesWidth)
+        notesToggleBtn.text:SetText("Notes")
+        notesToggleBtn:ClearAllPoints()
+        notesToggleBtn:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.notesX, SEARCH_COLUMN_HEADER_Y)
+        notesToggleBtn:Show()
+        notesHeader:Hide()
+        if notesHeader.hitbox then
+            notesHeader.hitbox:Hide()
+        end
+        notesVisibilityBtn:Hide()
+    else
+        local headerWidth = math.max(40, layout.notesWidth - 24)
+        notesHeader:SetWidth(headerWidth)
+        notesHeader:ClearAllPoints()
+        notesHeader:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", layout.notesX, SEARCH_COLUMN_HEADER_Y)
+        notesHeader:Show()
+        notesVisibilityBtn:SetWidth(20)
+        notesVisibilityBtn.text:SetText("-")
+        notesVisibilityBtn:ClearAllPoints()
+        notesVisibilityBtn:SetPoint("TOPLEFT", notesHeader, "TOPRIGHT", 4, 0)
+        notesVisibilityBtn:Show()
+        notesToggleBtn:Hide()
+    end
 
     for _, header in ipairs(headers) do
         if header.hitbox then
@@ -1915,6 +2013,35 @@ local function NormalizeScoreTargetLabel(label)
     return normalized
 end
 
+local function GetLocalizedSeasonDungeonLabels()
+    if not (C_ChallengeMode and C_ChallengeMode.GetMapTable and C_ChallengeMode.GetMapUIInfo) then
+        return DEFAULT_SEASON_DUNGEONS
+    end
+
+    local labels = {}
+    local seen = {}
+    local mapIDs = C_ChallengeMode.GetMapTable()
+    if type(mapIDs) ~= "table" then
+        return DEFAULT_SEASON_DUNGEONS
+    end
+
+    for _, mapID in ipairs(mapIDs) do
+        local name = C_ChallengeMode.GetMapUIInfo(mapID)
+        local cleanName = GetRaidFilterLabel({ fullName = name })
+        local key = NormalizeScoreTargetLabel(cleanName)
+        if cleanName ~= "" and key ~= "" and not seen[key] then
+            seen[key] = true
+            table.insert(labels, cleanName)
+        end
+    end
+
+    if #labels > 0 then
+        return labels
+    end
+
+    return DEFAULT_SEASON_DUNGEONS
+end
+
 addonTable.GetSearchHeaderTooltipData = function(sortKey, mode)
     if sortKey == "dungeon" then
         if mode == "raid" or mode == "legacy_raid" then
@@ -1938,6 +2065,8 @@ addonTable.GetSearchHeaderTooltipData = function(sortKey, mode)
         return "Rating", "Sort by the leader's Mythic+ rating."
     elseif sortKey == "age" then
         return "Age", "Sort by how long ago the listing was created."
+    elseif sortKey == "note" then
+        return "Notes", "Sort by the listing note text."
     end
     return nil, nil
 end
@@ -2279,9 +2408,10 @@ GetNativeDungeonActivityEntries = function()
     local defaultOrder = {}
     local cachedGroups = nativeDungeonFilterContent and nativeDungeonFilterContent.activityGroupCache or {}
     local scoreTargets = SearchModeShowsScoreTargets(currentSearchMode) and addonTable.GetMythicPlusScoreTargets and addonTable.GetMythicPlusScoreTargets() or nil
+    local defaultSeasonDungeons = GetLocalizedSeasonDungeonLabels()
 
     if currentSearchMode == "mythic_plus" or currentSearchMode == "dungeon" then
-        for index, label in ipairs(DEFAULT_SEASON_DUNGEONS) do
+        for index, label in ipairs(defaultSeasonDungeons) do
             local normalizedLabel = NormalizeScoreTargetLabel(label)
             defaultOrder[normalizedLabel] = index
             seen[normalizedLabel] = {
@@ -2290,6 +2420,35 @@ GetNativeDungeonActivityEntries = function()
                 scoreTarget = scoreTargets and scoreTargets[normalizedLabel] or nil,
             }
             table.insert(entries, seen[normalizedLabel])
+        end
+    end
+
+    local context = addonTable.UpdateSearchContext and addonTable.UpdateSearchContext() or nil
+    local categoryID = context and (context.categoryID or context.selectedCategoryID) or nil
+    local groupID = context and context.groupID or nil
+    if categoryID and groupID and C_LFGList and C_LFGList.GetAvailableActivities then
+        local success, activityIDs = pcall(C_LFGList.GetAvailableActivities, categoryID, groupID, Enum and Enum.LFGListFilter and Enum.LFGListFilter.CurrentSeason or 0x40)
+        if success and type(activityIDs) == "table" then
+            for _, activityID in ipairs(activityIDs) do
+                local activityInfo = C_LFGList.GetActivityInfoTable(activityID)
+                local label = GetRaidFilterLabel(activityInfo)
+                local key = NormalizeScoreTargetLabel(label)
+                local resolvedGroupID = tonumber(activityInfo and (activityInfo.groupFinderActivityGroupID or activityInfo.groupID)) or 0
+                if key ~= "" and resolvedGroupID > 0 then
+                    cachedGroups[key] = resolvedGroupID
+                    if seen[key] then
+                        seen[key].groupID = seen[key].groupID or resolvedGroupID
+                    else
+                        local entry = {
+                            label = label,
+                            groupID = resolvedGroupID,
+                            scoreTarget = scoreTargets and scoreTargets[key] or nil,
+                        }
+                        seen[key] = entry
+                        table.insert(entries, entry)
+                    end
+                end
+            end
         end
     end
 
@@ -2350,6 +2509,9 @@ ResetSearchFilters = function()
     OAK_F.PartyFit = false
     OAK_F.MatchMyRaidLockout = false
     OAK_F.RaidBossesRange = ""
+    OAK_F.RaidTankRange = ""
+    OAK_F.RaidHealerRange = ""
+    OAK_F.RaidDpsRange = ""
 
     for activityName in pairs(OAK_F.Activities) do
         OAK_F.Activities[activityName] = false
@@ -2410,6 +2572,37 @@ local function ParseRaidBossRangeExpression(text)
     end
 
     return nil, nil
+end
+
+local function ParseMinimumFriendlyRangeExpression(text)
+    local raw = tostring(text or "")
+    raw = raw:gsub("%s+", "")
+    if raw == "" then
+        return nil, nil
+    end
+
+    local minValue, maxValue = ParseRaidBossRangeExpression(raw)
+    if raw:match("^%-?%d+$") then
+        return tonumber(raw), nil
+    end
+
+    return minValue, maxValue
+end
+
+local function ResultMatchesNumericRange(value, expression, bareNumberMeansMinimum)
+    local minValue, maxValue
+    if bareNumberMeansMinimum then
+        minValue, maxValue = ParseMinimumFriendlyRangeExpression(expression)
+    else
+        minValue, maxValue = ParseRaidBossRangeExpression(expression)
+    end
+    if minValue and value < minValue then
+        return false
+    end
+    if maxValue and value > maxValue then
+        return false
+    end
+    return true
 end
 
 local function UpdateNativeDungeonFilterPane(topOffset)
@@ -2768,7 +2961,7 @@ local function GetCurrentSearchActivityLabels()
     local seen = {}
 
     if currentSearchMode == "mythic_plus" then
-        for _, label in ipairs(DEFAULT_SEASON_DUNGEONS) do
+        for _, label in ipairs(GetLocalizedSeasonDungeonLabels()) do
             if not seen[label] then
                 seen[label] = true
                 table.insert(labels, label)
@@ -2839,6 +3032,9 @@ UpdateSearchFilterPane = function()
     local showDifficulty = SearchModeUsesDifficulty(currentSearchMode)
     local showActivityFilters = SearchModeUsesActivityFilters(currentSearchMode)
     local showRaidBossRange = currentSearchMode == "raid" or currentSearchMode == "legacy_raid"
+    local showRaidRoleRanges = showRaidBossRange
+    local showRaidUtilityToggles = showRaidBossRange
+    local showRoleNeedToggles = not showRaidBossRange
 
     if not showSearchQuery then
         OAK_F.SearchQuery = ""
@@ -2862,6 +3058,12 @@ UpdateSearchFilterPane = function()
     SetControlVisible(filterPanel.raidBossRangeHint, showRaidBossRange)
     SetControlVisible(filterPanel.raidBossRangeBox, showRaidBossRange)
     SetControlVisible(filterPanel.raidBossRangeResetButton, showRaidBossRange)
+    for _, control in ipairs(raidRoleRangeControls) do
+        SetControlVisible(control.label, showRaidRoleRanges)
+        SetControlVisible(control.hint, showRaidRoleRanges)
+        SetControlVisible(control.box, showRaidRoleRanges)
+        SetControlVisible(control.resetButton, showRaidRoleRanges)
+    end
     if showSearchQuery and filterPanel:IsShown() then
         if nativeSearchHost.AttachNativeSearchBoxToOak then
             nativeSearchHost.AttachNativeSearchBoxToOak()
@@ -2896,14 +3098,23 @@ UpdateSearchFilterPane = function()
     filterPanel.raidBossRangeLabel:ClearAllPoints()
     filterPanel.raidBossRangeLabel:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryLabelTopY)
     filterPanel.raidBossRangeHint:ClearAllPoints()
-    filterPanel.raidBossRangeHint:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryHintTopY)
+    filterPanel.raidBossRangeHint:SetPoint("LEFT", filterPanel.raidBossRangeLabel, "RIGHT", 8, 0)
     filterPanel.raidBossRangeBox:ClearAllPoints()
-    filterPanel.raidBossRangeBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY)
+    filterPanel.raidBossRangeBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY + 8)
     if not filterPanel.raidBossRangeBox:HasFocus() then
         filterPanel.raidBossRangeBox:SetText(OAK_F.RaidBossesRange or "")
     end
     filterPanel.raidBossRangeResetButton:ClearAllPoints()
     filterPanel.raidBossRangeResetButton:SetPoint("LEFT", filterPanel.raidBossRangeBox, "RIGHT", 6, 0)
+    if not filterPanel.raidTankRange.box:HasFocus() then
+        filterPanel.raidTankRange.box:SetText(OAK_F.RaidTankRange or "")
+    end
+    if not filterPanel.raidHealerRange.box:HasFocus() then
+        filterPanel.raidHealerRange.box:SetText(OAK_F.RaidHealerRange or "")
+    end
+    if not filterPanel.raidDpsRange.box:HasFocus() then
+        filterPanel.raidDpsRange.box:SetText(OAK_F.RaidDpsRange or "")
+    end
     addonTable.SearchQueryButton:ClearAllPoints()
     addonTable.SearchResetButton:ClearAllPoints()
 
@@ -2958,15 +3169,15 @@ UpdateSearchFilterPane = function()
     addonTable.SearchQueryButton:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, searchButtonTopY)
     addonTable.SearchResetButton:Hide()
 
-    SetControlVisible(boxNeedTank, true)
-    SetControlVisible(boxNeedHeal, true)
-    SetControlVisible(boxNeedDPS, true)
-    SetControlVisible(boxHasTank, true)
-    SetControlVisible(boxHasHeal, true)
-    SetControlVisible(boxParty, true)
-    SetControlVisible(boxLust, true)
-    SetControlVisible(boxBrez, true)
-    SetControlVisible(filterPanel.matchMyRaidLockoutBox, showRaidBossRange)
+    SetControlVisible(boxNeedTank, showRoleNeedToggles)
+    SetControlVisible(boxNeedHeal, showRoleNeedToggles)
+    SetControlVisible(boxNeedDPS, showRoleNeedToggles)
+    SetControlVisible(boxHasTank, showRoleNeedToggles)
+    SetControlVisible(boxHasHeal, showRoleNeedToggles)
+    SetControlVisible(boxParty, showRaidUtilityToggles or not showRaidBossRange)
+    SetControlVisible(boxLust, showRaidUtilityToggles or not showRaidBossRange)
+    SetControlVisible(boxBrez, showRaidUtilityToggles or not showRaidBossRange)
+    SetControlVisible(filterPanel.matchMyRaidLockoutBox, showRaidUtilityToggles)
     boxNeedTank:SetState(OAK_F.NeedTank)
     boxHasTank:SetState(OAK_F.HasTank)
     boxNeedHeal:SetState(OAK_F.NeedHeal)
@@ -2986,34 +3197,81 @@ UpdateSearchFilterPane = function()
         baseY = showDifficulty and -78 or -46
     end
     if showRaidBossRange then
-        baseY = baseY - 36
-        baseY = baseY - 22
+        baseY = baseY - 24
+        baseY = baseY - 140
     end
 
-    boxNeedTank:ClearAllPoints()
-    boxNeedTank:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY)
-    boxHasTank:ClearAllPoints()
-    boxHasTank:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 116, baseY)
-    boxNeedHeal:ClearAllPoints()
-    boxNeedHeal:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 22)
-    boxHasHeal:ClearAllPoints()
-    boxHasHeal:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 116, baseY - 22)
-    boxNeedDPS:ClearAllPoints()
-    boxNeedDPS:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 44)
-    boxParty:ClearAllPoints()
-    boxParty:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 116, baseY - 44)
-    boxLust:ClearAllPoints()
-    boxLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 66)
-    boxBrez:ClearAllPoints()
-    boxBrez:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 116, baseY - 66)
-    filterPanel.matchMyRaidLockoutBox:ClearAllPoints()
-    filterPanel.matchMyRaidLockoutBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 88)
+    if showRaidBossRange then
+        boxParty:ClearAllPoints()
+        boxParty:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 14)
+        boxLust:ClearAllPoints()
+        boxLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 36)
+        boxBrez:ClearAllPoints()
+        boxBrez:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 104, baseY - 36)
+        filterPanel.matchMyRaidLockoutBox:ClearAllPoints()
+        filterPanel.matchMyRaidLockoutBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 58)
+
+        filterPanel.raidTankRange.label:ClearAllPoints()
+        filterPanel.raidTankRange.label:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY - 30)
+        filterPanel.raidTankRange.hint:ClearAllPoints()
+        filterPanel.raidTankRange.hint:SetPoint("LEFT", filterPanel.raidTankRange.label, "RIGHT", 8, 0)
+        filterPanel.raidTankRange.box:ClearAllPoints()
+        filterPanel.raidTankRange.box:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY - 44)
+        filterPanel.raidTankRange.resetButton:ClearAllPoints()
+        filterPanel.raidTankRange.resetButton:SetPoint("LEFT", filterPanel.raidTankRange.box, "RIGHT", 6, 0)
+
+        filterPanel.raidHealerRange.label:ClearAllPoints()
+        filterPanel.raidHealerRange.label:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY - 64)
+        filterPanel.raidHealerRange.hint:ClearAllPoints()
+        filterPanel.raidHealerRange.hint:SetPoint("LEFT", filterPanel.raidHealerRange.label, "RIGHT", 8, 0)
+        filterPanel.raidHealerRange.box:ClearAllPoints()
+        filterPanel.raidHealerRange.box:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY - 78)
+        filterPanel.raidHealerRange.resetButton:ClearAllPoints()
+        filterPanel.raidHealerRange.resetButton:SetPoint("LEFT", filterPanel.raidHealerRange.box, "RIGHT", 6, 0)
+
+        filterPanel.raidDpsRange.label:ClearAllPoints()
+        filterPanel.raidDpsRange.label:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY - 98)
+        filterPanel.raidDpsRange.hint:ClearAllPoints()
+        filterPanel.raidDpsRange.hint:SetPoint("LEFT", filterPanel.raidDpsRange.label, "RIGHT", 8, 0)
+        filterPanel.raidDpsRange.box:ClearAllPoints()
+        filterPanel.raidDpsRange.box:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, queryBoxTopY - 112)
+        filterPanel.raidDpsRange.resetButton:ClearAllPoints()
+        filterPanel.raidDpsRange.resetButton:SetPoint("LEFT", filterPanel.raidDpsRange.box, "RIGHT", 6, 0)
+
+        boxParty:ClearAllPoints()
+        boxParty:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 8)
+        boxLust:ClearAllPoints()
+        boxLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 28)
+        boxBrez:ClearAllPoints()
+        boxBrez:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 104, baseY - 28)
+        filterPanel.matchMyRaidLockoutBox:ClearAllPoints()
+        filterPanel.matchMyRaidLockoutBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 48)
+    else
+        boxNeedTank:ClearAllPoints()
+        boxNeedTank:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY)
+        boxHasTank:ClearAllPoints()
+        boxHasTank:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 116, baseY)
+        boxNeedHeal:ClearAllPoints()
+        boxNeedHeal:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 22)
+        boxHasHeal:ClearAllPoints()
+        boxHasHeal:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 116, baseY - 22)
+        boxNeedDPS:ClearAllPoints()
+        boxNeedDPS:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 44)
+        boxParty:ClearAllPoints()
+        boxParty:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 116, baseY - 44)
+        boxLust:ClearAllPoints()
+        boxLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 66)
+        boxBrez:ClearAllPoints()
+        boxBrez:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 116, baseY - 66)
+        filterPanel.matchMyRaidLockoutBox:ClearAllPoints()
+        filterPanel.matchMyRaidLockoutBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 16, baseY - 88)
+    end
     divTexture:ClearAllPoints()
-    divTexture:SetPoint("TOP", filterPanel, "TOP", 0, baseY - (showRaidBossRange and 106 or 84))
+    divTexture:SetPoint("TOP", filterPanel, "TOP", 0, baseY - (showRaidBossRange and 78 or 84))
     filterActivityTitle:ClearAllPoints()
-    filterActivityTitle:SetPoint("TOP", filterPanel, "TOPLEFT", 95, baseY - (showRaidBossRange and 116 or 94))
+    filterActivityTitle:SetPoint("TOP", filterPanel, "TOPLEFT", 95, baseY - (showRaidBossRange and 88 or 94))
     filterDungeonContainer:ClearAllPoints()
-    filterDungeonContainer:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 10, baseY - (showRaidBossRange and 128 or 106))
+    filterDungeonContainer:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 10, baseY - (showRaidBossRange and 100 or 106))
     filterDungeonContainer:SetPoint("BOTTOMRIGHT", filterPanel, "BOTTOMRIGHT", -10, 10)
 
     currentActivityFilters = showActivityFilters and GetCurrentSearchActivityLabels() or {}
@@ -3278,6 +3536,11 @@ end
 
 notesToggleBtn:SetScript("OnClick", function()
     OakLFGSorterDB.searchHideNotes = not OakLFGSorterDB.searchHideNotes
+    ApplySearchNotesLayout(true)
+    RequestUpdate()
+end)
+notesVisibilityBtn:SetScript("OnClick", function()
+    OakLFGSorterDB.searchHideNotes = true
     ApplySearchNotesLayout(true)
     RequestUpdate()
 end)
@@ -3719,6 +3982,15 @@ function OAK_SEARCH:UpdateDisplay()
             end
             if not skip and OAK_F.MatchMyRaidLockout and addonTable.ResultMatchesRaidLockout then
                 skip = not addonTable.ResultMatchesRaidLockout(group, { matchMyRaidLockout = true })
+            end
+            if not skip and not ResultMatchesNumericRange(tonumber(group.tanks) or 0, OAK_F.RaidTankRange, true) then
+                skip = true
+            end
+            if not skip and not ResultMatchesNumericRange(tonumber(group.heals) or 0, OAK_F.RaidHealerRange, true) then
+                skip = true
+            end
+            if not skip and not ResultMatchesNumericRange(tonumber(group.dps) or 0, OAK_F.RaidDpsRange, true) then
+                skip = true
             end
         end
 

@@ -598,7 +598,7 @@ local function CreateOakToggleBox(parent, sortKey, globalFiltersTable)
         self:SetState(globalFiltersTable[sortKey])
         RefreshFilters()
     end)
-    
+
     return box
 end
 
@@ -1665,7 +1665,6 @@ optionsLowLatencyBox:SetScript("OnLeave", function()
     ApplySharedRegionToggleVisual(optionsLowLatencyBox, optionsLowLatencyLabel, OakLFGSorterDB.lowLatencyOnly == true)
     GameTooltip:Hide()
 end)
-
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -106)
 optionsFontLabel:SetText("Addon Font")
