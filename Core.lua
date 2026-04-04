@@ -54,6 +54,14 @@ local function GetActiveListingActivityID()
     end
 
     local activityID = tonumber(entryInfo.activityID)
+    if not activityID and securecallfunction and C_LFGList and C_LFGList.GetActiveEntryInfo then
+        activityID = securecallfunction(function()
+            local secureEntryInfo = C_LFGList.GetActiveEntryInfo()
+            local ids = secureEntryInfo and secureEntryInfo.activityIDs
+            local firstID = type(ids) == "table" and ids[1] or nil
+            return tonumber(firstID)
+        end)
+    end
     if activityID == 0 then
         activityID = nil
     end
@@ -152,12 +160,20 @@ addonTable.NormalizeApplicationStatus = NormalizeApplicationStatus
 addonTable.IsAppliedStatus = IsAppliedStatus
 addonTable.IsDeclinedStatus = IsDeclinedStatus
 
-local function GetSearchResultActivityID(resultInfo)
+local function GetSearchResultActivityID(resultInfo, searchResultID)
     if not resultInfo then
         return nil
     end
 
     local activityID = tonumber(resultInfo.activityID)
+    if not activityID and searchResultID and securecallfunction and C_LFGList and C_LFGList.GetSearchResultInfo then
+        activityID = securecallfunction(function(resultID)
+            local secureResultInfo = C_LFGList.GetSearchResultInfo(resultID)
+            local ids = secureResultInfo and secureResultInfo.activityIDs
+            local firstID = type(ids) == "table" and ids[1] or nil
+            return tonumber(firstID)
+        end, searchResultID)
+    end
     if activityID == 0 then
         activityID = nil
     end
@@ -632,7 +648,7 @@ local function FetchSearchResultData()
     for _, searchResultID in ipairs(resultIDs) do
         local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
         if resultInfo then
-            local activityID = GetSearchResultActivityID(resultInfo)
+            local activityID = GetSearchResultActivityID(resultInfo, searchResultID)
             local activityInfo = activityID and C_LFGList.GetActivityInfoTable(activityID) or nil
 
             if activityInfo then

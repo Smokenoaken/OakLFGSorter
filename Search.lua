@@ -3082,12 +3082,20 @@ local function GetCurrentSearchActivityLabels()
     return labels
 end
 
-local function GetSearchResultActivityID(searchResultInfo)
+local function GetSearchResultActivityID(searchResultInfo, searchResultID)
     if not searchResultInfo then
         return nil
     end
 
     local activityID = tonumber(searchResultInfo.activityID)
+    if not activityID and searchResultID and securecallfunction and C_LFGList and C_LFGList.GetSearchResultInfo then
+        activityID = securecallfunction(function(resultID)
+            local secureResultInfo = C_LFGList.GetSearchResultInfo(resultID)
+            local ids = secureResultInfo and secureResultInfo.activityIDs
+            local firstID = type(ids) == "table" and ids[1] or nil
+            return tonumber(firstID)
+        end, searchResultID)
+    end
     if activityID == 0 then
         activityID = nil
     end
@@ -4362,7 +4370,7 @@ local function FetchSearchResults()
         local searchResultInfo = C_LFGList.GetSearchResultInfo(resultID)
         
         if searchResultInfo then
-            local activityID = GetSearchResultActivityID(searchResultInfo)
+            local activityID = GetSearchResultActivityID(searchResultInfo, resultID)
             local activityInfo = activityID and C_LFGList.GetActivityInfoTable(activityID) or nil
             local memberCounts = C_LFGList.GetSearchResultMemberCounts(resultID) or {}
             
