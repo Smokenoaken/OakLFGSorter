@@ -1,3 +1,7 @@
+## v2.0.2
+
+- Fixed Party Fit filtering so it no longer filters out valid groups incorrectly.
+
 ## v2.0.1
 
 - Fixed mute ping taint by removing the unsafe global sound hook.
