@@ -1,3 +1,8 @@
+## v2.0.6
+
+- Fixed Blizzard LFG taint caused by touching protected activityIDs on search/listing data.
+- Sanitized cached listing data so Oak no longer keeps Blizzard secret tables in addon state.
+
 ## v2.0.5
 
 - Added a localization framework with English fallback so contributors can add translations without editing logic files.
