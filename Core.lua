@@ -312,19 +312,25 @@ local function NormalizeApplicantRole(tank, healer, specID)
     return "DAMAGER"
 end
 
-local function GetSearchResultRoleCounts(searchResultID)
-    local counts = { TANK = 0, HEALER = 0, DAMAGER = 0 }
+local function GetSearchResultMemberCounts(searchResultID)
     if not (C_LFGList and C_LFGList.GetSearchResultMemberCounts) then
-        return counts
+        return {}
     end
 
     local success, memberCounts = pcall(C_LFGList.GetSearchResultMemberCounts, searchResultID)
     if success and type(memberCounts) == "table" then
-        counts.TANK = tonumber(memberCounts.TANK) or 0
-        counts.HEALER = tonumber(memberCounts.HEALER) or 0
-        counts.DAMAGER = tonumber(memberCounts.DAMAGER) or 0
+        return memberCounts
     end
 
+    return {}
+end
+
+local function GetSearchResultRoleCounts(searchResultID, memberCounts)
+    local counts = { TANK = 0, HEALER = 0, DAMAGER = 0 }
+    memberCounts = type(memberCounts) == "table" and memberCounts or GetSearchResultMemberCounts(searchResultID)
+    counts.TANK = tonumber(memberCounts.TANK) or 0
+    counts.HEALER = tonumber(memberCounts.HEALER) or 0
+    counts.DAMAGER = tonumber(memberCounts.DAMAGER) or 0
     return counts
 end
 
@@ -639,7 +645,8 @@ local function FetchSearchResultData()
                 local activityFilterLabel = GetSearchResultActivityFilterLabel(activityInfo, listingMode)
                 local activityFilterKey = strlower(activityFilterLabel or "")
                 local players = GetSearchResultPlayers(searchResultID, resultInfo.numMembers or 0)
-                local roleCounts = GetSearchResultRoleCounts(searchResultID)
+                local memberCounts = GetSearchResultMemberCounts(searchResultID)
+                local roleCounts = GetSearchResultRoleCounts(searchResultID, memberCounts)
                 local _, hasLust, hasBrez, highestItemLevel = SummarizeSearchResultPlayers(players)
                 local playstyleValue, playstyleLabel, playstyleShortLabel = GetSearchResultPlaystyle(resultInfo, activityInfo)
                 local applicationStatus = GetApplicationStatusForResult(searchResultID)
@@ -709,6 +716,7 @@ local function FetchSearchResultData()
                     playstyleValue = playstyleValue,
                     playstyleLabel = playstyleLabel,
                     playstyleShortLabel = playstyleShortLabel,
+                    memberCounts = memberCounts,
                     roleCounts = roleCounts,
                     tanks = roleCounts.TANK or 0,
                     heals = roleCounts.HEALER or 0,
@@ -718,6 +726,7 @@ local function FetchSearchResultData()
                     hasLust = hasLust,
                     hasBrez = hasBrez,
                     highestItemLevel = highestItemLevel,
+                    maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or 0,
                     difficultyID = tonumber(activityInfo.difficultyID) or 0,
                     difficulty = tonumber(activityInfo.difficultyID) or 0,
                     isMythicPlus = activityInfo.isMythicPlusActivity or false,

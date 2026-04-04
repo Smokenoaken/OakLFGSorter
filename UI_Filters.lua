@@ -11,6 +11,11 @@ local browserActivityButtons = {}
 local BrowserFilterState
 local BROWSER_FILTER_VERSION = 5
 local GetPartyRoleSupply
+local ROLE_REMAINING_KEYS = {
+    TANK = "TANK_REMAINING",
+    HEALER = "HEALER_REMAINING",
+    DAMAGER = "DAMAGER_REMAINING",
+}
 local applicantRegionToggleBox
 local applicantRegionToggleLabel
 local browserRegionToggleBox
@@ -351,7 +356,10 @@ local function ResultMatchesRoleNeeds(result, filters)
         return false
     end
 
-    local maxPlayers = result.activityInfo and tonumber(result.activityInfo.maxPlayers) or 0
+    local maxPlayers = tonumber(result.maxPlayers)
+    if not maxPlayers or maxPlayers <= 0 then
+        maxPlayers = result.activityInfo and tonumber(result.activityInfo.maxNumPlayers or result.activityInfo.maxPlayers) or 0
+    end
     if maxPlayers <= 0 then
         return true
     end
@@ -381,11 +389,44 @@ local function ResultMatchesRoleNeeds(result, filters)
     return true
 end
 
+local function GetResultRemainingRoleCount(result, role)
+    local memberCounts = result.memberCounts
+    if type(memberCounts) == "table" then
+        local remainingKey = ROLE_REMAINING_KEYS[role]
+        local remaining = remainingKey and tonumber(memberCounts[remainingKey])
+        if remaining ~= nil then
+            return remaining
+        end
+    end
+
+    return nil
+end
+
 local function ResultMatchesPartyFit(result)
     local partyRoles, partySize = GetPartyRoleSupply()
-    local maxPlayers = result.activityInfo and tonumber(result.activityInfo.maxPlayers) or 0
+    local maxPlayers = tonumber(result.maxPlayers)
+    if not maxPlayers or maxPlayers <= 0 then
+        maxPlayers = result.activityInfo and tonumber(result.activityInfo.maxNumPlayers or result.activityInfo.maxPlayers) or 0
+    end
     if maxPlayers > 0 and result.numMembers + partySize > maxPlayers then
         return false
+    end
+
+    local hasRemainingData = false
+    for role, amount in pairs(partyRoles) do
+        if amount > 0 then
+            local remaining = GetResultRemainingRoleCount(result, role)
+            if remaining ~= nil then
+                hasRemainingData = true
+                if remaining < amount then
+                    return false
+                end
+            end
+        end
+    end
+
+    if hasRemainingData then
+        return true
     end
 
     if maxPlayers == 5 then

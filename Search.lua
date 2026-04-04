@@ -1579,21 +1579,79 @@ end
 -- ==========================================
 -- 6. Logic Helpers
 -- ==========================================
-local function GetMyPartyRoles()
-    local t, h, d = 0, 0, 0
-    local num = GetNumGroupMembers()
-    if num == 0 then
-        local role = UnitGroupRolesAssigned("player")
-        if role == "TANK" then t = 1 elseif role == "HEALER" then h = 1 else d = 1 end
-    else
-        for i=1, num do
-            local unit = IsInRaid() and "raid"..i or "party"..i
-            if i == num and not IsInRaid() then unit = "player" end
-            local role = UnitGroupRolesAssigned(unit)
-            if role == "TANK" then t = t + 1 elseif role == "HEALER" then h = h + 1 else d = d + 1 end
+local ROLE_REMAINING_KEYS = {
+    TANK = "TANK_REMAINING",
+    HEALER = "HEALER_REMAINING",
+    DAMAGER = "DAMAGER_REMAINING",
+}
+
+local function GetPartyRoleCounts()
+    local counts = { TANK = 0, HEALER = 0, DAMAGER = 0 }
+    local total = 1
+
+    local playerRole = UnitGroupRolesAssigned("player")
+    if not playerRole or playerRole == "NONE" then
+        local specIndex = GetSpecialization and GetSpecialization()
+        local specID = specIndex and GetSpecializationInfo(specIndex)
+        playerRole = specID and GetSpecializationRoleByID and GetSpecializationRoleByID(specID) or "DAMAGER"
+    end
+    counts[playerRole] = (counts[playerRole] or 0) + 1
+
+    if IsInGroup() then
+        total = GetNumGroupMembers()
+        for i = 1, total do
+            local unit = IsInRaid() and ("raid" .. i) or ("party" .. i)
+            if UnitExists(unit) and not UnitIsUnit(unit, "player") then
+                local role = UnitGroupRolesAssigned(unit)
+                if not role or role == "NONE" then
+                    role = "DAMAGER"
+                end
+                counts[role] = (counts[role] or 0) + 1
+            end
         end
     end
-    return t, h, d
+
+    return counts, total
+end
+
+local function GroupMatchesPartyFit(group)
+    local partyRoles, partySize = GetPartyRoleCounts()
+    local maxPlayers = tonumber(group.maxPlayers) or 0
+    local members = tonumber(group.members or group.numMembers) or 0
+
+    if maxPlayers > 0 and members + partySize > maxPlayers then
+        return false
+    end
+
+    local memberCounts = group.memberCounts
+    if type(memberCounts) == "table" then
+        local hasRemainingData = false
+        for role, amount in pairs(partyRoles) do
+            if amount > 0 then
+                local remainingKey = ROLE_REMAINING_KEYS[role]
+                local remaining = remainingKey and tonumber(memberCounts[remainingKey])
+                if remaining ~= nil then
+                    hasRemainingData = true
+                    if remaining < amount then
+                        return false
+                    end
+                end
+            end
+        end
+
+        if hasRemainingData then
+            return true
+        end
+    end
+
+    if maxPlayers == 5 then
+        return (group.tanks + (partyRoles.TANK or 0) <= 1)
+            and (group.heals + (partyRoles.HEALER or 0) <= 1)
+            and (group.dps + (partyRoles.DAMAGER or 0) <= 3)
+            and (members + partySize <= 5)
+    end
+
+    return true
 end
 
 local function GetRoleTexCoords(role)
@@ -3618,7 +3676,6 @@ local function CreateRow(index)
 end
 
 function OAK_SEARCH:UpdateDisplay()
-    local myT, myH, myD = GetMyPartyRoles()
     local filteredGroups = {}
     local useNativeDungeonFilters = SearchModeUsesNativeDungeonFilters(currentSearchMode)
     local adv = useNativeDungeonFilters and GetAdvancedSearchFilter() or nil
@@ -3738,13 +3795,7 @@ function OAK_SEARCH:UpdateDisplay()
         end
 
         if OAK_F.PartyFit then
-            if maxPlayers == 5 then
-                if (group.tanks + myT > 1) or (group.heals + myH > 1) or (group.dps + myD > 3) or (group.members + myT + myH + myD > 5) then
-                    skip = true
-                end
-            elseif maxPlayers > 0 and (group.members + myT + myH + myD > maxPlayers) then
-                skip = true
-            end
+            skip = not GroupMatchesPartyFit(group)
         end
 
         if not skip then table.insert(filteredGroups, group) end
@@ -3972,11 +4023,12 @@ local function FetchSearchResults()
                     tanks = memberCounts.TANK or 0,
                     heals = memberCounts.HEALER or 0,
                     dps = memberCounts.DAMAGER or 0,
+                    memberCounts = memberCounts,
                     hasLust = hasLust,
                     hasBrez = hasBrez,
                     members = searchResultInfo.numMembers or 0,
                     memberDetails = memberDetails,
-                    maxPlayers = tonumber(activityInfo.maxPlayers) or tonumber(searchResultInfo.numMembers) or 0,
+                    maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or tonumber(searchResultInfo.numMembers) or 0,
                     ilvl = searchResultInfo.requiredItemLevel or 0,
                     rating = rating or 0,
                     ratingLabel = ratingLabel,
