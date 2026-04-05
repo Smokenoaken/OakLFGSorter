@@ -1,3 +1,10 @@
+## v2.0.8
+
+- Kept all signed-up groups visible and pinned at the top even when listings become full or stop matching filters
+- so applications can always be cancelled from Oak.
+- Replaced the find-browser Low Latency checkbox with shared per-region filter toggles and persisted shared font/region display settings more reliably.
+- Reduced browser drag jitter by backing off auto-clamping while Oak windows are actively being dragged or resized.
+
 ## v2.0.7
 
 - Restored browser results for listings where Blizzard delays the direct activityID field.
