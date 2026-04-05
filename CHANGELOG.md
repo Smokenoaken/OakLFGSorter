@@ -1,3 +1,10 @@
+## v2.0.9
+
+- Stopped Oak windows from continuing to follow Blizzard's Dungeons & Raids frame after the user places them
+- so reset/fresh install still dock while normal dragging stays where you put it.
+- Fixed the search browser comp column to render filled role slots from Blizzard role counts when per-member class details are unavailable.
+- Fixed a load-breaking Lua syntax error introduced during the drag hotfix pass.
+
 ## v2.0.8
 
 - Kept all signed-up groups visible and pinned at the top even when listings become full or stop matching filters
