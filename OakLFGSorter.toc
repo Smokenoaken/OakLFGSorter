@@ -1,6 +1,7 @@
 ## Interface: 120001
 ## Title: Oakensoul LFG Sorter
 ## Notes: Sorts LFG applicants by Role, Class, and iLvl.
+## Notes-ruRU: Сортирует кандидатов в поиске групп по роли, классу и уровню предметов.
 ## Author: OAK
 ## IconTexture: Interface\AddOns\OakLFGSorter\Media\icon.png
 ## Version: 2.0.9
@@ -14,6 +15,7 @@ Locales\deDE.lua
 Locales\frFR.lua
 Locales\esES.lua
 Locales\esMX.lua
+Locales\ruRU.lua
 RegionInfo.lua
 Search.lua
 Search_Header.lua
