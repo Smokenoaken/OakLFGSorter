@@ -1244,7 +1244,9 @@ OAK_LFG:SetScript("OnShow", function(self)
     end
     
     if addonTable.CheckRIOHook then addonTable.CheckRIOHook() end
-    if addonTable.AutoPosition then addonTable.AutoPosition() end
+    if addonTable.AutoPosition and not (OakLFGSorterDB and (OakLFGSorterDB.frameUserPlaced or OakLFGSorterDB.framePos)) then
+        addonTable.AutoPosition()
+    end
     if addonTable.AnchorRIOPanelToOak then
         addonTable.AnchorRIOPanelToOak(OAK_LFG)
     end
@@ -1252,7 +1254,9 @@ end)
 
 if PVEFrame then
     hooksecurefunc(PVEFrame, "SetPoint", function()
-        if OAK_LFG:IsShown() and addonTable.AutoPosition then addonTable.AutoPosition() end
+        if OAK_LFG:IsShown() and addonTable.AutoPosition and not (OakLFGSorterDB and (OakLFGSorterDB.frameUserPlaced or OakLFGSorterDB.framePos)) then
+            addonTable.AutoPosition()
+        end
     end)
 end
 
@@ -1314,10 +1318,12 @@ end)
 
 OAK_LFG:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
+    self.isOakDragging = false
     if addonTable.ClampFrameToScreen then
         addonTable.ClampFrameToScreen(self, OakLFGSorterDB, "framePos")
     end
     if OakLFGSorterDB then
+        OakLFGSorterDB.frameUserPlaced = true
         local point, _, relativePoint, xOfs, yOfs = self:GetPoint()
         OakLFGSorterDB.framePos = { point, relativePoint, xOfs, yOfs }
         OakLFGSorterDB.frameSize = { self:GetWidth(), self:GetHeight() }
@@ -1326,6 +1332,7 @@ end)
 
 addonTable.ResizeGrip:SetScript("OnMouseUp", function(self, button) 
     OAK_LFG:StopMovingOrSizing() 
+    OAK_LFG.isOakResizing = false
     if addonTable.ClampFrameToScreen then
         addonTable.ClampFrameToScreen(OAK_LFG, OakLFGSorterDB, "framePos")
     end
@@ -1337,6 +1344,7 @@ SlashCmdList["OAKLFG"] = function(msg)
     if msg and msg:lower() == "reset" then
         if OakLFGSorterDB then
             OakLFGSorterDB.framePos = nil
+            OakLFGSorterDB.frameUserPlaced = false
             OakLFGSorterDB.scale = 1.0
             OakLFGSorterDB.hideNotes = false
         end

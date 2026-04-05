@@ -20,5 +20,6 @@ addonTable.Patreons = {
 	"Emil Sundström",
 	"Tony",
 	"Mills Guild",
-	"Tony (2)"
+	"Tony (2)",
+	"Inuyasha"
 }

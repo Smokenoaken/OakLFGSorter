@@ -21,6 +21,8 @@ local applicantRegionToggleBox
 local applicantRegionToggleLabel
 local browserRegionToggleBox
 local browserRegionToggleLabel
+local regionFilterButtons = {}
+local regionFilterLabels = {}
 
 local function GetBrowserMode()
     return (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
@@ -645,8 +647,8 @@ end
 
 local function ShowLowLatencyToggleTooltip(owner)
     GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-    GameTooltip:SetText("Low Latency", 1, 1, 1)
-    GameTooltip:AddLine("Show only groups from your own region to avoid higher-latency listings.", 1, 1, 1, true)
+    GameTooltip:SetText("Region Filters", 1, 1, 1)
+    GameTooltip:AddLine("Choose exactly which regions Oak should show in both the listing browser and the find browser.", 1, 1, 1, true)
     GameTooltip:Show()
 end
 
@@ -678,8 +680,12 @@ end
 
 addonTable.SyncSharedLowLatencyToggles = SyncSharedLowLatencySetting
 
-local function ToggleSharedLowLatencySetting()
-    OakLFGSorterDB.lowLatencyOnly = not (OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true)
+local function ToggleSharedRegionFilter(regionCode)
+    if not (addonTable.SetRegionEnabled and addonTable.IsRegionEnabled) then
+        return
+    end
+
+    addonTable.SetRegionEnabled(regionCode, not addonTable.IsRegionEnabled(regionCode))
     SyncSharedLowLatencySetting()
 end
 
@@ -1650,37 +1656,61 @@ optionsRegionBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
-local optionsLowLatencyBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
-optionsLowLatencyBox:SetSize(16, 16)
-optionsLowLatencyBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-optionsLowLatencyBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -74)
-local optionsLowLatencyLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsLowLatencyLabel:SetPoint("LEFT", optionsLowLatencyBox, "RIGHT", 8, 0)
-optionsLowLatencyLabel:SetText(L["Low Latency"])
-optionsLowLatencyBox:SetScript("OnClick", ToggleSharedLowLatencySetting)
-optionsLowLatencyBox:SetScript("OnEnter", function(self)
-    ApplySharedRegionToggleVisual(self, optionsLowLatencyLabel, OakLFGSorterDB.lowLatencyOnly == true)
-    ShowLowLatencyToggleTooltip(self)
-end)
-optionsLowLatencyBox:SetScript("OnLeave", function()
-    ApplySharedRegionToggleVisual(optionsLowLatencyBox, optionsLowLatencyLabel, OakLFGSorterDB.lowLatencyOnly == true)
-    GameTooltip:Hide()
-end)
+local optionsRegionFilterLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -74)
+optionsRegionFilterLabel:SetText("Filter Regions")
+
+local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
+    local box = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    box:SetSize(16, 16)
+    box:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+    box:SetPoint("TOPLEFT", parent, "TOPLEFT", xOffset, yOffset)
+
+    local meta = addonTable.GetRegionMeta and addonTable.GetRegionMeta(regionCode) or { shortLabel = regionCode, label = regionCode }
+    local label = parent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    label:SetPoint("LEFT", box, "RIGHT", 6, 0)
+    label:SetText(meta.shortLabel or regionCode)
+
+    box:SetScript("OnClick", function()
+        ToggleSharedRegionFilter(regionCode)
+    end)
+    box:SetScript("OnEnter", function(self)
+        ApplySharedRegionToggleVisual(self, label, addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(meta.label or regionCode, 1, 1, 1)
+        GameTooltip:AddLine("Toggle whether Oak shows listings from this region.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    box:SetScript("OnLeave", function()
+        ApplySharedRegionToggleVisual(box, label, addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+        GameTooltip:Hide()
+    end)
+
+    regionFilterButtons[regionCode] = box
+    regionFilterLabels[regionCode] = label
+end
+
+CreateRegionFilterOption(optionsPanel, "NA", 15, -96)
+CreateRegionFilterOption(optionsPanel, "OCE", 105, -96)
+CreateRegionFilterOption(optionsPanel, "LATAM", 15, -118)
+CreateRegionFilterOption(optionsPanel, "BR", 105, -118)
+CreateRegionFilterOption(optionsPanel, "EU", 15, -140)
+CreateRegionFilterOption(optionsPanel, "OTHER", 105, -140)
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -106)
+optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -172)
 optionsFontLabel:SetText(L["Addon Font"])
 local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
-optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -126)
+optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -192)
 
 local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -162)
+optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -228)
 optionsFontSizeLabel:SetText(L["Font Size"])
 local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -162)
+optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -228)
 
 local optionsFontSizeSlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsFontSizeSlider:SetSize(170, 10)
-optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -184)
+optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -250)
 optionsFontSizeSlider:SetMinMaxValues(10, 18)
 optionsFontSizeSlider:SetValueStep(1)
 optionsFontSizeSlider:SetObeyStepOnDrag(true)
@@ -1713,14 +1743,14 @@ end)
 optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
 
 local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -220)
+optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -286)
 optionsOpacityLabel:SetText("Window Opacity")
 local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -220)
+optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -286)
 
 local optionsOpacitySlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsOpacitySlider:SetSize(170, 10)
-optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -242)
+optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -308)
 optionsOpacitySlider:SetMinMaxValues(0.35, 1.0)
 optionsOpacitySlider:SetValueStep(0.05)
 optionsOpacitySlider:SetObeyStepOnDrag(true)
@@ -1753,7 +1783,9 @@ optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWind
 
 local function RefreshOptionsPanel()
     ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
-    ApplySharedRegionToggleVisual(optionsLowLatencyBox, optionsLowLatencyLabel, OakLFGSorterDB.lowLatencyOnly == true)
+    for _, regionCode in ipairs(addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder() or {}) do
+        ApplySharedRegionToggleVisual(regionFilterButtons[regionCode], regionFilterLabels[regionCode], addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+    end
     if optionsFontButton and optionsFontButton.RefreshSelection then
         optionsFontButton:RefreshSelection()
     end

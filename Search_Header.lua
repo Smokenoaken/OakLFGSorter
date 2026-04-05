@@ -158,11 +158,13 @@ local resizeGrip = CreateFrame("Button", nil, OAK_SEARCH, "PanelResizeButtonTemp
 resizeGrip:SetPoint("BOTTOMRIGHT", OAK_SEARCH, "BOTTOMRIGHT", -2, 2)
 resizeGrip:SetScript("OnMouseDown", function(_, button)
     if button == "LeftButton" then
+        OAK_SEARCH.isOakResizing = true
         OAK_SEARCH:StartSizing("BOTTOMRIGHT")
     end
 end)
 resizeGrip:SetScript("OnMouseUp", function()
     OAK_SEARCH:StopMovingOrSizing()
+    OAK_SEARCH.isOakResizing = false
     if addonTable.SearchSaveFramePosition then
         addonTable.SearchSaveFramePosition()
     end
@@ -242,6 +244,8 @@ searchOptions.panel:SetBackdropColor(unpack(OAK_COLOR_BG))
 searchOptions.panel:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
 searchOptions.panel:HookScript("OnShow", RefreshSearchRIOAnchor)
 searchOptions.panel:HookScript("OnHide", RefreshSearchRIOAnchor)
+searchOptions.regionFilterButtons = {}
+searchOptions.regionFilterLabels = {}
 
 searchOptions.title = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 searchOptions.title:SetPoint("TOP", searchOptions.panel, "TOP", 0, -10)
@@ -297,67 +301,94 @@ searchOptions.regionBox:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 
-searchOptions.lowLatencyBox = CreateFrame("Button", nil, searchOptions.panel, "BackdropTemplate")
-searchOptions.lowLatencyBox:SetSize(16, 16)
-searchOptions.lowLatencyBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
-searchOptions.lowLatencyBox:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -74)
-searchOptions.lowLatencyLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.lowLatencyLabel:SetPoint("LEFT", searchOptions.lowLatencyBox, "RIGHT", 8, 0)
-searchOptions.lowLatencyLabel:SetText(L["Low Latency"])
+searchOptions.regionFilterLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+searchOptions.regionFilterLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -74)
+searchOptions.regionFilterLabel:SetText("Filter Regions")
 
-function searchOptions.lowLatencyBox:SetState(isActive)
+local function SetRegionToggleState(button, label, isActive)
     if isActive then
-        self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
-        self:SetBackdropBorderColor(0, 0, 0, 1)
-        searchOptions.lowLatencyLabel:SetTextColor(1, 1, 1)
+        button:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
+        button:SetBackdropBorderColor(0, 0, 0, 1)
+        label:SetTextColor(1, 1, 1)
     else
-        self:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
-        self:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
-        searchOptions.lowLatencyLabel:SetTextColor(0.84, 0.84, 0.84)
+        button:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        button:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
+        label:SetTextColor(0.84, 0.84, 0.84)
     end
 end
 
-searchOptions.lowLatencyBox:SetScript("OnClick", function(self)
-    OakLFGSorterDB.lowLatencyOnly = not (OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true)
-    if addonTable.SyncSharedLowLatencyToggles then
-        addonTable.SyncSharedLowLatencyToggles()
-    else
-        self:SetState(OakLFGSorterDB.lowLatencyOnly == true)
-        if OAK_SEARCH.UpdateDisplay then
-            OAK_SEARCH:UpdateDisplay()
-        end
-        if addonTable.UpdateDisplay then
-            addonTable.UpdateDisplay()
-        end
+local function RefreshSearchRegionFilterButtons()
+    for regionCode, button in pairs(searchOptions.regionFilterButtons) do
+        local label = searchOptions.regionFilterLabels[regionCode]
+        SetRegionToggleState(button, label, addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
     end
-end)
-searchOptions.lowLatencyBox:SetScript("OnEnter", function(self)
-    self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
-    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText(L["Low Latency"], 1, 1, 1)
-    GameTooltip:AddLine("Show only groups from your own region to avoid higher-latency listings.", 1, 1, 1, true)
-    GameTooltip:Show()
-end)
-searchOptions.lowLatencyBox:SetScript("OnLeave", function(self)
-    self:SetState(OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true)
-    GameTooltip:Hide()
-end)
+end
+
+local function ToggleSearchRegionFilter(regionCode)
+    if addonTable.SetRegionEnabled and addonTable.IsRegionEnabled then
+        addonTable.SetRegionEnabled(regionCode, not addonTable.IsRegionEnabled(regionCode))
+    end
+    RefreshSearchRegionFilterButtons()
+    if OAK_SEARCH.UpdateDisplay then
+        OAK_SEARCH:UpdateDisplay()
+    end
+    if addonTable.UpdateDisplay then
+        addonTable.UpdateDisplay()
+    end
+end
+
+local function CreateSearchRegionFilterOption(regionCode, xOffset, yOffset)
+    local box = CreateFrame("Button", nil, searchOptions.panel, "BackdropTemplate")
+    box:SetSize(16, 16)
+    box:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
+    box:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", xOffset, yOffset)
+
+    local meta = addonTable.GetRegionMeta and addonTable.GetRegionMeta(regionCode) or { shortLabel = regionCode, label = regionCode }
+    local label = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    label:SetPoint("LEFT", box, "RIGHT", 6, 0)
+    label:SetText(meta.shortLabel or regionCode)
+
+    box:SetScript("OnClick", function()
+        ToggleSearchRegionFilter(regionCode)
+    end)
+    box:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText(meta.label or regionCode, 1, 1, 1)
+        GameTooltip:AddLine("Toggle whether Oak shows listings from this region.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    box:SetScript("OnLeave", function()
+        RefreshSearchRegionFilterButtons()
+        GameTooltip:Hide()
+    end)
+
+    searchOptions.regionFilterButtons[regionCode] = box
+    searchOptions.regionFilterLabels[regionCode] = label
+end
+
+CreateSearchRegionFilterOption("NA", 15, -96)
+CreateSearchRegionFilterOption("OCE", 105, -96)
+CreateSearchRegionFilterOption("LATAM", 15, -118)
+CreateSearchRegionFilterOption("BR", 105, -118)
+CreateSearchRegionFilterOption("EU", 15, -140)
+CreateSearchRegionFilterOption("OTHER", 105, -140)
 
 searchOptions.fontLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.fontLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -106)
+searchOptions.fontLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -172)
 searchOptions.fontLabel:SetText(L["Addon Font"])
 searchOptions.fontButton, searchOptions.fontList = addonTable.CreateFontDropdown(searchOptions.panel, 170)
-searchOptions.fontButton:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -126)
+searchOptions.fontButton:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -192)
 
 searchOptions.fontSizeLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.fontSizeLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -162)
+searchOptions.fontSizeLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -228)
 searchOptions.fontSizeLabel:SetText(L["Font Size"])
 searchOptions.fontSizeValue = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.fontSizeValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -162)
+searchOptions.fontSizeValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -228)
 
 searchOptions.fontSizeSlider = CreateFrame("Slider", nil, searchOptions.panel, "BackdropTemplate")
 searchOptions.fontSizeSlider:SetSize(170, 10)
-searchOptions.fontSizeSlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -184)
+searchOptions.fontSizeSlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -250)
 searchOptions.fontSizeSlider:SetMinMaxValues(10, 18)
 searchOptions.fontSizeSlider:SetValueStep(1)
 searchOptions.fontSizeSlider:SetObeyStepOnDrag(true)
@@ -389,14 +420,14 @@ searchOptions.fontSizeSlider:SetScript("OnLeave", function()
 end)
 
 searchOptions.opacityLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.opacityLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -220)
+searchOptions.opacityLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -286)
 searchOptions.opacityLabel:SetText(L["Window Opacity"])
 searchOptions.opacityValue = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.opacityValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -220)
+searchOptions.opacityValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -286)
 
 searchOptions.opacitySlider = CreateFrame("Slider", nil, searchOptions.panel, "BackdropTemplate")
 searchOptions.opacitySlider:SetSize(170, 10)
-searchOptions.opacitySlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -242)
+searchOptions.opacitySlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -308)
 searchOptions.opacitySlider:SetMinMaxValues(0.35, 1.0)
 searchOptions.opacitySlider:SetValueStep(0.05)
 searchOptions.opacitySlider:SetObeyStepOnDrag(true)
@@ -432,9 +463,7 @@ function searchOptions:Refresh()
     if self.regionBox and self.regionBox.SetState then
         self.regionBox:SetState(OakLFGSorterDB and OakLFGSorterDB.showRegions == true)
     end
-    if self.lowLatencyBox and self.lowLatencyBox.SetState then
-        self.lowLatencyBox:SetState(OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true)
-    end
+    RefreshSearchRegionFilterButtons()
     if self.fontButton and self.fontButton.RefreshSelection then
         self.fontButton:RefreshSelection()
     end

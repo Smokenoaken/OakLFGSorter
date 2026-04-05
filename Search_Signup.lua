@@ -156,21 +156,37 @@ local function SetSignupDialogRoleState(button, shouldEnable)
     end
 end
 
-local function RaiseSignupDialogAboveOak(dialog)
-    if not dialog then
+local function RaiseFrameAboveOak(frame)
+    if not frame then
         return
     end
 
-    dialog:SetFrameStrata("FULLSCREEN_DIALOG")
-    dialog:SetToplevel(true)
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetToplevel(true)
 
     local targetLevel = math.max(1, OAK_SEARCH:GetFrameLevel() + 20)
     if addonTable and addonTable.OAK_LFG and addonTable.OAK_LFG.GetFrameLevel then
         targetLevel = math.max(targetLevel, addonTable.OAK_LFG:GetFrameLevel() + 20)
     end
 
-    dialog:SetFrameLevel(targetLevel)
-    dialog:Raise()
+    frame:SetFrameLevel(targetLevel)
+    frame:Raise()
+end
+
+local function RaiseSignupDialogAboveOak(dialog)
+    RaiseFrameAboveOak(dialog)
+end
+
+local function RaiseApplicationViewerAboveOak()
+    if LFGListFrame and LFGListFrame.ApplicationViewer then
+        RaiseFrameAboveOak(LFGListFrame.ApplicationViewer)
+    end
+end
+
+local function RaiseInviteDialogAboveOak()
+    if LFGListInviteDialog then
+        RaiseFrameAboveOak(LFGListInviteDialog)
+    end
 end
 
 local function ApplySavedQuickSignupRoles(dialog)
@@ -452,6 +468,18 @@ function addonTable.EnsureSearchSignupHooks()
     UpdatePersistentNotePatch()
 
     if not LFGListApplicationDialog or LFGListApplicationDialog.OakQuickSignupHooked then
+        if LFGListFrame and LFGListFrame.ApplicationViewer and not LFGListFrame.ApplicationViewer.OakRaiseAboveHooked then
+            LFGListFrame.ApplicationViewer:HookScript("OnShow", function()
+                RaiseApplicationViewerAboveOak()
+            end)
+            LFGListFrame.ApplicationViewer.OakRaiseAboveHooked = true
+        end
+        if LFGListInviteDialog and not LFGListInviteDialog.OakRaiseAboveHooked then
+            LFGListInviteDialog:HookScript("OnShow", function()
+                RaiseInviteDialogAboveOak()
+            end)
+            LFGListInviteDialog.OakRaiseAboveHooked = true
+        end
         return
     end
 
@@ -467,6 +495,19 @@ function addonTable.EnsureSearchSignupHooks()
     end)
 
     LFGListApplicationDialog.OakQuickSignupHooked = true
+
+    if LFGListFrame and LFGListFrame.ApplicationViewer and not LFGListFrame.ApplicationViewer.OakRaiseAboveHooked then
+        LFGListFrame.ApplicationViewer:HookScript("OnShow", function()
+            RaiseApplicationViewerAboveOak()
+        end)
+        LFGListFrame.ApplicationViewer.OakRaiseAboveHooked = true
+    end
+    if LFGListInviteDialog and not LFGListInviteDialog.OakRaiseAboveHooked then
+        LFGListInviteDialog:HookScript("OnShow", function()
+            RaiseInviteDialogAboveOak()
+        end)
+        LFGListInviteDialog.OakRaiseAboveHooked = true
+    end
 end
 
 function addonTable.BeginSearchSignup(searchResultID)

@@ -54,6 +54,7 @@ if OakLFGSorterDB.lowLatencyOnly == nil then OakLFGSorterDB.lowLatencyOnly = fal
 if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "OakUI Font" end
 if OakLFGSorterDB.fontSize == nil then OakLFGSorterDB.fontSize = 12 end
 if OakLFGSorterDB.windowOpacity == nil then OakLFGSorterDB.windowOpacity = 0.85 end
+if type(OakLFGSorterDB.regionFilters) ~= "table" then OakLFGSorterDB.regionFilters = {} end
 OakLFGSorterDB.browserFilters = OakLFGSorterDB.browserFilters or {}
 
 local browserFilters = OakLFGSorterDB.browserFilters
@@ -109,6 +110,16 @@ local function ApplyOakFont(fontPath)
     addonTable.Fonts.Small:SetFont(fontPath, math.max(8, baseSize - 2), "")
     addonTable.Fonts.Small:SetShadowColor(0, 0, 0, 1)
     addonTable.Fonts.Small:SetShadowOffset(1, -1)
+end
+
+local function ReapplySavedFont()
+    local activeName = addonTable.GetActiveFontName and addonTable.GetActiveFontName() or "OakUI Font"
+    local fontPath = ResolveFontPath(activeName)
+    addonTable.ActiveFontPath = fontPath
+    ApplyOakFont(fontPath)
+    if addonTable.RefreshRegisteredFontDropdowns then addonTable.RefreshRegisteredFontDropdowns() end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+    if addonTable.RefreshSearchOptionsPanel then addonTable.RefreshSearchOptionsPanel() end
 end
 
 function addonTable.GetAvailableFontNames()
@@ -443,6 +454,26 @@ function addonTable.CreateFontDropdown(parent, width)
 end
 
 addonTable.SetActiveFont(OakLFGSorterDB.fontName)
+
+local fontEventFrame = CreateFrame("Frame")
+fontEventFrame:RegisterEvent("PLAYER_LOGIN")
+fontEventFrame:SetScript("OnEvent", function()
+    ReapplySavedFont()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, ReapplySavedFont)
+        C_Timer.After(1, ReapplySavedFont)
+    end
+end)
+
+if LSM and LSM.RegisterCallback then
+    pcall(function()
+        LSM:RegisterCallback(addonTable, "LibSharedMedia_Registered", function(_, mediaType)
+            if mediaType == "font" then
+                ReapplySavedFont()
+            end
+        end)
+    end)
+end
 
 -- Colors & Styling
 local _, playerClass = UnitClass("player")

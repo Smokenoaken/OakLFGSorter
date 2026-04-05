@@ -10,7 +10,12 @@ OAK_LFG:SetResizable(true)
 OAK_LFG:SetResizeBounds(660, 444, 660, 800) 
 OAK_LFG:EnableMouse(true)
 OAK_LFG:RegisterForDrag("LeftButton")
-OAK_LFG:SetScript("OnDragStart", OAK_LFG.StartMoving)
+OAK_LFG:SetScript("OnDragStart", function(self)
+    OakLFGSorterDB = OakLFGSorterDB or {}
+    OakLFGSorterDB.frameUserPlaced = true
+    self.isOakDragging = true
+    self:StartMoving()
+end)
 OAK_LFG:SetFrameStrata("DIALOG")
 OAK_LFG:SetClampedToScreen(true)
 OAK_LFG:Hide()
@@ -123,6 +128,11 @@ end)
 function addonTable.AutoPosition()
     if not addonTable.OAK_LFG then return end
     if OakLFGSorterDB and OakLFGSorterDB.framePos then
+        addonTable.OAK_LFG:ClearAllPoints()
+        local p = OakLFGSorterDB.framePos
+        if #p == 4 then
+            addonTable.OAK_LFG:SetPoint(p[1], UIParent, p[2], p[3], p[4])
+        end
         if addonTable.AnchorRIOPanelToOak then
             addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
         end
@@ -296,14 +306,17 @@ OAK_LFG:HookScript("OnHide", function()
 end)
 
 OAK_LFG:HookScript("OnSizeChanged", function(self)
-    if self:IsShown() and addonTable.ClampFrameToScreen then
+    if self:IsShown() and not self.isOakDragging and not self.isOakResizing and addonTable.ClampFrameToScreen then
         addonTable.ClampFrameToScreen(self, OakLFGSorterDB, "framePos")
     end
 end)
 
 scaleReset:SetScript("OnClick", function()
     scaleSlider:SetValue(1.0)
-    if OakLFGSorterDB then OakLFGSorterDB.framePos = nil end 
+    if OakLFGSorterDB then
+        OakLFGSorterDB.framePos = nil
+        OakLFGSorterDB.frameUserPlaced = false
+    end
     addonTable.AutoPosition() 
 end)
 
@@ -336,7 +349,10 @@ local resizeGrip = CreateFrame("Button", nil, OAK_LFG, "PanelResizeButtonTemplat
 addonTable.ResizeGrip = resizeGrip
 resizeGrip:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -2, 2)
 resizeGrip:SetScript("OnMouseDown", function(self, button)
-    if button == "LeftButton" then OAK_LFG:StartSizing("BOTTOMRIGHT") end
+    if button == "LeftButton" then
+        OAK_LFG.isOakResizing = true
+        OAK_LFG:StartSizing("BOTTOMRIGHT")
+    end
 end)
 
 StaticPopupDialogs["OAK_LFG_URL_COPY"] = {

@@ -18,6 +18,8 @@ local REGION_META = {
     OTHER = { code = "OTHER", shortLabel = "OTHER", label = "Other" },
 }
 
+local REGION_FILTER_ORDER = { "NA", "OCE", "LATAM", "BR", "EU", "OTHER" }
+
 local OCE_REALMS = {
     ["amanthul"] = true,
     ["barthilas"] = true,
@@ -112,6 +114,70 @@ function addonTable.ShouldShowRegions()
     return OakLFGSorterDB and OakLFGSorterDB.showRegions == true
 end
 
+function addonTable.GetRegionFilterOrder()
+    return REGION_FILTER_ORDER
+end
+
+local function EnsureRegionFilterState()
+    OakLFGSorterDB = OakLFGSorterDB or {}
+    local filters = type(OakLFGSorterDB.regionFilters) == "table" and OakLFGSorterDB.regionFilters or {}
+    OakLFGSorterDB.regionFilters = filters
+
+    local hasAnyExplicitValue = false
+    for _, regionCode in ipairs(REGION_FILTER_ORDER) do
+        if filters[regionCode] ~= nil then
+            hasAnyExplicitValue = true
+            break
+        end
+    end
+
+    if not hasAnyExplicitValue then
+        local playerRegion = addonTable.GetPlayerRegionInfo and addonTable.GetPlayerRegionInfo() or nil
+        local legacyLowLatencyOnly = OakLFGSorterDB.lowLatencyOnly == true
+        for _, regionCode in ipairs(REGION_FILTER_ORDER) do
+            if legacyLowLatencyOnly and playerRegion and playerRegion.code then
+                filters[regionCode] = regionCode == playerRegion.code
+            else
+                filters[regionCode] = true
+            end
+        end
+    else
+        for _, regionCode in ipairs(REGION_FILTER_ORDER) do
+            if filters[regionCode] == nil then
+                filters[regionCode] = true
+            end
+        end
+    end
+
+    OakLFGSorterDB.lowLatencyOnly = nil
+    return filters
+end
+
+function addonTable.GetRegionFilters()
+    return EnsureRegionFilterState()
+end
+
+function addonTable.IsRegionEnabled(regionCode)
+    local filters = EnsureRegionFilterState()
+    if not regionCode or regionCode == "" then
+        return true
+    end
+    return filters[regionCode] ~= false
+end
+
+function addonTable.SetRegionEnabled(regionCode, isEnabled)
+    if not regionCode or regionCode == "" then
+        return
+    end
+
+    local filters = EnsureRegionFilterState()
+    filters[regionCode] = isEnabled and true or false
+end
+
+function addonTable.GetRegionMeta(regionCode)
+    return REGION_META[regionCode] or REGION_META.OTHER
+end
+
 local function GetRegionInfoForRealm(realmName, lookupToken)
     if realmName == "" then
         return nil
@@ -156,12 +222,16 @@ function addonTable.GetPlayerRegionInfo()
 end
 
 function addonTable.ResultMatchesPlayerRegion(result)
-    if not (OakLFGSorterDB and OakLFGSorterDB.lowLatencyOnly == true) then
-        return true
+    local filters = EnsureRegionFilterState()
+    local hasAnyFilteredOut = false
+    for _, regionCode in ipairs(REGION_FILTER_ORDER) do
+        if filters[regionCode] == false then
+            hasAnyFilteredOut = true
+            break
+        end
     end
 
-    local playerRegion = addonTable.GetPlayerRegionInfo and addonTable.GetPlayerRegionInfo()
-    if not playerRegion then
+    if not hasAnyFilteredOut then
         return true
     end
 
@@ -171,10 +241,10 @@ function addonTable.ResultMatchesPlayerRegion(result)
     end
 
     if not resultRegion then
-        return true
+        return addonTable.IsRegionEnabled("OTHER")
     end
 
-    return tostring(resultRegion.code or "") == tostring(playerRegion.code or "")
+    return addonTable.IsRegionEnabled(tostring(resultRegion.code or "OTHER"))
 end
 
 function addonTable.GetRegionBadgeMarkup(regionInfo)

@@ -84,7 +84,6 @@ end
 
 local function HasSavedSearchFramePosition()
     return OakLFGSorterDB
-        and OakLFGSorterDB.searchFrameUserPlaced
         and type(OakLFGSorterDB.searchFramePos) == "table"
         and #OakLFGSorterDB.searchFramePos >= 4
 end
@@ -118,9 +117,14 @@ local function HideApplicantWindow()
     end
 end
 
-OAK_SEARCH:SetScript("OnDragStart", OAK_SEARCH.StartMoving)
+OAK_SEARCH:SetScript("OnDragStart", function(self)
+    OakLFGSorterDB.searchFrameUserPlaced = true
+    self.isOakDragging = true
+    self:StartMoving()
+end)
 OAK_SEARCH:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
+    self.isOakDragging = false
     if addonTable.ClampFrameToScreen then
         addonTable.ClampFrameToScreen(OAK_SEARCH, OakLFGSorterDB, "searchFramePos")
     end
@@ -588,6 +592,58 @@ local function SyncNativeDifficultyFilter()
         state.difficultyMythic = (OAK_F.Difficulty == "MYTHIC") and true or nil
         state.difficultyMythicPlus = (OAK_F.Difficulty == "MYTHIC_PLUS") and true or nil
     end)
+end
+
+local function SyncOakFiltersFromNativeAdvancedFilter()
+    if not SearchModeUsesNativeDungeonFilters(currentSearchMode) then
+        return
+    end
+
+    local adv = GetAdvancedSearchFilter()
+    OAK_F.NeedTank = adv.needsTank == true
+    OAK_F.NeedHeal = adv.needsHealer == true
+    OAK_F.NeedDPS = adv.needsDamage == true
+    OAK_F.HasTank = adv.hasTank == true
+    OAK_F.HasHeal = adv.hasHealer == true
+
+    if currentSearchMode == "mythic_plus" then
+        OAK_F.Difficulty = "MYTHIC_PLUS"
+    elseif adv.difficultyMythicPlus == true then
+        OAK_F.Difficulty = "MYTHIC_PLUS"
+    elseif adv.difficultyMythic == true then
+        OAK_F.Difficulty = "MYTHIC"
+    elseif adv.difficultyHeroic == true then
+        OAK_F.Difficulty = "HEROIC"
+    elseif adv.difficultyNormal == true then
+        OAK_F.Difficulty = "NORMAL"
+    else
+        OAK_F.Difficulty = "ANY"
+    end
+
+    for activityName in pairs(OAK_F.Activities) do
+        OAK_F.Activities[activityName] = false
+    end
+
+    local selectedGroups = {}
+    if type(adv.activities) == "table" then
+        for _, groupID in ipairs(adv.activities) do
+            local numericID = tonumber(groupID)
+            if numericID and numericID > 0 then
+                selectedGroups[numericID] = true
+            end
+        end
+    end
+
+    for _, entry in ipairs(GetNativeDungeonActivityEntries()) do
+        local label = tostring(entry and entry.label or "")
+        local groupID = tonumber(entry and entry.groupID) or 0
+        if label ~= "" and OAK_F.Activities[label] == nil then
+            OAK_F.Activities[label] = false
+        end
+        if label ~= "" and groupID > 0 and selectedGroups[groupID] then
+            OAK_F.Activities[label] = true
+        end
+    end
 end
 
 -- Native API Syncer for Advanced Filters
@@ -1276,6 +1332,11 @@ end)
 local scrollFrame = CreateFrame("ScrollFrame", "OakLFGSearchScrollFrame", OAK_SEARCH, "UIPanelScrollFrameTemplate")
 scrollFrame:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", 10, SEARCH_SCROLL_TOP_Y)
 scrollFrame:SetPoint("BOTTOMRIGHT", OAK_SEARCH, "BOTTOMRIGHT", -25, 26) 
+local pinnedRowsFrame = CreateFrame("Frame", nil, OAK_SEARCH)
+pinnedRowsFrame:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", 10, SEARCH_SCROLL_TOP_Y)
+pinnedRowsFrame:SetPoint("TOPRIGHT", OAK_SEARCH, "TOPRIGHT", -25, SEARCH_SCROLL_TOP_Y)
+pinnedRowsFrame:SetHeight(1)
+pinnedRowsFrame:Hide()
 
 local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
 if scrollBar then
@@ -1299,7 +1360,7 @@ OAK_SEARCH:SetScript("OnSizeChanged", function(self, width, height)
     if nativeDungeonFilterContent and nativeDungeonFilterScroll then
         nativeDungeonFilterContent:SetWidth(math.max(1, nativeDungeonFilterScroll:GetWidth()))
     end
-    if self:IsShown() and addonTable.ClampFrameToScreen then
+    if self:IsShown() and not self.isOakDragging and not self.isOakResizing and addonTable.ClampFrameToScreen then
         addonTable.ClampFrameToScreen(self, OakLFGSorterDB, "searchFramePos")
     end
 end)
@@ -3122,6 +3183,8 @@ local function SetControlVisible(control, visible)
 end
 
 UpdateSearchFilterPane = function()
+    SyncOakFiltersFromNativeAdvancedFilter()
+
     local showSearchQuery = SearchModeUsesHostedSearch(currentSearchMode)
     local showNativeDungeonFilters = SearchModeUsesNativeDungeonFilters(currentSearchMode)
     local showDifficulty = SearchModeUsesDifficulty(currentSearchMode)
@@ -4061,8 +4124,158 @@ local function CreateRow(index)
     return row
 end
 
+local function PositionSearchRow(row, parentFrame, previousRow)
+    row:SetParent(parentFrame)
+    row:ClearAllPoints()
+    row:SetHeight(ROW_HEIGHT)
+    if previousRow then
+        row:SetPoint("TOPLEFT", previousRow, "BOTTOMLEFT", 0, 0)
+    else
+        row:SetPoint("TOPLEFT", parentFrame, "TOPLEFT", 0, 0)
+    end
+    row:SetPoint("RIGHT", parentFrame, "RIGHT", 0, 0)
+end
+
+local function RenderSearchGroupRow(row, group, isAltColor)
+    row.groupData = group
+
+    if group.isRoleFilled then
+        row.bg:SetColorTexture(0.58, 0.38, 0.10, 0.62)
+    elseif group.isApplied then
+        row.bg:SetColorTexture(0.2, 0.6, 0.2, 0.6)
+    elseif group.isDeclined then
+        row.bg:SetColorTexture(0.6, 0.1, 0.1, 0.5)
+    elseif group.isFriend then
+        row.bg:SetColorTexture(0.15, 0.4, 0.6, 0.6)
+    else
+        row.bg:SetColorTexture(unpack(isAltColor and ROW_COLOR_B or ROW_COLOR_A))
+    end
+
+    if group.playstyleLabel and group.playstyleLabel ~= "" and group.playstyleLabel ~= "Any" then
+        row.playstyleText:SetText(group.playstyleLabel)
+    else
+        row.playstyleText:SetText("")
+    end
+
+    if group.mode == "raid" or group.mode == "legacy_raid" then
+        row.dungeonText:SetText(GetRaidDungeonDisplay(group))
+        row.titleText:SetText(GetRaidRowTitle(group))
+        row.modeText:SetText(GetRaidModeDisplay(group))
+        row.modeText:Show()
+    else
+        row.dungeonText:SetText(group.dungeon)
+        row.titleText:SetText(group.titleStr or "")
+        row.modeText:SetText("")
+        row.modeText:Hide()
+    end
+    UpdateSearchRegionDisplay(row, GetSearchLayout())
+    row.notesText:SetText(tostring(group.commentStr or ""))
+
+    local setupSlots, setupMode = BuildSetupSlots(group)
+    if setupMode == "summary" then
+        for _, square in ipairs(row.roleSquares) do
+            square:Hide()
+        end
+        local summaryCounts = {
+            TANK = group.tanks or 0,
+            HEALER = group.heals or 0,
+            DAMAGER = group.dps or 0,
+        }
+        local summaryRoles = { "TANK", "HEALER", "DAMAGER" }
+        for index, role in ipairs(summaryRoles) do
+            local summary = row.roleSummaries[index]
+            local l, r, t, b = GetRoleTexCoords(role)
+            summary.icon:SetTexCoord(l, r, t, b)
+            summary.count:SetText(tostring(summaryCounts[role] or 0))
+            summary:Show()
+        end
+    else
+        for _, summary in ipairs(row.roleSummaries) do
+            summary:Hide()
+        end
+        for index, square in ipairs(row.roleSquares) do
+            local slotInfo = setupSlots and setupSlots[index]
+            if slotInfo then
+                square:Show()
+                if slotInfo.filled and slotInfo.class then
+                    local c = RAID_CLASS_COLORS[slotInfo.class]
+                    if c then
+                        square.bg:SetColorTexture(c.r, c.g, c.b, 0.8)
+                    else
+                        square.bg:SetColorTexture(0.5, 0.5, 0.5, 0.8)
+                    end
+                    local l, r, t, b = GetRoleTexCoords(slotInfo.role)
+                    square.icon:SetTexCoord(l, r, t, b)
+                    square.icon:SetDesaturated(false)
+                    square.icon:SetAlpha(1.0)
+                else
+                    square.bg:SetColorTexture(0, 0, 0, 0.3)
+                    local l, r, t, b = GetRoleTexCoords(slotInfo and slotInfo.role or "DAMAGER")
+                    square.icon:SetTexCoord(l, r, t, b)
+                    square.icon:SetDesaturated(true)
+                    square.icon:SetAlpha(0.3)
+                end
+            else
+                square:Hide()
+            end
+        end
+    end
+
+    local rNum = math.floor(group.rating or 0)
+    local rStr = (rNum > 0 and tostring(rNum)) or "--"
+    if group.mode == "raid" or group.mode == "legacy_raid" then
+        rStr = GetRaidKillsDisplay(group)
+    elseif currentSearchMode == "raid" or currentSearchMode == "legacy_raid" then
+        rStr = "N/A"
+    elseif group.mode == "rated_pvp" or group.mode == "pvp" then
+        rStr = (rNum > 0 and tostring(rNum)) or "--"
+    elseif rNum > 0 then
+        local r, g, b = GetPreferredScoreColor(rNum, 1, 1, 1)
+        rStr = string.format("|cFF%02x%02x%02x%s|r", (r or 1)*255, (g or 1)*255, (b or 1)*255, rStr)
+    end
+    row.ratingText:SetText(rStr)
+
+    if group.isDeclined then
+        row.applyBtn:Hide()
+        row.cancelBtn:Hide()
+        row.ageText:SetText("Declined")
+        row.ageText:SetTextColor(1, 0.2, 0.2)
+    elseif group.isApplied then
+        row.applyBtn:Hide()
+        row.cancelBtn:Show()
+        if group.isRoleFilled then
+            row.ageText:SetText("Filled")
+            row.ageText:SetTextColor(1.0, 0.82, 0.30)
+            row.cancelBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Role Filled - Cancel Application", 1, 0.82, 0.30)
+                GameTooltip:Show()
+            end)
+        else
+            row.ageText:SetText("Pending")
+            row.ageText:SetTextColor(0.2, 1, 0.2)
+            row.cancelBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Cancel Application", 1, 0.2, 0.2)
+                GameTooltip:Show()
+            end)
+        end
+    else
+        row.applyBtn:Show()
+        row.cancelBtn:Hide()
+        row.ageText:SetText(FormatTime(group.age))
+        row.ageText:SetTextColor(1, 1, 1)
+    end
+
+    row:Show()
+end
+
 function OAK_SEARCH:UpdateDisplay()
+    SyncOakFiltersFromNativeAdvancedFilter()
+
     local filteredGroups = {}
+    local pinnedGroups = {}
+    local scrollingGroups = {}
     local useNativeDungeonFilters = SearchModeUsesNativeDungeonFilters(currentSearchMode)
     local adv = useNativeDungeonFilters and GetAdvancedSearchFilter() or nil
     local selectedActivityGroups = {}
@@ -4076,279 +4289,184 @@ function OAK_SEARCH:UpdateDisplay()
             end
         end
     end
-    
+
     for _, group in ipairs(searchResults) do
         local skip = false
         group.isRoleFilled = addonTable.IsAppliedRoleFilled and addonTable.IsAppliedRoleFilled(group) or false
 
-        if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(group) then
-            skip = true
-        end
-
-        if not skip and useNativeDungeonFilters then
-            local selectedCount = 0
-            for _ in pairs(selectedActivityGroups) do
-                selectedCount = selectedCount + 1
-            end
-            if selectedCount > 0 and not selectedActivityGroups[tonumber(group.activityGroupID) or 0] then
+        if not group.isApplied then
+            if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(group) then
                 skip = true
             end
 
-            if adv.hasTank and group.tanks == 0 then skip = true end
-            if adv.hasHealer and group.heals == 0 then skip = true end
-        elseif not skip then
-            local anyFilterActive = false
-            local matchFound = false
-            for _, activityName in ipairs(currentActivityFilters) do
-                if OAK_F.Activities[activityName] then
-                    anyFilterActive = true
-                    if group.filterLabel == activityName then
-                        matchFound = true
+            if not skip and useNativeDungeonFilters then
+                local selectedCount = 0
+                for _ in pairs(selectedActivityGroups) do
+                    selectedCount = selectedCount + 1
+                end
+                if selectedCount > 0 and not selectedActivityGroups[tonumber(group.activityGroupID) or 0] then
+                    skip = true
+                end
+
+                if adv.hasTank and group.tanks == 0 then skip = true end
+                if adv.hasHealer and group.heals == 0 then skip = true end
+            elseif not skip then
+                local anyFilterActive = false
+                local matchFound = false
+                for _, activityName in ipairs(currentActivityFilters) do
+                    if OAK_F.Activities[activityName] then
+                        anyFilterActive = true
+                        if group.filterLabel == activityName then
+                            matchFound = true
+                        end
                     end
                 end
-            end
-            if anyFilterActive and not matchFound then skip = true end
+                if anyFilterActive and not matchFound then skip = true end
 
-            if OAK_F.HasTank and group.tanks == 0 then skip = true end
-            if OAK_F.HasHeal and group.heals == 0 then skip = true end
-        end
-
-        local maxPlayers = tonumber(group.maxPlayers) or 0
-        if not skip and useNativeDungeonFilters then
-            if adv.needsTank and group.tanks >= 1 then skip = true end
-            if adv.needsHealer and group.heals >= 1 then skip = true end
-            if adv.needsDamage and group.dps >= 3 then skip = true end
-            if adv.minimumRating and (tonumber(group.rating) or 0) < tonumber(adv.minimumRating) then
-                skip = true
+                if OAK_F.HasTank and group.tanks == 0 then skip = true end
+                if OAK_F.HasHeal and group.heals == 0 then skip = true end
             end
-            if adv.needsMyClass and playerClassToken then
-                local foundClass = false
-                for _, member in ipairs(group.memberDetails or {}) do
-                    if member.class and string.upper(member.class) == playerClassToken then
-                        foundClass = true
-                        break
+
+            local maxPlayers = tonumber(group.maxPlayers) or 0
+            if not skip and useNativeDungeonFilters then
+                if adv.needsTank and group.tanks >= 1 then skip = true end
+                if adv.needsHealer and group.heals >= 1 then skip = true end
+                if adv.needsDamage and group.dps >= 3 then skip = true end
+                if adv.minimumRating and (tonumber(group.rating) or 0) < tonumber(adv.minimumRating) then
+                    skip = true
+                end
+                if adv.needsMyClass and playerClassToken then
+                    local foundClass = false
+                    for _, member in ipairs(group.memberDetails or {}) do
+                        if member.class and string.upper(member.class) == playerClassToken then
+                            foundClass = true
+                            break
+                        end
+                    end
+                    if foundClass then
+                        skip = true
                     end
                 end
-                if foundClass then
+            elseif not skip then
+                if currentSearchMode == "mythic_plus" or currentSearchMode == "dungeon" or currentSearchMode == "generic" or currentSearchMode == "delve" or currentSearchMode == "rated_pvp" or currentSearchMode == "pvp" then
+                    if OAK_F.NeedTank and group.tanks >= 1 then skip = true end
+                    if OAK_F.NeedHeal and group.heals >= 1 then skip = true end
+                    if OAK_F.NeedDPS and group.dps >= 3 then skip = true end
+                elseif maxPlayers > 5 then
+                    local targetTanks = math.max(1, math.min(2, math.ceil(maxPlayers / 10)))
+                    local targetHeals = math.max(2, math.floor(maxPlayers / 5))
+                    local targetDps = math.max(0, maxPlayers - targetTanks - targetHeals)
+
+                    if OAK_F.NeedTank and group.tanks >= targetTanks then skip = true end
+                    if OAK_F.NeedHeal and group.heals >= targetHeals then skip = true end
+                    if OAK_F.NeedDPS and (group.dps >= targetDps or group.members >= maxPlayers) then skip = true end
+                end
+            end
+
+            if not skip and OAK_F.NeedLust and group.hasLust then skip = true end
+            if not skip and OAK_F.NeedBrez and group.hasBrez then skip = true end
+
+            if not skip and SearchModeUsesDifficulty(currentSearchMode) then
+                if OAK_F.Difficulty == "NORMAL" and group.difficultyToken ~= "NORMAL" then skip = true end
+                if OAK_F.Difficulty == "HEROIC" and group.difficultyToken ~= "HEROIC" then skip = true end
+                if OAK_F.Difficulty == "MYTHIC" and group.difficultyToken ~= "MYTHIC" then skip = true end
+                if OAK_F.Difficulty == "MYTHIC_PLUS" and group.difficultyToken ~= "MYTHIC_PLUS" then skip = true end
+            end
+
+            if not skip and (currentSearchMode == "raid" or currentSearchMode == "legacy_raid") then
+                local bossesKilled = tonumber(group.raidListing and group.raidListing.bossesKilled) or 0
+                local minBosses, maxBosses = ParseRaidBossRangeExpression(OAK_F.RaidBossesRange)
+                if minBosses and bossesKilled < minBosses then
+                    skip = true
+                end
+                if maxBosses and bossesKilled > maxBosses then
+                    skip = true
+                end
+                if not skip and OAK_F.MatchMyRaidLockout and addonTable.ResultMatchesRaidLockout then
+                    skip = not addonTable.ResultMatchesRaidLockout(group, { matchMyRaidLockout = true })
+                end
+                if not skip and not ResultMatchesNumericRange(tonumber(group.tanks) or 0, OAK_F.RaidTankRange, true) then
+                    skip = true
+                end
+                if not skip and not ResultMatchesNumericRange(tonumber(group.heals) or 0, OAK_F.RaidHealerRange, true) then
+                    skip = true
+                end
+                if not skip and not ResultMatchesNumericRange(tonumber(group.dps) or 0, OAK_F.RaidDpsRange, true) then
                     skip = true
                 end
             end
-        elseif not skip then
-            if currentSearchMode == "mythic_plus" or currentSearchMode == "dungeon" or currentSearchMode == "generic" or currentSearchMode == "delve" or currentSearchMode == "rated_pvp" or currentSearchMode == "pvp" then
-                if OAK_F.NeedTank and group.tanks >= 1 then skip = true end
-                if OAK_F.NeedHeal and group.heals >= 1 then skip = true end
-                if OAK_F.NeedDPS and group.dps >= 3 then skip = true end
-            elseif maxPlayers > 5 then
-                local targetTanks = math.max(1, math.min(2, math.ceil(maxPlayers / 10)))
-                local targetHeals = math.max(2, math.floor(maxPlayers / 5))
-                local targetDps = math.max(0, maxPlayers - targetTanks - targetHeals)
 
-                if OAK_F.NeedTank and group.tanks >= targetTanks then skip = true end
-                if OAK_F.NeedHeal and group.heals >= targetHeals then skip = true end
-                if OAK_F.NeedDPS and (group.dps >= targetDps or group.members >= maxPlayers) then skip = true end
+            local rowMode = group.mode or currentSearchMode
+            local isPvpListing = rowMode == "rated_pvp" or rowMode == "pvp"
+            if not skip and isPvpListing then
+                local pvpQuery = TrimString(OAK_F.SearchQuery)
+                local exactRating = tonumber(pvpQuery)
+                if exactRating and (tonumber(group.pvpRating) or 0) ~= exactRating then
+                    skip = true
+                end
+            end
+
+            if not skip and OAK_F.PartyFit then
+                skip = not GroupMatchesPartyFit(group)
             end
         end
 
-        if not skip and OAK_F.NeedLust and group.hasLust then skip = true end
-        if not skip and OAK_F.NeedBrez and group.hasBrez then skip = true end
-
-        if not skip and SearchModeUsesDifficulty(currentSearchMode) then
-            if OAK_F.Difficulty == "NORMAL" and group.difficultyToken ~= "NORMAL" then skip = true end
-            if OAK_F.Difficulty == "HEROIC" and group.difficultyToken ~= "HEROIC" then skip = true end
-            if OAK_F.Difficulty == "MYTHIC" and group.difficultyToken ~= "MYTHIC" then skip = true end
-            if OAK_F.Difficulty == "MYTHIC_PLUS" and group.difficultyToken ~= "MYTHIC_PLUS" then skip = true end
+        if not skip then
+            table.insert(filteredGroups, group)
         end
-
-        if not skip and (currentSearchMode == "raid" or currentSearchMode == "legacy_raid") then
-            local bossesKilled = tonumber(group.raidListing and group.raidListing.bossesKilled) or 0
-            local minBosses, maxBosses = ParseRaidBossRangeExpression(OAK_F.RaidBossesRange)
-            if minBosses and bossesKilled < minBosses then
-                skip = true
-            end
-            if maxBosses and bossesKilled > maxBosses then
-                skip = true
-            end
-            if not skip and OAK_F.MatchMyRaidLockout and addonTable.ResultMatchesRaidLockout then
-                skip = not addonTable.ResultMatchesRaidLockout(group, { matchMyRaidLockout = true })
-            end
-            if not skip and not ResultMatchesNumericRange(tonumber(group.tanks) or 0, OAK_F.RaidTankRange, true) then
-                skip = true
-            end
-            if not skip and not ResultMatchesNumericRange(tonumber(group.heals) or 0, OAK_F.RaidHealerRange, true) then
-                skip = true
-            end
-            if not skip and not ResultMatchesNumericRange(tonumber(group.dps) or 0, OAK_F.RaidDpsRange, true) then
-                skip = true
-            end
-        end
-
-        local rowMode = group.mode or currentSearchMode
-        local isKeyListing = rowMode == "mythic_plus" or rowMode == "generic" or rowMode == "delve" or group.difficultyToken == "MYTHIC_PLUS" or (tonumber(group.keyLevel) or 0) > 0
-        local isPvpListing = rowMode == "rated_pvp" or rowMode == "pvp"
-
-        if not skip and isPvpListing then
-            local pvpQuery = TrimString(OAK_F.SearchQuery)
-            local exactRating = tonumber(pvpQuery)
-            if exactRating and (tonumber(group.pvpRating) or 0) ~= exactRating then
-                skip = true
-            end
-        end
-
-        if not skip and OAK_F.PartyFit then
-            skip = not GroupMatchesPartyFit(group)
-        end
-
-        if not skip then table.insert(filteredGroups, group) end
     end
 
     table.sort(filteredGroups, function(a, b) return SortGroups(a, b, currentSortBy, currentIsAscending) end)
 
-    for _, row in ipairs(rows) do row:Hide() end
-
-    local displayIndex = 1
-    local isAltColor = false 
-
     for _, group in ipairs(filteredGroups) do
-        if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
-        local row = rows[displayIndex]
-        
-        row.groupData = group
-        
-        if group.isRoleFilled then
-            row.bg:SetColorTexture(0.58, 0.38, 0.10, 0.62)
-        elseif group.isApplied then
-            row.bg:SetColorTexture(0.2, 0.6, 0.2, 0.6) 
-        elseif group.isDeclined then
-            row.bg:SetColorTexture(0.6, 0.1, 0.1, 0.5) 
-        elseif group.isFriend then
-            row.bg:SetColorTexture(0.15, 0.4, 0.6, 0.6) 
+        if group.isApplied then
+            table.insert(pinnedGroups, group)
         else
-            row.bg:SetColorTexture(unpack(isAltColor and ROW_COLOR_B or ROW_COLOR_A))
+            table.insert(scrollingGroups, group)
         end
-        
-        -- Exact short native string directly displayed
-        row.dungeonText:SetText(group.dungeon)
-        
-        if group.playstyleLabel and group.playstyleLabel ~= "" and group.playstyleLabel ~= "Any" then
-            row.playstyleText:SetText(group.playstyleLabel)
-        else
-            row.playstyleText:SetText("")
-        end
-
-        if group.mode == "raid" or group.mode == "legacy_raid" then
-            row.dungeonText:SetText(GetRaidDungeonDisplay(group))
-            row.titleText:SetText(GetRaidRowTitle(group))
-            row.modeText:SetText(GetRaidModeDisplay(group))
-            row.modeText:Show()
-        else
-            row.dungeonText:SetText(group.dungeon)
-            row.titleText:SetText(group.titleStr or "")
-            row.modeText:SetText("")
-            row.modeText:Hide()
-        end
-        UpdateSearchRegionDisplay(row, GetSearchLayout())
-        row.notesText:SetText(tostring(group.commentStr or ""))
-        
-        local setupSlots, setupMode = BuildSetupSlots(group)
-        if setupMode == "summary" then
-            for _, square in ipairs(row.roleSquares) do
-                square:Hide()
-            end
-            local summaryCounts = {
-                TANK = group.tanks or 0,
-                HEALER = group.heals or 0,
-                DAMAGER = group.dps or 0,
-            }
-            local summaryRoles = { "TANK", "HEALER", "DAMAGER" }
-            for index, role in ipairs(summaryRoles) do
-                local summary = row.roleSummaries[index]
-                local l, r, t, b = GetRoleTexCoords(role)
-                summary.icon:SetTexCoord(l, r, t, b)
-                summary.count:SetText(tostring(summaryCounts[role] or 0))
-                summary:Show()
-            end
-        else
-            for _, summary in ipairs(row.roleSummaries) do
-                summary:Hide()
-            end
-            for index, square in ipairs(row.roleSquares) do
-                local slotInfo = setupSlots and setupSlots[index]
-                if slotInfo then
-                    square:Show()
-                    if slotInfo.filled and slotInfo.class then
-                        local c = RAID_CLASS_COLORS[slotInfo.class]
-                        if c then
-                            square.bg:SetColorTexture(c.r, c.g, c.b, 0.8)
-                        else
-                            square.bg:SetColorTexture(0.5, 0.5, 0.5, 0.8)
-                        end
-                        local l, r, t, b = GetRoleTexCoords(slotInfo.role)
-                        square.icon:SetTexCoord(l, r, t, b)
-                        square.icon:SetDesaturated(false)
-                        square.icon:SetAlpha(1.0)
-                    else
-                        square.bg:SetColorTexture(0, 0, 0, 0.3)
-                        local l, r, t, b = GetRoleTexCoords(slotInfo and slotInfo.role or "DAMAGER")
-                        square.icon:SetTexCoord(l, r, t, b)
-                        square.icon:SetDesaturated(true)
-                        square.icon:SetAlpha(0.3)
-                    end
-                else
-                    square:Hide()
-                end
-            end
-        end
-        
-        local rNum = math.floor(group.rating or 0)
-        local rStr = (rNum > 0 and tostring(rNum)) or "--"
-        if group.mode == "raid" or group.mode == "legacy_raid" then
-            rStr = GetRaidKillsDisplay(group)
-        elseif currentSearchMode == "raid" or currentSearchMode == "legacy_raid" then
-            rStr = "N/A"
-        elseif group.mode == "rated_pvp" or group.mode == "pvp" then
-            rStr = (rNum > 0 and tostring(rNum)) or "--"
-        elseif rNum > 0 then
-            local r, g, b = GetPreferredScoreColor(rNum, 1, 1, 1)
-            rStr = string.format("|cFF%02x%02x%02x%s|r", (r or 1)*255, (g or 1)*255, (b or 1)*255, rStr)
-        end
-        row.ratingText:SetText(rStr)
-        
-        if group.isDeclined then
-            row.applyBtn:Hide()
-            row.cancelBtn:Hide()
-            row.ageText:SetText("Declined")
-            row.ageText:SetTextColor(1, 0.2, 0.2)
-        elseif group.isApplied then
-            row.applyBtn:Hide()
-            row.cancelBtn:Show()
-            if group.isRoleFilled then
-                row.ageText:SetText("Filled")
-                row.ageText:SetTextColor(1.0, 0.82, 0.30)
-                row.cancelBtn:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText("Role Filled - Cancel Application", 1, 0.82, 0.30)
-                    GameTooltip:Show()
-                end)
-            else
-                row.ageText:SetText("Pending")
-                row.ageText:SetTextColor(0.2, 1, 0.2)
-                row.cancelBtn:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText("Cancel Application", 1, 0.2, 0.2)
-                    GameTooltip:Show()
-                end)
-            end
-        else
-            row.applyBtn:Show()
-            row.cancelBtn:Hide()
-            row.ageText:SetText(FormatTime(group.age))
-            row.ageText:SetTextColor(1, 1, 1)
-        end
-
-        row:Show(); displayIndex = displayIndex + 1; isAltColor = not isAltColor
     end
 
-    scrollChild:SetHeight(math.max(1, (displayIndex - 1) * ROW_HEIGHT))
+    for _, row in ipairs(rows) do
+        row:Hide()
+    end
+
+    if #pinnedGroups > 0 then
+        pinnedRowsFrame:SetHeight(#pinnedGroups * ROW_HEIGHT)
+        pinnedRowsFrame:Show()
+        scrollFrame:ClearAllPoints()
+        scrollFrame:SetPoint("TOPLEFT", pinnedRowsFrame, "BOTTOMLEFT", 0, -4)
+        scrollFrame:SetPoint("BOTTOMRIGHT", OAK_SEARCH, "BOTTOMRIGHT", -25, 26)
+    else
+        pinnedRowsFrame:SetHeight(1)
+        pinnedRowsFrame:Hide()
+        scrollFrame:ClearAllPoints()
+        scrollFrame:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", 10, SEARCH_SCROLL_TOP_Y)
+        scrollFrame:SetPoint("BOTTOMRIGHT", OAK_SEARCH, "BOTTOMRIGHT", -25, 26)
+    end
+
+    local displayIndex = 1
+    local previousPinnedRow = nil
+    local previousScrollingRow = nil
+
+    for index, group in ipairs(pinnedGroups) do
+        if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
+        local row = rows[displayIndex]
+        PositionSearchRow(row, pinnedRowsFrame, previousPinnedRow)
+        RenderSearchGroupRow(row, group, (index % 2) == 0)
+        previousPinnedRow = row
+        displayIndex = displayIndex + 1
+    end
+
+    for index, group in ipairs(scrollingGroups) do
+        if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
+        local row = rows[displayIndex]
+        PositionSearchRow(row, scrollChild, previousScrollingRow)
+        RenderSearchGroupRow(row, group, (index % 2) == 0)
+        previousScrollingRow = row
+        displayIndex = displayIndex + 1
+    end
+
+    scrollChild:SetHeight(math.max(1, #scrollingGroups * ROW_HEIGHT))
     OAK_SEARCH.footerText:SetText(string.format("Showing %d of %d groups", #filteredGroups, #searchResults))
 end
 
@@ -4383,7 +4501,7 @@ local function FetchSearchResults()
                 local maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or tonumber(searchResultInfo.numMembers) or 0
                 local numMembers = tonumber(searchResultInfo.numMembers) or 0
 
-                if not ((mode == "dungeon" or mode == "mythic_plus") and maxPlayers > 0 and numMembers >= maxPlayers) then
+                if isApplied or not ((mode == "dungeon" or mode == "mythic_plus") and maxPlayers > 0 and numMembers >= maxPlayers) then
                     local hasLust, hasBrez = false, false
                     local memberDetails = (addonTable.GetSearchResultPlayers and addonTable.GetSearchResultPlayers(resultID, tonumber(searchResultInfo.numMembers) or 0)) or {}
                     local playstyleValue, playstyleLabel = GetSearchPlaystyle(searchResultInfo, activityInfo)
@@ -4515,7 +4633,6 @@ OAK_SEARCH:SetScript("OnShow", function(self)
     if OAK_SEARCH.ScaleSlider then
         OAK_SEARCH.ScaleSlider:SetValue(OakLFGSorterDB.searchScale or 1.0)
     end
-    AutoPositionSearch()
     ApplySearchScale(OakLFGSorterDB.searchScale or 1.0)
     ApplySearchNotesLayout()
     if addonTable.UpdateSearchQuickSignupControls then
