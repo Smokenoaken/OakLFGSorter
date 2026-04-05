@@ -417,6 +417,7 @@ local nativeSearchBoxOriginalState
 local nativeAutoCompleteOriginalState
 local raidRoleRangeControls = {}
 local pendingNativeActivitySelections = {}
+local isRefreshingNativeDungeonPane = false
 
 local OAK_F = {
     Difficulty = "ANY",
@@ -570,8 +571,18 @@ local function SaveAdvancedSearchFilter(mutator)
         mutator(adv)
     end
     C_LFGList.SaveAdvancedFilter(adv)
+    if not isRefreshingNativeDungeonPane and filterPanel and filterPanel:IsShown() and nativeDungeonFilterScroll and nativeDungeonFilterScroll:IsShown() then
+        UpdateSearchFilterPane()
+    end
     if OAK_SEARCH and OAK_SEARCH.UpdateDisplay then
         OAK_SEARCH:UpdateDisplay()
+    end
+    if RequestUpdate then
+        C_Timer.After(0.15, function()
+            if RequestUpdate then
+                RequestUpdate()
+            end
+        end)
     end
 end
 
@@ -1242,12 +1253,18 @@ nativeDungeonFilterContent.selectAllButton:SetScript("OnClick", function()
     SaveAdvancedSearchFilter(function(state)
         state.activities = activityIDs
     end)
+    if filterPanel and filterPanel:IsShown() then
+        UpdateSearchFilterPane()
+    end
 end)
 nativeDungeonFilterContent.selectNoneButton:SetScript("OnClick", function()
     wipe(pendingNativeActivitySelections)
     SaveAdvancedSearchFilter(function(state)
         state.activities = {}
     end)
+    if filterPanel and filterPanel:IsShown() then
+        UpdateSearchFilterPane()
+    end
 end)
 
 nativeNeedsTankBox:SetScript("OnClick", function()
@@ -2927,7 +2944,11 @@ local function UpdateNativeDungeonFilterPane(topOffset)
                     end
                     table.sort(state.activities)
                 end)
-                self:SetState(not isSelected)
+                if filterPanel and filterPanel:IsShown() then
+                    UpdateSearchFilterPane()
+                else
+                    self:SetState(not isSelected)
+                end
             end)
             nativeDungeonActivityButtons[index] = button
         end
@@ -3206,6 +3227,11 @@ local function SetControlVisible(control, visible)
 end
 
 UpdateSearchFilterPane = function()
+    if isRefreshingNativeDungeonPane then
+        return
+    end
+
+    isRefreshingNativeDungeonPane = true
     SyncOakFiltersFromNativeAdvancedFilter()
 
     local showSearchQuery = SearchModeUsesHostedSearch(currentSearchMode)
@@ -3323,6 +3349,7 @@ UpdateSearchFilterPane = function()
 
         nativeDungeonFilterScroll:Show()
         UpdateNativeDungeonFilterPane(searchButtonTopY - 34)
+        isRefreshingNativeDungeonPane = false
         return
     else
         nativeDungeonFilterScroll:Hide()
@@ -3478,6 +3505,8 @@ UpdateSearchFilterPane = function()
             box:Hide()
         end
     end
+
+    isRefreshingNativeDungeonPane = false
 end
 
 local function DetermineSearchMode()
