@@ -1252,14 +1252,6 @@ OAK_LFG:SetScript("OnShow", function(self)
     end
 end)
 
-if PVEFrame then
-    hooksecurefunc(PVEFrame, "SetPoint", function()
-        if OAK_LFG:IsShown() and addonTable.AutoPosition and not (OakLFGSorterDB and (OakLFGSorterDB.frameUserPlaced or OakLFGSorterDB.framePos)) then
-            addonTable.AutoPosition()
-        end
-    end)
-end
-
 local VarEventFrame = CreateFrame("Frame")
 VarEventFrame:RegisterEvent("ADDON_LOADED")
 VarEventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")

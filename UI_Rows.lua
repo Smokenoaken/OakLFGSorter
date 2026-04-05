@@ -701,7 +701,7 @@ local function SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
         OAK_LFG:SetWidth(targetWidth)
     end
 
-    if addonTable.ClampFrameToScreen then
+    if not OAK_LFG.isOakDragging and not OAK_LFG.isOakResizing and addonTable.ClampFrameToScreen then
         addonTable.ClampFrameToScreen(OAK_LFG, OakLFGSorterDB, "framePos")
     end
 end

@@ -17,7 +17,9 @@ OAK_LFG:SetScript("OnDragStart", function(self)
     self:StartMoving()
 end)
 OAK_LFG:SetFrameStrata("DIALOG")
-OAK_LFG:SetClampedToScreen(true)
+-- Avoid Blizzard's live drag clamp, which makes the frame feel "bouncy"
+-- near screen edges. We clamp only after drag/resize completes.
+OAK_LFG:SetClampedToScreen(false)
 OAK_LFG:Hide()
 
 _G["OakensoulLFGSorterFrame"] = OAK_LFG
@@ -289,7 +291,9 @@ function addonTable.CheckRIOHook()
     if not rioHooked and RaiderIO_ProfileTooltip then
         rioHooked = true
         RaiderIO_ProfileTooltip:HookScript("OnHide", function()
-            if addonTable.OAK_LFG:IsShown() then addonTable.AutoPosition() end
+            if addonTable.OAK_LFG:IsShown() and addonTable.RefreshRIOAnchor then
+                addonTable.RefreshRIOAnchor()
+            end
         end)
         RaiderIO_ProfileTooltip:HookScript("OnShow", function()
             addonTable.RefreshRIOAnchor()

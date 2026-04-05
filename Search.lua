@@ -50,7 +50,9 @@ OAK_SEARCH:SetResizeBounds(510, 444, 660, 800)
 OAK_SEARCH:EnableMouse(true)
 OAK_SEARCH:RegisterForDrag("LeftButton")
 OAK_SEARCH:SetFrameStrata("DIALOG")
-OAK_SEARCH:SetClampedToScreen(true)
+-- Avoid Blizzard's live drag clamp, which makes the frame feel "bouncy"
+-- near screen edges. We clamp only after drag/resize completes.
+OAK_SEARCH:SetClampedToScreen(false)
 OAK_SEARCH:Hide()
 addonTable.OAK_SEARCH = OAK_SEARCH
 
@@ -1861,6 +1863,27 @@ local function BuildSetupSlots(group)
         targetSlots = math.max(2, math.min(tonumber(group.maxPlayers) or #sortedMembers or 3, 5))
     else
         targetSlots = 5
+    end
+
+    if #sortedMembers == 0 then
+        local fallbackMembers = {}
+        local tankCount = tonumber(group.tanks) or 0
+        local healCount = tonumber(group.heals) or 0
+        local dpsCount = tonumber(group.dps) or 0
+
+        for _ = 1, tankCount do
+            table.insert(fallbackMembers, { role = "TANK", class = nil, filled = true })
+        end
+        for _ = 1, healCount do
+            table.insert(fallbackMembers, { role = "HEALER", class = nil, filled = true })
+        end
+        for _ = 1, dpsCount do
+            table.insert(fallbackMembers, { role = "DAMAGER", class = nil, filled = true })
+        end
+
+        for _, member in ipairs(fallbackMembers) do
+            table.insert(sortedMembers, member)
+        end
     end
 
     local slots = {}
@@ -3700,11 +3723,13 @@ ApplySearchNotesLayout = function(preserveLeftEdge)
         end
     else
         OAK_SEARCH:SetWidth(targetWidth)
-        if HasSavedSearchFramePosition() then
-            RestoreSearchFramePosition()
-        else
+        if not OAK_SEARCH:GetPoint() then
             AutoPositionSearch()
         end
+    end
+
+    if not OAK_SEARCH.isOakDragging and not OAK_SEARCH.isOakResizing and addonTable.ClampFrameToScreen then
+        addonTable.ClampFrameToScreen(OAK_SEARCH, OakLFGSorterDB, "searchFramePos")
     end
 
     scrollChild:SetWidth(scrollFrame:GetWidth())
@@ -4197,12 +4222,18 @@ local function RenderSearchGroupRow(row, group, isAltColor)
             local slotInfo = setupSlots and setupSlots[index]
             if slotInfo then
                 square:Show()
-                if slotInfo.filled and slotInfo.class then
-                    local c = RAID_CLASS_COLORS[slotInfo.class]
+                if slotInfo.filled then
+                    local c = slotInfo.class and RAID_CLASS_COLORS[slotInfo.class] or nil
                     if c then
                         square.bg:SetColorTexture(c.r, c.g, c.b, 0.8)
                     else
-                        square.bg:SetColorTexture(0.5, 0.5, 0.5, 0.8)
+                        if slotInfo.role == "TANK" then
+                            square.bg:SetColorTexture(0.27, 0.55, 0.85, 0.8)
+                        elseif slotInfo.role == "HEALER" then
+                            square.bg:SetColorTexture(0.20, 0.75, 0.35, 0.8)
+                        else
+                            square.bg:SetColorTexture(0.82, 0.32, 0.32, 0.8)
+                        end
                     end
                     local l, r, t, b = GetRoleTexCoords(slotInfo.role)
                     square.icon:SetTexCoord(l, r, t, b)
@@ -4660,12 +4691,3 @@ OAK_SEARCH:SetScript("OnHide", function()
         addonTable.RefreshRIOAnchor()
     end
 end)
-
-if PVEFrame then
-    hooksecurefunc(PVEFrame, "SetPoint", function()
-        if OAK_SEARCH:IsShown() and not HasSavedSearchFramePosition() then
-            AutoPositionSearch()
-            ApplySearchScale(OakLFGSorterDB.searchScale or 1.0)
-        end
-    end)
-end
