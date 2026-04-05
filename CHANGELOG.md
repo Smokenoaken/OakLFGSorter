@@ -1,3 +1,9 @@
+## v2.0.10
+
+- Fixed the native dungeon filter hotfix so Oak no longer taints Blizzard's protected Search() path when refreshing dungeon filters.
+- Stopped the dungeon filter UI from recursing into a long refresh loop while repainting Blizzard-backed activity selections.
+- Kept the safer immediate checkbox refresh behavior for Blizzard-backed dungeon filters without requiring unsafe protected calls.
+
 ## v2.0.9
 
 - Stopped Oak windows from continuing to follow Blizzard's Dungeons & Raids frame after the user places them
