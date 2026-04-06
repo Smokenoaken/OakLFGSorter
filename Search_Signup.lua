@@ -122,6 +122,41 @@ local function GetSavedQuickSignupRoles()
     return roles
 end
 
+local function ApplyQuickSignupDirect(searchResultID)
+    if not (C_LFGList and C_LFGList.ApplyToGroup and searchResultID) then
+        return false
+    end
+
+    local roleSettings = GetSavedQuickSignupRoles()
+    local availableRoles = GetPlayerQuickSignupCapabilities()
+
+    local tank = availableRoles.TANK == true and roleSettings.TANK == true
+    local healer = availableRoles.HEALER == true and roleSettings.HEALER == true
+    local damage = availableRoles.DAMAGER == true and roleSettings.DAMAGER == true
+
+    if not tank and not healer and not damage then
+        local defaults = GetDefaultQuickSignupRoles()
+        tank = availableRoles.TANK == true and defaults.TANK == true
+        healer = availableRoles.HEALER == true and defaults.HEALER == true
+        damage = availableRoles.DAMAGER == true and defaults.DAMAGER == true
+    end
+
+    local ok = pcall(C_LFGList.ApplyToGroup, searchResultID, tank, healer, damage)
+    if not ok then
+        return false
+    end
+
+    if addonTable.MarkSearchResultApplied then
+        addonTable.MarkSearchResultApplied(searchResultID)
+    end
+
+    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH.UpdateDisplay then
+        addonTable.OAK_SEARCH:UpdateDisplay()
+    end
+
+    return true
+end
+
 local function GetSignupDialogRoleButton(dialog, roleKey)
     local fieldNameByRole = {
         TANK = "TankButton",
@@ -357,6 +392,13 @@ quickSignupState.roleButtons.TANK = CreateQuickSignupRoleButton(quickSignupBar, 
 quickSignupState.roleButtons.HEALER = CreateQuickSignupRoleButton(quickSignupBar, "HEALER", "Use Healer for Quick Sign Up and preselect Healer in the Blizzard popup")
 quickSignupState.roleButtons.DAMAGER = CreateQuickSignupRoleButton(quickSignupBar, "DAMAGER", "Use Damage for Quick Sign Up and preselect Damage in the Blizzard popup")
 
+local signupLimitNote = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+signupLimitNote:SetText("Note: You can only sign up for a total of 5 groups at a time")
+signupLimitNote:SetTextColor(0.85, 0.85, 0.85)
+signupLimitNote:SetJustifyH("LEFT")
+signupLimitNote:SetWordWrap(false)
+signupLimitNote:SetScale(0.9)
+
 local persistNoteToggleLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 persistNoteToggleLabel:SetPoint("RIGHT", quickSignupBar, "RIGHT", -12, 0)
 persistNoteToggleLabel:SetText(L["Persist Note"])
@@ -413,7 +455,43 @@ function addonTable.UpdateSearchQuickSignupControls()
         end
     end
 
+    signupLimitNote:ClearAllPoints()
+    signupLimitNote:SetPoint("LEFT", quickSignupState.roleButtons.DAMAGER, "RIGHT", 10, 0)
+    signupLimitNote:SetPoint("RIGHT", persistNoteToggleBox, "LEFT", -14, 0)
+
     UpdatePersistentNotePatch()
+end
+
+local function TryPanelSignup(panel, searchResultID)
+    if not (panel and searchResultID) then
+        return false
+    end
+
+    if panel.selectedResult ~= searchResultID then
+        LFGListSearchPanel_SelectResult(panel, searchResultID)
+    end
+
+    if panel.SignUpButton and panel.SignUpButton:IsEnabled() then
+        LFGListSearchPanel_SignUp(panel)
+        if addonTable.MarkSearchResultApplied then
+            addonTable.MarkSearchResultApplied(searchResultID)
+        end
+        return true
+    end
+
+    return false
+end
+
+local function FallbackShowSignupDialog(searchResultID)
+    if type(LFGListApplicationDialog_Show) == "function" and LFGListApplicationDialog then
+        local ok = pcall(LFGListApplicationDialog_Show, LFGListApplicationDialog, searchResultID)
+        if ok then
+            RaiseSignupDialogAboveOak(LFGListApplicationDialog)
+            return true
+        end
+    end
+
+    return false
 end
 
 quickSignupToggleBox:SetScript("OnClick", function(self)
@@ -516,10 +594,50 @@ function addonTable.BeginSearchSignup(searchResultID)
     end
 
     addonTable.EnsureSearchSignupHooks()
-    quickSignupState.pending = OakLFGSorterDB.searchQuickSignup and not IsShiftKeyDown() or false
+    local panel = LFGListFrame.SearchPanel
+    local shouldQuickSignup = OakLFGSorterDB.searchQuickSignup and not IsShiftKeyDown() or false
+    quickSignupState.pending = shouldQuickSignup
 
-    LFGListSearchPanel_SelectResult(LFGListFrame.SearchPanel, searchResultID)
-    LFGListSearchPanel_SignUp(LFGListFrame.SearchPanel)
+    if shouldQuickSignup and ApplyQuickSignupDirect(searchResultID) then
+        quickSignupState.pending = false
+        return
+    end
+
+    if FallbackShowSignupDialog(searchResultID) then
+        quickSignupState.pending = false
+        return
+    end
+
+    if LFGListSearchPanelUtil_CanSelectResult and not LFGListSearchPanelUtil_CanSelectResult(searchResultID) then
+        return
+    end
+
+    if TryPanelSignup(panel, searchResultID) then
+        return
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if TryPanelSignup(panel, searchResultID) then
+                return
+            end
+
+            C_Timer.After(0.05, function()
+                if TryPanelSignup(panel, searchResultID) then
+                    return
+                end
+
+                if panel and panel.SignUpButton and panel.SignUpButton:IsEnabled() then
+                    LFGListSearchPanel_SignUp(panel)
+                    if addonTable.MarkSearchResultApplied then
+                        addonTable.MarkSearchResultApplied(searchResultID)
+                    end
+                end
+            end)
+        end)
+    else
+        FallbackShowSignupDialog(searchResultID)
+    end
 end
 
 addonTable.UpdateSearchQuickSignupControls()

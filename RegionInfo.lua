@@ -149,6 +149,23 @@ local function EnsureRegionFilterState()
         end
     end
 
+    local hasAnyEnabled = false
+    for _, regionCode in ipairs(REGION_FILTER_ORDER) do
+        if filters[regionCode] ~= false then
+            hasAnyEnabled = true
+            break
+        end
+    end
+
+    if not hasAnyEnabled then
+        local playerRegion = addonTable.GetPlayerRegionInfo and addonTable.GetPlayerRegionInfo() or nil
+        if playerRegion and playerRegion.code and filters[playerRegion.code] ~= nil then
+            filters[playerRegion.code] = true
+        else
+            filters[REGION_FILTER_ORDER[1]] = true
+        end
+    end
+
     OakLFGSorterDB.lowLatencyOnly = nil
     return filters
 end
@@ -167,11 +184,28 @@ end
 
 function addonTable.SetRegionEnabled(regionCode, isEnabled)
     if not regionCode or regionCode == "" then
-        return
+        return false
     end
 
     local filters = EnsureRegionFilterState()
-    filters[regionCode] = isEnabled and true or false
+    if isEnabled then
+        filters[regionCode] = true
+        return true
+    end
+
+    local enabledCount = 0
+    for _, code in ipairs(REGION_FILTER_ORDER) do
+        if filters[code] ~= false then
+            enabledCount = enabledCount + 1
+        end
+    end
+
+    if enabledCount <= 1 and filters[regionCode] ~= false then
+        return false
+    end
+
+    filters[regionCode] = false
+    return true
 end
 
 function addonTable.GetRegionMeta(regionCode)

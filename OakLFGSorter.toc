@@ -14,7 +14,10 @@ Locales\deDE.lua
 Locales\frFR.lua
 Locales\esES.lua
 Locales\esMX.lua
+Locales\ruRU.lua
 RegionInfo.lua
+Search_Config.lua
+Search_FilterModes.lua
 Search.lua
 Search_Header.lua
 Search_Signup.lua

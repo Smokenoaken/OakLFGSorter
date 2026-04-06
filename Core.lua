@@ -774,7 +774,7 @@ local function FetchSearchResultData()
         searchContext.activityInfo = activityInfo
         searchContext.mode = firstContextResult.mode or "generic"
         searchContext.categoryID = activityInfo and activityInfo.categoryID or searchContext.selectedCategoryID
-        searchContext.groupID = activityInfo and (activityInfo.groupFinderActivityGroupID or activityInfo.groupID) or searchContext.groupID
+        searchContext.groupID = (addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(activityInfo)) or searchContext.groupID
     else
         searchContext.activityID = nil
         searchContext.activityInfo = nil
@@ -794,6 +794,16 @@ local function GetCurrentSeasonFilterMask()
 
     return 0x40
 end
+addonTable.GetCurrentSeasonFilterMask = GetCurrentSeasonFilterMask
+
+local function ResolveActivityGroupID(activityInfo)
+    if type(activityInfo) ~= "table" then
+        return nil
+    end
+
+    return tonumber(activityInfo.activityGroupID or activityInfo.groupFinderActivityGroupID or activityInfo.groupID)
+end
+addonTable.ResolveActivityGroupID = ResolveActivityGroupID
 
 function addonTable.GetAvailableBrowserActivities()
     local activityEntries = {}
