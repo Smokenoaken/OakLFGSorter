@@ -1,13 +1,13 @@
 local addonName, addonTable = ...
 
-local OAK_SEARCH = addonTable.OAK_SEARCH
-local theme = addonTable.SearchFrameTheme or {}
-if not OAK_SEARCH then
+local OAK_LFG = addonTable.OAK_LFG
+if not OAK_LFG then
     return
 end
 
-local FLAT_TEX = theme.FLAT_TEX or "Interface\\Buttons\\WHITE8X8"
-local classColor = theme.classColor or { r = 1, g = 1, b = 1 }
+local FLAT_TEX = "Interface\\Buttons\\WHITE8X8"
+local _, playerClass = UnitClass("player")
+local classColor = RAID_CLASS_COLORS[playerClass] or { r = 1, g = 1, b = 1 }
 
 local EventFrame = CreateFrame("Frame")
 EventFrame:RegisterEvent("ADDON_LOADED")
@@ -16,19 +16,12 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
         return
     end
 
+    -- Wire quick-signup popup hooks
     if addonTable.EnsureSearchSignupHooks then
         addonTable.EnsureSearchSignupHooks()
     end
 
-    if addonTable.OAK_LFG and not addonTable.OAK_LFG.OakSearchMutualHooked then
-        addonTable.OAK_LFG:HookScript("OnShow", function()
-            if OAK_SEARCH:IsShown() then
-                OAK_SEARCH:Hide()
-            end
-        end)
-        addonTable.OAK_LFG.OakSearchMutualHooked = true
-    end
-
+    -- Add "Auto-Open Sorter" toggle on the Blizzard Search panel
     if LFGListFrame and LFGListFrame.SearchPanel and not LFGListFrame.SearchPanel.OakSearchToggleHooked then
         local toggleHolder = CreateFrame("Frame", nil, LFGListFrame.SearchPanel)
         toggleHolder:SetSize(170, 18)
@@ -63,17 +56,20 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
             OakLFGSorterDB.autoOpenSearch = not OakLFGSorterDB.autoOpenSearch
             UpdateState()
             if OakLFGSorterDB.autoOpenSearch then
-                OAK_SEARCH:Show()
+                if addonTable.SetCurrentViewMode then addonTable.SetCurrentViewMode("browser") end
+                OAK_LFG:Show()
             else
-                OAK_SEARCH:Hide()
+                OAK_LFG:Hide()
             end
         end)
 
+        -- When the Blizzard search panel opens, show OAK_LFG in browser mode
         LFGListFrame.SearchPanel:HookScript("OnShow", function()
             if OakLFGSorterDB.autoOpenSearch then
-                OAK_SEARCH:Show()
+                if addonTable.SetCurrentViewMode then addonTable.SetCurrentViewMode("browser") end
+                OAK_LFG:Show()
             else
-                OAK_SEARCH:Hide()
+                OAK_LFG:Hide()
             end
         end)
 

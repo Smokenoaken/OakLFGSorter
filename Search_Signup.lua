@@ -1,8 +1,9 @@
 local addonName, addonTable = ...
 local L = addonTable.L
 
-local OAK_SEARCH = addonTable and addonTable.OAK_SEARCH
-if not OAK_SEARCH then
+-- Unified browser: the quick signup bar now lives inside OAK_LFG
+local OAK_LFG = addonTable and addonTable.OAK_LFG
+if not OAK_LFG then
     return
 end
 
@@ -154,8 +155,8 @@ local function ApplyQuickSignupDirect(searchResultID)
         addonTable.MarkSearchResultApplied(searchResultID)
     end
 
-    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH.UpdateDisplay then
-        addonTable.OAK_SEARCH:UpdateDisplay()
+    if addonTable.UpdateDisplay and addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
+        addonTable.UpdateDisplay()
     end
 
     if addonTable.StartSignupCooldown then
@@ -207,10 +208,7 @@ local function RaiseFrameAboveOak(frame)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetToplevel(true)
 
-    local targetLevel = math.max(1, OAK_SEARCH:GetFrameLevel() + 20)
-    if addonTable and addonTable.OAK_LFG and addonTable.OAK_LFG.GetFrameLevel then
-        targetLevel = math.max(targetLevel, addonTable.OAK_LFG:GetFrameLevel() + 20)
-    end
+    local targetLevel = math.max(1, OAK_LFG:GetFrameLevel() + 20)
 
     frame:SetFrameLevel(targetLevel)
     frame:Raise()
@@ -382,12 +380,15 @@ local function CreateQuickSignupRoleButton(parent, roleKey, tooltipText)
     return btn
 end
 
-local quickSignupBar = CreateFrame("Frame", nil, OAK_SEARCH, "BackdropTemplate")
-quickSignupBar:SetPoint("TOPLEFT", OAK_SEARCH, "TOPLEFT", 1, -31)
-quickSignupBar:SetPoint("TOPRIGHT", OAK_SEARCH, "TOPRIGHT", -1, -31)
+-- Bar sits above OAK_LFG's footer row; shown only in browser mode
+local quickSignupBar = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
+quickSignupBar:SetPoint("BOTTOMLEFT",  OAK_LFG, "BOTTOMLEFT",  1, 31)
+quickSignupBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -1, 31)
 quickSignupBar:SetHeight(24)
 quickSignupBar:SetBackdrop({ bgFile = FLAT_TEX })
 quickSignupBar:SetBackdropColor(0.08, 0.08, 0.1, 0.75)
+quickSignupBar:Hide()  -- shown by SetCurrentViewMode("browser")
+addonTable.quickSignupBar = quickSignupBar
 
 local quickSignupToggleBox = CreateQuickSignupToggle(quickSignupBar)
 quickSignupToggleBox:SetPoint("LEFT", quickSignupBar, "LEFT", 10, 0)

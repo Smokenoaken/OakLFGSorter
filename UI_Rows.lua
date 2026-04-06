@@ -149,14 +149,20 @@ applicantListingActivity:SetJustifyV("BOTTOM")
 applicantListingActivity:SetTextColor(0.75, 0.75, 0.75)
 applicantListingActivity:SetWordWrap(false)
 
+local SCROLL_BOTTOM_APPLICANT = 35
+local SCROLL_BOTTOM_BROWSER   = 60  -- extra room for the quick signup bar above the footer
+
 local function UpdateApplicantContextLayout()
     local contextVisible = applicantContextBar:IsShown()
     HEADER_TOP_OFFSET = contextVisible and (BASE_HEADER_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_HEADER_TOP_OFFSET
     SCROLL_TOP_OFFSET = contextVisible and (BASE_SCROLL_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_SCROLL_TOP_OFFSET
 
+    local isBrowser = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
+    local bottomOffset = isBrowser and SCROLL_BOTTOM_BROWSER or SCROLL_BOTTOM_APPLICANT
+
     scrollFrame:ClearAllPoints()
     scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET)
-    scrollFrame:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -25, 35)
+    scrollFrame:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -25, bottomOffset)
 end
 
 local function UpdateApplicantContextBar()

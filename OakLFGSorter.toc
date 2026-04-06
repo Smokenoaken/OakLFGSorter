@@ -18,8 +18,8 @@ Locales\ruRU.lua
 RegionInfo.lua
 Search_Config.lua
 Search_FilterModes.lua
-Search.lua
-Search_Header.lua
+# Search.lua -- retired: browser mode now runs inside OAK_LFG (UI_Rows.lua browser path)
+# Search_Header.lua -- retired: header controls live in UI_Header.lua / UI_Filters.lua
 Search_Signup.lua
 Search_Integration.lua
 UI_Header.lua

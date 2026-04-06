@@ -142,6 +142,36 @@ addonTable.SearchResults = addonTable.SearchResults or {}
 addonTable.CurrentSearchContext = addonTable.CurrentSearchContext or { mode = "generic" }
 addonTable.SearchApplications = addonTable.SearchApplications or {}
 
+-- View mode: "applicant" when you are listing a group, "browser" when searching to join
+local currentViewMode = "applicant"
+
+function addonTable.GetCurrentViewMode()
+    return currentViewMode
+end
+
+function addonTable.SetCurrentViewMode(mode)
+    if currentViewMode == mode then return end
+    currentViewMode = mode
+    -- Show/hide the quick signup bar
+    if addonTable.quickSignupBar then
+        if mode == "browser" then
+            addonTable.quickSignupBar:Show()
+        else
+            addonTable.quickSignupBar:Hide()
+        end
+    end
+    -- Reflow the layout (scroll frame bottom offset, headers, filter buttons)
+    if addonTable.ApplyHideNotesLayout then
+        addonTable.ApplyHideNotesLayout()
+    elseif addonTable.UpdateDisplay then
+        addonTable.UpdateDisplay()
+    end
+    -- Initialise the signup bar controls when entering browser mode
+    if mode == "browser" and addonTable.UpdateSearchQuickSignupControls then
+        addonTable.UpdateSearchQuickSignupControls()
+    end
+end
+
 local function NormalizeApplicationStatus(status)
     return strlower(tostring(status or "none"))
 end
@@ -934,6 +964,37 @@ function addonTable.ApplyToSearchResult(searchResultID)
     end
 end
 
+-- Convenience helpers so Search_Signup.lua can update the unified SearchResults table
+function addonTable.MarkSearchResultApplied(searchResultID)
+    addonTable.SearchApplications[searchResultID] = "applied"
+    for _, result in ipairs(addonTable.SearchResults or {}) do
+        if result.id == searchResultID then
+            result.applicationStatus = "applied"
+            result.hasSelf = true
+            break
+        end
+    end
+    local OAK_LFG = addonTable.OAK_LFG
+    if addonTable.UpdateDisplay and OAK_LFG and OAK_LFG:IsShown() then
+        addonTable.UpdateDisplay()
+    end
+end
+
+function addonTable.MarkSearchResultCanceled(searchResultID)
+    addonTable.SearchApplications[searchResultID] = "cancelled"
+    for _, result in ipairs(addonTable.SearchResults or {}) do
+        if result.id == searchResultID then
+            result.applicationStatus = "cancelled"
+            result.hasSelf = false
+            break
+        end
+    end
+    local OAK_LFG = addonTable.OAK_LFG
+    if addonTable.UpdateDisplay and OAK_LFG and OAK_LFG:IsShown() then
+        addonTable.UpdateDisplay()
+    end
+end
+
 function GetPvpBracketLabel(pvpRatingInfo)
     if type(pvpRatingInfo) ~= "table" then
         return nil
@@ -1196,8 +1257,8 @@ end
 OAK_LFG:RegisterEvent("LFG_LIST_APPLICANT_LIST_UPDATED")
 OAK_LFG:RegisterEvent("LFG_LIST_APPLICANT_UPDATED")
 OAK_LFG:RegisterEvent("LFG_LIST_ACTIVE_ENTRY_UPDATE")
-    -- OAK_LFG:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED")
-    --     -- OAK_LFG:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED")
+OAK_LFG:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED")
+OAK_LFG:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED")
 OAK_LFG:RegisterEvent("LFG_LIST_APPLICATION_STATUS_UPDATED")
 
 OAK_LFG:SetScript("OnEvent", function(self, event, ...) 
@@ -1218,10 +1279,23 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end
         return
     elseif event == "LFG_LIST_SEARCH_RESULTS_RECEIVED" or event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
+        -- Only refresh in browser mode; ignore while in applicant mode
+        if currentViewMode == "browser" and OAK_LFG:IsShown() then
+            FetchSearchResultData()
+            addonTable.UpdateDisplay()
+        end
         return
     elseif event == "LFG_LIST_ACTIVE_ENTRY_UPDATE" then
-        if not C_LFGList.HasActiveEntryInfo() then
-            if OAK_LFG:IsShown() then OAK_LFG:Hide() end
+        if C_LFGList.HasActiveEntryInfo() then
+            -- Player just created a listing — switch to applicant mode
+            addonTable.SetCurrentViewMode("applicant")
+        else
+            -- Player delisted — switch to browser mode and stay open
+            addonTable.SetCurrentViewMode("browser")
+            if OAK_LFG:IsShown() then
+                FetchSearchResultData()
+                addonTable.UpdateDisplay()
+            end
             return
         end
     end
@@ -1232,14 +1306,16 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         FetchSearchResultData()
     end
 
-    if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end 
+    if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end
 end)
 
-OAK_LFG:SetScript("OnShow", function(self) 
+OAK_LFG:SetScript("OnShow", function(self)
     SetupApplicantPingMuteHook()
     if C_LFGList.HasActiveEntryInfo() then
+        addonTable.SetCurrentViewMode("applicant")
         FetchApplicantData()
     else
+        addonTable.SetCurrentViewMode("browser")
         FetchSearchResultData()
         if addonTable.UpdateFilterPaneMode then
             addonTable.UpdateFilterPaneMode()
