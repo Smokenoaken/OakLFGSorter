@@ -1,3 +1,9 @@
+## v2.0.11
+
+- Improved search signup responsiveness by making normal apply clicks open Blizzard's signup dialog more reliably and keeping Quick Sign Up on the faster direct-apply path.
+- Added a top-bar reminder that you can only sign up for a total of 5 groups at a time and tightened its layout to fit beside the quick signup role icons.
+- Kept the latest native dungeon filter reset behavior so Oak and Blizzard start from a cleaner shared baseline after reloads.
+
 ## v2.0.10
 
 - Fixed the native dungeon filter hotfix so Oak no longer taints Blizzard's protected Search() path when refreshing dungeon filters.
