@@ -191,7 +191,10 @@ local function ScheduleSearchRefresh()
     C_Timer.After(0.3, function()
         searchRefreshPending = false
         if currentViewMode == "browser" and OAK_LFG:IsShown() then
-            FetchSearchResultData()
+            -- addonTable.FetchSearchResultData is the exposed reference to the
+            -- local function defined later in this file — use that to avoid a
+            -- forward-reference nil error.
+            if addonTable.FetchSearchResultData then addonTable.FetchSearchResultData() end
             addonTable.UpdateDisplay()
         end
     end)
