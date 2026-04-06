@@ -8,6 +8,7 @@ addonTable.CurrentIsAscending = false
 local ROW_HEIGHT = 22 
 local FULL_FRAME_WIDTH = 660
 local COLLAPSED_FRAME_WIDTH = 460
+local BROWSER_COLLAPSED_WIDTH = 552
 local BASE_HEADER_TOP_OFFSET = -43
 local BASE_SCROLL_TOP_OFFSET = -70
 local APPLICANT_CONTEXT_BAR_HEIGHT = 24
@@ -53,16 +54,11 @@ local function GetHeaderTooltipData(sortKey)
         end
         return "Class", "Sort by the applicant's class."
     elseif sortKey == "spec" then
-        if isBrowser then
-            if listingMode == "raid" or listingMode == "legacy_raid" then
-                return "Comp", "Sort by the listing composition summary."
-            end
-            return "Style", "Sort by the listing playstyle."
-        end
+        if isBrowser then return nil, nil end  -- hidden in browser
         return "Spec", "Sort by the applicant's specialization."
     elseif sortKey == "ilvl" then
         if isBrowser then
-            return "Setup", "Sort by the current party setup shown on the listing."
+            return "Comp", "Sort by the current party composition of the listing."
         end
         return "iLvl", "Sort by item level."
     elseif sortKey == "rating" then
@@ -74,9 +70,12 @@ local function GetHeaderTooltipData(sortKey)
         end
         return modeConfig.ratingLabel, "Sort by Mythic+ rating."
     elseif sortKey == "key" then
+        if isBrowser then
+            return "Age", "Sort by how long ago this listing was posted. Older listings may have already filled."
+        end
         local modeConfig = GetModeConfig()
         if listingMode == "raid" or listingMode == "legacy_raid" then
-            return modeConfig.keyLabel, isBrowser and "Sort by raid progress or bosses defeated on the listing." or "Sort by the applicant's raid progress."
+            return modeConfig.keyLabel, "Sort by the applicant's raid progress."
         elseif listingMode == "rated_pvp" or listingMode == "pvp" then
             return modeConfig.keyLabel, "Sort by bracket type."
         end
@@ -188,6 +187,9 @@ end
 
 local function GetTargetFrameWidth()
     if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        if IsBrowserMode() then
+            return BROWSER_COLLAPSED_WIDTH
+        end
         return COLLAPSED_FRAME_WIDTH
     end
     return FULL_FRAME_WIDTH
@@ -299,12 +301,8 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
                 valA, valB = grpA.rating or 0, grpB.rating or 0
             end
         elseif sortBy == "key" then
-            if listingMode == "raid" or listingMode == "legacy_raid" then
-                valA = (grpA.raidListing and grpA.raidListing.bossesKilled) or 0
-                valB = (grpB.raidListing and grpB.raidListing.bossesKilled) or 0
-            else
-                valA, valB = grpA.keyLevel or 0, grpB.keyLevel or 0
-            end
+            -- In browser mode "key" header is repurposed as "Age"
+            valA, valB = grpA.age or 0, grpB.age or 0
         elseif sortBy == "note" then valA, valB = grpA.comment or "", grpB.comment or "" end
     else
         if sortBy == "role" then valA, valB = roleWeights[grpA.leadRole] or 99, roleWeights[grpB.leadRole] or 99
@@ -368,13 +366,12 @@ local C_ILVL   = { x = 200, w = 40,  align = "CENTER" }
 local C_RATING = { x = 240, w = 90,  align = "CENTER" }
 local C_KEY    = { x = 330, w = 40,  align = "CENTER" }
 local C_NOTE   = { x = 370, w = 200, align = "LEFT" }
-local B_DUNGEON = { x = 10,  w = 130, align = "LEFT" }
-local B_TITLE   = { x = 140, w = 170, align = "LEFT" }
-local B_STYLE   = { x = 310, w = 64,  align = "CENTER" }
-local B_SETUP   = { x = 374, w = 58,  align = "CENTER" }
-local B_RATING  = { x = 432, w = 78,  align = "CENTER" }
-local B_KEY     = { x = 510, w = 44,  align = "CENTER" }
-local B_NOTE    = { x = 554, w = 76,  align = "LEFT" }
+local B_DUNGEON = { x = 10,  w = 145, align = "LEFT" }    -- [10,  155]
+local B_COMP    = { x = 155, w = 103, align = "CENTER" }   -- [155, 258]  comp slot icons
+local B_TITLE   = { x = 258, w = 102, align = "LEFT" }     -- [258, 360]  listing title
+local B_RATING  = { x = 360, w = 70,  align = "CENTER" }   -- [360, 430]
+local B_AGE     = { x = 430, w = 45,  align = "CENTER" }   -- [430, 475]
+local B_NOTE    = { x = 475, w = 155, align = "LEFT" }     -- [475, 630]
 local ROW_X_OFFSET = 10
 local REGION_TAG_WIDTH = 42
 
@@ -390,12 +387,11 @@ local R_RATING = RowColumn(C_RATING)
 local R_KEY    = RowColumn(C_KEY)
 local R_NOTE   = RowColumn(C_NOTE)
 local BR_DUNGEON = RowColumn(B_DUNGEON)
-local BR_SETUP   = RowColumn(B_SETUP)
+local BR_COMP    = RowColumn(B_COMP)
 local BR_TITLE   = RowColumn(B_TITLE)
-local BR_STYLE  = RowColumn(B_STYLE)
-local BR_RATING = RowColumn(B_RATING)
-local BR_KEY    = RowColumn(B_KEY)
-local BR_NOTE   = RowColumn(B_NOTE)
+local BR_RATING  = RowColumn(B_RATING)
+local BR_AGE     = RowColumn(B_AGE)
+local BR_NOTE    = RowColumn(B_NOTE)
 
 local headers = {}
 local keyHeader
@@ -404,12 +400,12 @@ function addonTable.UpdateHeaderVisuals()
     local showSecondaryMetric = UsesSecondaryMetricColumn()
     local isBrowser = IsBrowserMode()
     local browserColumns = {
-        role = B_DUNGEON,
-        class = B_TITLE,
-        spec = B_STYLE,
-        ilvl = B_SETUP,
+        role   = B_DUNGEON,
+        class  = B_TITLE,
+        spec   = nil,       -- hidden in browser (Style removed)
+        ilvl   = B_COMP,    -- "Comp" in browser
         rating = B_RATING,
-        key = B_KEY,
+        key    = B_AGE,     -- "Age" in browser
     }
     local defaultColumns = {
         role = C_ROLE,
@@ -434,8 +430,11 @@ function addonTable.UpdateHeaderVisuals()
             header.text:SetJustifyH(column.align == "LEFT" and "LEFT" or "CENTER")
         end
 
-        if header.sortKey == "key" then
-            if showSecondaryMetric then
+        -- In browser: hide "spec" (Style removed), always show "key" as "Age"
+        if isBrowser and header.sortKey == "spec" then
+            header:Hide()
+        elseif header.sortKey == "key" then
+            if isBrowser or showSecondaryMetric then
                 header:Show()
             else
                 header:Hide()
@@ -447,15 +446,17 @@ function addonTable.UpdateHeaderVisuals()
         if header.sortKey == "rating" then
             header.text:SetText(modeConfig.ratingLabel)
         elseif header.sortKey == "key" then
-            header.text:SetText(modeConfig.keyLabel)
+            if isBrowser then
+                header.text:SetText(L["Age"])
+            else
+                header.text:SetText(modeConfig.keyLabel)
+            end
         elseif isBrowser and header.sortKey == "role" then
             header.text:SetText(L["Dungeon"])
         elseif isBrowser and header.sortKey == "class" then
             header.text:SetText(L["Title"])
-        elseif isBrowser and header.sortKey == "spec" then
-            header.text:SetText(L["Style"])
         elseif isBrowser and header.sortKey == "ilvl" then
-            header.text:SetText(L["Setup"])
+            header.text:SetText(L["Comp"])
         else
             header.text:SetText(header.baseText)
         end
@@ -754,6 +755,12 @@ local function ConfigureTextColumnWithTrailingTag(fontString, tagFontString, row
     fontString:SetWordWrap(false)
 end
 
+local function FormatAge(seconds)
+    if not seconds or seconds <= 0 then return "--" end
+    if seconds < 60 then return seconds .. "s" end
+    return math.floor(seconds / 60) .. "m"
+end
+
 local function GetPreferredScoreColor(score, defaultR, defaultG, defaultB)
     if RaiderIO and RaiderIO.GetScoreColor then
         local r, g, b = RaiderIO.GetScoreColor(score)
@@ -888,10 +895,10 @@ end
 local function ConfigureBrowserRowLayout(row)
     local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
     ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_DUNGEON, 5, regionMarkup)
+    -- comp slots are positioned at BR_COMP.x (handled separately via compSlots anchoring)
     ConfigureTextColumn(row.nameText, row, BR_TITLE, 5)
-    ConfigureTextColumn(row.specText, row, BR_STYLE, 4)
     ConfigureTextColumn(row.ratingText, row, BR_RATING)
-    ConfigureTextColumn(row.keyText, row, BR_KEY)
+    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_AGE) end
     ConfigureTextColumn(row.noteText, row, BR_NOTE, 5)
 end
 
@@ -1218,7 +1225,9 @@ local function CreateRow(index)
     for index, role in ipairs(compRoles) do
         local slot = CreateFrame("Frame", nil, row, "BackdropTemplate")
         slot:SetSize(12, 12)
-        slot:SetPoint("LEFT", row, "LEFT", BR_SETUP.x + ((index - 1) * 11) + 2, 0)
+        -- 5 slots × 12px each + 2px gap = 70px span; center in 103px column
+        local compSlotOffset = math.floor((BR_COMP.w - (5 * 12 + 4 * 2)) / 2)
+        slot:SetPoint("LEFT", row, "LEFT", BR_COMP.x + compSlotOffset + ((index - 1) * 14), 0)
         slot:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
         slot:SetBackdropBorderColor(0, 0, 0, 1)
         slot.icon = slot:CreateTexture(nil, "OVERLAY")
@@ -1227,6 +1236,10 @@ local function CreateRow(index)
         slot.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
         row.compSlots[index] = slot
     end
+
+    row.ageText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    row.ageText:SetJustifyH("CENTER")
+    row.ageText:Hide()
 
     ConfigureApplicantRowLayout(row)
 
@@ -1296,6 +1309,23 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         end
         if row.ilvlText then
             if isBrowser then row.ilvlText:Hide() else row.ilvlText:Show() end
+        end
+        if row.specText then
+            -- Hidden in browser (Style column removed); visible in applicant mode
+            if isBrowser then row.specText:Hide() else row.specText:Show() end
+        end
+        if row.keyText then
+            -- In browser, keyText is replaced by ageText; in applicant, depends on mode
+            if isBrowser then
+                row.keyText:Hide()
+            elseif showSecondaryMetric then
+                row.keyText:Show()
+            else
+                row.keyText:Hide()
+            end
+        end
+        if row.ageText then
+            if isBrowser then row.ageText:Show() else row.ageText:Hide() end
         end
         if row.compSlots then
             for _, slot in pairs(row.compSlots) do
@@ -1383,6 +1413,9 @@ function addonTable.UpdateDisplay()
             row.dungeonText:Show()
             row.roleIcon:Hide()
             row.ilvlText:Hide()
+            row.specText:Hide()
+            row.keyText:Hide()
+            if row.ageText then row.ageText:Show() end
             for _, slot in pairs(row.compSlots) do
                 slot:Show()
             end
@@ -1397,10 +1430,24 @@ function addonTable.UpdateDisplay()
             else
                 row.nameText:SetText(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--"))
             end
-            row.specText:SetText(result.playstyleShortLabel or "--")
             row.ratingText:SetText(GetBrowserRatingDisplay(result))
-            row.keyText:SetText(GetBrowserSecondaryDisplay(result))
-            if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
+
+            -- Age column: show application status if applied/declined, otherwise listing age
+            if row.ageText then
+                if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
+                    row.ageText:SetText("Declined")
+                    row.ageText:SetTextColor(1, 0.2, 0.2)
+                elseif result.isRoleFilled then
+                    row.ageText:SetText("Filled")
+                    row.ageText:SetTextColor(1.0, 0.82, 0.30)
+                elseif addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+                    row.ageText:SetText("Pending")
+                    row.ageText:SetTextColor(0.2, 1, 0.2)
+                else
+                    row.ageText:SetText(FormatAge(result.age))
+                    row.ageText:SetTextColor(1, 1, 1)
+                end
+            end
 
             row.noteText:SetText(result.comment or "")
             row.dungeonText:SetText(result.dungeonName ~= "" and result.dungeonName or "--")
