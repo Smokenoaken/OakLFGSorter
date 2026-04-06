@@ -152,6 +152,16 @@ end
 function addonTable.SetCurrentViewMode(mode)
     if currentViewMode == mode then return end
     currentViewMode = mode
+    -- Hide the filter panel that belongs to the OTHER mode so it doesn't bleed through
+    if mode == "applicant" then
+        if addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() then
+            addonTable.BrowserFilterPanel:Hide()
+        end
+    else
+        if addonTable.FilterPanel and addonTable.FilterPanel:IsShown() then
+            addonTable.FilterPanel:Hide()
+        end
+    end
     -- Show/hide the quick signup bar
     if addonTable.quickSignupBar then
         if mode == "browser" then
@@ -170,6 +180,21 @@ function addonTable.SetCurrentViewMode(mode)
     if mode == "browser" and addonTable.UpdateSearchQuickSignupControls then
         addonTable.UpdateSearchQuickSignupControls()
     end
+end
+
+-- Debounce for search result events: LFG_LIST_SEARCH_RESULT_UPDATED fires once per
+-- result, so with 100 results it would call FetchSearchResultData 100× per frame.
+local searchRefreshPending = false
+local function ScheduleSearchRefresh()
+    if searchRefreshPending then return end
+    searchRefreshPending = true
+    C_Timer.After(0.3, function()
+        searchRefreshPending = false
+        if currentViewMode == "browser" and OAK_LFG:IsShown() then
+            FetchSearchResultData()
+            addonTable.UpdateDisplay()
+        end
+    end)
 end
 
 local function NormalizeApplicationStatus(status)
@@ -1279,10 +1304,18 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end
         return
     elseif event == "LFG_LIST_SEARCH_RESULTS_RECEIVED" or event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
-        -- Only refresh in browser mode; ignore while in applicant mode
+        -- Auto-open when the Blizzard search panel is visible and autoOpenSearch is on.
+        -- This handles category switches where SearchPanel:OnShow doesn't re-fire.
+        if OakLFGSorterDB and OakLFGSorterDB.autoOpenSearch and not OAK_LFG:IsShown()
+                and LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel:IsShown() then
+            addonTable.SetCurrentViewMode("browser")
+            OAK_LFG:Show()  -- OnShow triggers FetchSearchResultData + UpdateDisplay
+            return
+        end
+        -- LFG_LIST_SEARCH_RESULT_UPDATED fires once per result row, so debounce to
+        -- avoid running FetchSearchResultData + UpdateDisplay hundreds of times per frame.
         if currentViewMode == "browser" and OAK_LFG:IsShown() then
-            FetchSearchResultData()
-            addonTable.UpdateDisplay()
+            ScheduleSearchRefresh()
         end
         return
     elseif event == "LFG_LIST_ACTIVE_ENTRY_UPDATE" then
