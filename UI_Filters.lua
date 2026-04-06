@@ -1656,8 +1656,47 @@ optionsRegionBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
+local optionsSpecBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
+optionsSpecBox:SetSize(16, 16)
+optionsSpecBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+optionsSpecBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -64)
+local optionsSpecLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsSpecLabel:SetPoint("LEFT", optionsSpecBox, "RIGHT", 8, 0)
+optionsSpecLabel:SetText(L["Show Spec Icons"])
+
+local function ApplySpecToggleVisual(button, label, isActive)
+    if isActive then
+        button:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        button:SetBackdropBorderColor(0, 0, 0, 1)
+        label:SetTextColor(1, 1, 1)
+    else
+        button:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        button:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
+        label:SetTextColor(0.84, 0.84, 0.84)
+    end
+end
+
+optionsSpecBox:SetScript("OnClick", function()
+    OakLFGSorterDB.showSpecIcons = not OakLFGSorterDB.showSpecIcons
+    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH.UpdateDisplay then addonTable.OAK_SEARCH:UpdateDisplay() end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+    if addonTable.RefreshSearchOptionsPanel then addonTable.RefreshSearchOptionsPanel() end
+end)
+optionsSpecBox:SetScript("OnEnter", function(self)
+    ApplySpecToggleVisual(self, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText(L["Show Spec Icons"], 1, 1, 1)
+    GameTooltip:AddLine("Show specialization icons instead of abbreviated names in the applicant list.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsSpecBox:SetScript("OnLeave", function()
+    ApplySpecToggleVisual(optionsSpecBox, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
+    GameTooltip:Hide()
+end)
+
 local optionsRegionFilterLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -74)
+optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -96)
 optionsRegionFilterLabel:SetText("Filter Regions")
 
 local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
@@ -1690,27 +1729,27 @@ local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
     regionFilterLabels[regionCode] = label
 end
 
-CreateRegionFilterOption(optionsPanel, "NA", 15, -96)
-CreateRegionFilterOption(optionsPanel, "OCE", 105, -96)
-CreateRegionFilterOption(optionsPanel, "LATAM", 15, -118)
-CreateRegionFilterOption(optionsPanel, "BR", 105, -118)
-CreateRegionFilterOption(optionsPanel, "EU", 15, -140)
-CreateRegionFilterOption(optionsPanel, "OTHER", 105, -140)
+CreateRegionFilterOption(optionsPanel, "NA", 15, -118)
+CreateRegionFilterOption(optionsPanel, "OCE", 105, -118)
+CreateRegionFilterOption(optionsPanel, "LATAM", 15, -140)
+CreateRegionFilterOption(optionsPanel, "BR", 105, -140)
+CreateRegionFilterOption(optionsPanel, "EU", 15, -162)
+CreateRegionFilterOption(optionsPanel, "OTHER", 105, -162)
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -172)
+optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -194)
 optionsFontLabel:SetText(L["Addon Font"])
 local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
-optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -192)
+optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -214)
 
 local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -228)
+optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -250)
 optionsFontSizeLabel:SetText(L["Font Size"])
 local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -228)
+optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -250)
 
 local optionsFontSizeSlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsFontSizeSlider:SetSize(170, 10)
-optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -250)
+optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -272)
 optionsFontSizeSlider:SetMinMaxValues(10, 18)
 optionsFontSizeSlider:SetValueStep(1)
 optionsFontSizeSlider:SetObeyStepOnDrag(true)
@@ -1743,14 +1782,14 @@ end)
 optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
 
 local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -286)
+optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -308)
 optionsOpacityLabel:SetText("Window Opacity")
 local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -286)
+optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -308)
 
 local optionsOpacitySlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsOpacitySlider:SetSize(170, 10)
-optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -308)
+optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -330)
 optionsOpacitySlider:SetMinMaxValues(0.35, 1.0)
 optionsOpacitySlider:SetValueStep(0.05)
 optionsOpacitySlider:SetObeyStepOnDrag(true)
@@ -1783,6 +1822,7 @@ optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWind
 
 local function RefreshOptionsPanel()
     ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
+    ApplySpecToggleVisual(optionsSpecBox, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
     for _, regionCode in ipairs(addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder() or {}) do
         ApplySharedRegionToggleVisual(regionFilterButtons[regionCode], regionFilterLabels[regionCode], addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
     end

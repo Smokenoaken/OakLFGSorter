@@ -301,8 +301,49 @@ searchOptions.regionBox:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 
+searchOptions.specBox = CreateFrame("Button", nil, searchOptions.panel, "BackdropTemplate")
+searchOptions.specBox:SetSize(16, 16)
+searchOptions.specBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
+searchOptions.specBox:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -64)
+searchOptions.specLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+searchOptions.specLabel:SetPoint("LEFT", searchOptions.specBox, "RIGHT", 8, 0)
+searchOptions.specLabel:SetText(L["Show Spec Icons"])
+
+function searchOptions.specBox:SetState(isActive)
+    if isActive then
+        self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
+        self:SetBackdropBorderColor(0, 0, 0, 1)
+        searchOptions.specLabel:SetTextColor(1, 1, 1)
+    else
+        self:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        self:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
+        searchOptions.specLabel:SetTextColor(0.84, 0.84, 0.84)
+    end
+end
+
+searchOptions.specBox:SetScript("OnClick", function(self)
+    OakLFGSorterDB.showSpecIcons = not (OakLFGSorterDB and OakLFGSorterDB.showSpecIcons == true)
+    self:SetState(OakLFGSorterDB.showSpecIcons == true)
+    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH.UpdateDisplay then addonTable.OAK_SEARCH:UpdateDisplay() end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end)
+
+searchOptions.specBox:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText(L["Show Spec Icons"], 1, 1, 1)
+    GameTooltip:AddLine("Show specialization icons instead of abbreviated names in the applicant list.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+
+searchOptions.specBox:SetScript("OnLeave", function(self)
+    self:SetState(OakLFGSorterDB and OakLFGSorterDB.showSpecIcons == true)
+    GameTooltip:Hide()
+end)
+
 searchOptions.regionFilterLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.regionFilterLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -74)
+searchOptions.regionFilterLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -96)
 searchOptions.regionFilterLabel:SetText("Filter Regions")
 
 local function SetRegionToggleState(button, label, isActive)
@@ -367,28 +408,28 @@ local function CreateSearchRegionFilterOption(regionCode, xOffset, yOffset)
     searchOptions.regionFilterLabels[regionCode] = label
 end
 
-CreateSearchRegionFilterOption("NA", 15, -96)
-CreateSearchRegionFilterOption("OCE", 105, -96)
-CreateSearchRegionFilterOption("LATAM", 15, -118)
-CreateSearchRegionFilterOption("BR", 105, -118)
-CreateSearchRegionFilterOption("EU", 15, -140)
-CreateSearchRegionFilterOption("OTHER", 105, -140)
+CreateSearchRegionFilterOption("NA", 15, -118)
+CreateSearchRegionFilterOption("OCE", 105, -118)
+CreateSearchRegionFilterOption("LATAM", 15, -140)
+CreateSearchRegionFilterOption("BR", 105, -140)
+CreateSearchRegionFilterOption("EU", 15, -162)
+CreateSearchRegionFilterOption("OTHER", 105, -162)
 
 searchOptions.fontLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.fontLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -172)
+searchOptions.fontLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -194)
 searchOptions.fontLabel:SetText(L["Addon Font"])
 searchOptions.fontButton, searchOptions.fontList = addonTable.CreateFontDropdown(searchOptions.panel, 170)
-searchOptions.fontButton:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -192)
+searchOptions.fontButton:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -214)
 
 searchOptions.fontSizeLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.fontSizeLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -228)
+searchOptions.fontSizeLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -250)
 searchOptions.fontSizeLabel:SetText(L["Font Size"])
 searchOptions.fontSizeValue = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.fontSizeValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -228)
+searchOptions.fontSizeValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -250)
 
 searchOptions.fontSizeSlider = CreateFrame("Slider", nil, searchOptions.panel, "BackdropTemplate")
 searchOptions.fontSizeSlider:SetSize(170, 10)
-searchOptions.fontSizeSlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -250)
+searchOptions.fontSizeSlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -272)
 searchOptions.fontSizeSlider:SetMinMaxValues(10, 18)
 searchOptions.fontSizeSlider:SetValueStep(1)
 searchOptions.fontSizeSlider:SetObeyStepOnDrag(true)
@@ -420,14 +461,14 @@ searchOptions.fontSizeSlider:SetScript("OnLeave", function()
 end)
 
 searchOptions.opacityLabel = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.opacityLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -286)
+searchOptions.opacityLabel:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -308)
 searchOptions.opacityLabel:SetText(L["Window Opacity"])
 searchOptions.opacityValue = searchOptions.panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-searchOptions.opacityValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -286)
+searchOptions.opacityValue:SetPoint("RIGHT", searchOptions.panel, "TOPRIGHT", -15, -308)
 
 searchOptions.opacitySlider = CreateFrame("Slider", nil, searchOptions.panel, "BackdropTemplate")
 searchOptions.opacitySlider:SetSize(170, 10)
-searchOptions.opacitySlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -308)
+searchOptions.opacitySlider:SetPoint("TOPLEFT", searchOptions.panel, "TOPLEFT", 15, -330)
 searchOptions.opacitySlider:SetMinMaxValues(0.35, 1.0)
 searchOptions.opacitySlider:SetValueStep(0.05)
 searchOptions.opacitySlider:SetObeyStepOnDrag(true)
@@ -460,6 +501,9 @@ searchOptions.opacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.
 searchOptions.fontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
 
 function searchOptions:Refresh()
+    if self.specBox and self.specBox.SetState then
+        self.specBox:SetState(OakLFGSorterDB and OakLFGSorterDB.showSpecIcons == true)
+    end
     if self.regionBox and self.regionBox.SetState then
         self.regionBox:SetState(OakLFGSorterDB and OakLFGSorterDB.showRegions == true)
     end

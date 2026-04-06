@@ -357,14 +357,14 @@ end
 -- Master Column Coordinates
 local C_ROLE   = { x = 10,  w = 35,  align = "CENTER" }
 local C_CLASS  = { x = 45,  w = 110, align = "LEFT" }
-local C_SPEC   = { x = 155, w = 45,  align = "LEFT" }
+local C_SPEC   = { x = 155, w = 45,  align = "CENTER" }
 local C_ILVL   = { x = 200, w = 40,  align = "CENTER" }
 local C_RATING = { x = 240, w = 90,  align = "CENTER" }
 local C_KEY    = { x = 330, w = 40,  align = "CENTER" }
 local C_NOTE   = { x = 370, w = 200, align = "LEFT" }
 local B_DUNGEON = { x = 10,  w = 130, align = "LEFT" }
 local B_TITLE   = { x = 140, w = 170, align = "LEFT" }
-local B_STYLE   = { x = 310, w = 64,  align = "LEFT" }
+local B_STYLE   = { x = 310, w = 64,  align = "CENTER" }
 local B_SETUP   = { x = 374, w = 58,  align = "CENTER" }
 local B_RATING  = { x = 432, w = 78,  align = "CENTER" }
 local B_KEY     = { x = 510, w = 44,  align = "CENTER" }
@@ -1197,6 +1197,7 @@ local function CreateRow(index)
     row.regionText:Hide()
     row.dungeonText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
     row.specText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    row.specText:SetJustifyH("CENTER")
     row.ilvlText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     row.ratingText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     row.keyText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
@@ -1492,8 +1493,20 @@ function addonTable.UpdateDisplay()
                     row.roleIcon:Hide()
                 end
 
-                local specAbbr = addonTable.SpecShortNames and addonTable.SpecShortNames[member.specID] or ""
-                row.specText:SetText(addonTable.ApplyClassColor(specAbbr, member.class))
+                local specIconText
+                if OakLFGSorterDB and OakLFGSorterDB.showSpecIcons and member.specID then
+                    local _, _, _, icon = GetSpecializationInfoByID(member.specID)
+                    if icon then
+                        specIconText = string.format("|T%s:16:16:0:0:64:64:5:59:5:59|t", icon)
+                    end
+                end
+
+                if specIconText then
+                    row.specText:SetText(specIconText)
+                else
+                    local specAbbr = addonTable.SpecShortNames and addonTable.SpecShortNames[member.specID] or ""
+                    row.specText:SetText(addonTable.ApplyClassColor(specAbbr, member.class))
+                end
 
                 local formattedName = addonTable.ApplyClassColor(member.name, member.class)
                 if member.isFriend then
