@@ -1,3 +1,7 @@
+## v2.0.12
+
+- Added Specialization Icon Toggles
+
 ## v2.0.11
 
 - Improved search signup responsiveness by making normal apply clicks open Blizzard's signup dialog more reliably and keeping Quick Sign Up on the faster direct-apply path.
