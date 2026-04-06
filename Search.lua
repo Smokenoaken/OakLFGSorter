@@ -363,6 +363,7 @@ local nativeHasHealBox
 local nativePartyBox
 local nativeLustBox
 local nativeBrezBox
+local boxHideDeclined
 local nativeMinimumRatingLabel
 local nativeMinimumRatingRangeLabel
 local nativeMinimumRatingBox
@@ -392,6 +393,7 @@ local OAK_F = {
     NeedBrez = false,
     PartyFit = false,
     MatchMyRaidLockout = false,
+    HideDeclined = false,
     RaidBossesRange = "",
     RaidTankRange = "",
     RaidHealerRange = "",
@@ -1007,8 +1009,11 @@ boxLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY - 66)
 boxBrez = CreateOakToggleBox(filterPanel, L["Need BRez"], "NeedBrez", false)
 boxBrez:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col2X, startY - 66)
 
+boxHideDeclined = CreateOakToggleBox(filterPanel, "Hide Declined", "HideDeclined", false)
+boxHideDeclined:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY - 88)
+
 filterPanel.matchMyRaidLockoutBox = CreateOakToggleBox(filterPanel, L["Match My Lockout"], "MatchMyRaidLockout", false)
-filterPanel.matchMyRaidLockoutBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col1X, startY - 88)
+filterPanel.matchMyRaidLockoutBox:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", col2X, startY - 88)
 
 divTexture = filterPanel:CreateTexture(nil, "ARTWORK")
 divTexture:SetColorTexture(classColor.r, classColor.g, classColor.b, 0.5)
@@ -1323,6 +1328,7 @@ end)
 -- 5. Sorting & Headers (Pinned Applications)
 -- ==========================================
 local searchResults = {}
+local playerIsListed = false   -- true when the player has an active LFG listing
 local currentSortBy = "rating"
 local currentIsAscending = false
 local SEARCH_FULL_WIDTH = 660
@@ -1355,6 +1361,9 @@ function addonTable.MarkSearchResultApplied(searchResultID)
     if OAK_SEARCH and OAK_SEARCH.UpdateDisplay then
         OAK_SEARCH:UpdateDisplay()
     end
+    if addonTable.UpdateSignupLimitDisplay then
+        addonTable.UpdateSignupLimitDisplay()
+    end
 end
 
 function addonTable.MarkSearchResultCanceled(searchResultID)
@@ -1377,54 +1386,60 @@ function addonTable.MarkSearchResultCanceled(searchResultID)
     if OAK_SEARCH and OAK_SEARCH.UpdateDisplay then
         OAK_SEARCH:UpdateDisplay()
     end
+    if addonTable.UpdateSignupLimitDisplay then
+        addonTable.UpdateSignupLimitDisplay()
+    end
 end
 
+local lastSearchClickID = nil
+local lastSearchClickTime = 0
+
 local SEARCH_LAYOUT_EXPANDED = {
-    dungeonX = 15, dungeonWidth = 145,
-    setupX = 165, setupWidth = 98,
-    titleX = 267, titleWidth = 98,
+    dungeonX = 15, dungeonWidth = 145,   -- [15, 160]
+    setupX = 160, setupWidth = 103,      -- [160, 263] contiguous; was 165,98
+    titleX = 263, titleWidth = 102,      -- [263, 365] contiguous; was 267,98
     modeX = nil, modeWidth = 0,
-    ratingX = 370, ratingWidth = 65,
-    ageX = 440, ageWidth = 35,
-    notesX = 480, notesWidth = SEARCH_NOTE_FULL_WIDTH,
-    roleStartX = 177,
-    roleSummaryX = {175, 205, 235},
+    ratingX = 365, ratingWidth = 70,     -- [365, 435] contiguous; was 370,65
+    ageX = 435, ageWidth = 40,           -- [435, 475] contiguous; was 440,35
+    notesX = 475, notesWidth = SEARCH_NOTE_FULL_WIDTH,
+    roleStartX = 172,                    -- setupX + 12
+    roleSummaryX = {170, 200, 230},      -- setupX + {10, 40, 70}
 }
 
 local SEARCH_LAYOUT_COLLAPSED = {
     dungeonX = 15, dungeonWidth = 145,
-    setupX = 165, setupWidth = 98,
-    titleX = 267, titleWidth = 98,
+    setupX = 160, setupWidth = 103,
+    titleX = 263, titleWidth = 102,
     modeX = nil, modeWidth = 0,
-    ratingX = 370, ratingWidth = 65,
-    ageX = 440, ageWidth = 35,
-    notesX = 482, notesWidth = SEARCH_NOTE_COLLAPSED_WIDTH,
-    roleStartX = 177,
-    roleSummaryX = {175, 205, 235},
+    ratingX = 365, ratingWidth = 70,
+    ageX = 435, ageWidth = 40,
+    notesX = 475, notesWidth = SEARCH_NOTE_COLLAPSED_WIDTH,
+    roleStartX = 172,
+    roleSummaryX = {170, 200, 230},
 }
 
 local SEARCH_LAYOUT_EXPANDED_RAID = {
-    dungeonX = 15, dungeonWidth = 132,
-    modeX = 151, modeWidth = 56,
-    setupX = 211, setupWidth = 92,
-    titleX = 307, titleWidth = 86,
-    ratingX = 397, ratingWidth = 30,
-    ageX = 431, ageWidth = 35,
-    notesX = 471, notesWidth = SEARCH_NOTE_FULL_WIDTH,
-    roleStartX = 222,
-    roleSummaryX = {220, 248, 276},
+    dungeonX = 15, dungeonWidth = 132,   -- [15, 147]
+    modeX = 147, modeWidth = 60,         -- [147, 207] contiguous; was 151,56
+    setupX = 207, setupWidth = 96,       -- [207, 303] contiguous; was 211,92
+    titleX = 303, titleWidth = 90,       -- [303, 393] contiguous; was 307,86
+    ratingX = 393, ratingWidth = 34,     -- [393, 427] contiguous; was 397,30
+    ageX = 427, ageWidth = 39,           -- [427, 466] contiguous; was 431,35
+    notesX = 466, notesWidth = SEARCH_NOTE_FULL_WIDTH,
+    roleStartX = 218,                    -- setupX + 11
+    roleSummaryX = {216, 244, 272},      -- setupX + {9, 37, 65}
 }
 
 local SEARCH_LAYOUT_COLLAPSED_RAID = {
     dungeonX = 15, dungeonWidth = 132,
-    modeX = 151, modeWidth = 56,
-    setupX = 211, setupWidth = 92,
-    titleX = 307, titleWidth = 86,
-    ratingX = 397, ratingWidth = 30,
-    ageX = 431, ageWidth = 35,
-    notesX = 473, notesWidth = SEARCH_NOTE_COLLAPSED_WIDTH,
-    roleStartX = 222,
-    roleSummaryX = {220, 248, 276},
+    modeX = 147, modeWidth = 60,
+    setupX = 207, setupWidth = 96,
+    titleX = 303, titleWidth = 90,
+    ratingX = 393, ratingWidth = 34,
+    ageX = 427, ageWidth = 39,
+    notesX = 466, notesWidth = SEARCH_NOTE_COLLAPSED_WIDTH,
+    roleStartX = 218,
+    roleSummaryX = {216, 244, 272},
 }
 
 local function GetSearchRoleStartX(layout)
@@ -1617,46 +1632,43 @@ local function CreateHeader(label, sortKey, width, xOffset)
     btn:SetFrameLevel(OAK_SEARCH:GetFrameLevel() + 10)
     btn.baseText = label; btn.sortKey = sortKey
     btn.text = btn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    btn.text:SetPoint("CENTER"); btn.text:SetText(label)
+    btn.text:SetPoint("LEFT", btn, "LEFT", 5, 0)
+    btn.text:SetPoint("RIGHT", btn, "RIGHT", -5, 0)
+    local isTextColumn = sortKey == "dungeon" or sortKey == "title" or sortKey == "note"
+    btn.text:SetJustifyH(isTextColumn and "LEFT" or "CENTER")
+    btn.text:SetWordWrap(false)
+    btn.text:SetText(label)
 
-    local function HandleClick()
+    btn:RegisterForClicks("LeftButtonUp")
+    btn:SetScript("OnClick", function()
         if sortKey ~= "none" then
             if currentSortBy == sortKey then currentIsAscending = not currentIsAscending
             else currentSortBy = sortKey; currentIsAscending = false end
             OAK_SEARCH.UpdateHeaderVisuals(); OAK_SEARCH:UpdateDisplay()
         end
-    end
+    end)
 
-    local function HandleEnter(self)
-        local title, description = addonTable.GetSearchHeaderTooltipData and addonTable.GetSearchHeaderTooltipData(self.sortKey, currentSearchMode)
-        if title and description then
-            btn:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
-            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-            GameTooltip:SetText(title, 1, 1, 1)
-            GameTooltip:AddLine(description, 1, 1, 1, true)
-            GameTooltip:AddLine("Click to sort. Click again to reverse the order.", 0.75, 0.75, 0.75, true)
-            GameTooltip:Show()
+    btn:SetScript("OnEnter", function()
+        btn:SetBackdropBorderColor(classColor.r, classColor.g, classColor.b, 1)
+        GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+        local title, description
+        if addonTable.GetSearchHeaderTooltipData then
+            local ok, t, d = pcall(addonTable.GetSearchHeaderTooltipData, sortKey, currentSearchMode)
+            if ok then title, description = t, d end
         end
-    end
+        GameTooltip:SetText(title or label, 1, 1, 1)
+        if description then
+            GameTooltip:AddLine(description, 1, 1, 1, true)
+        end
+        GameTooltip:AddLine("Click to sort. Click again to reverse the order.", 0.75, 0.75, 0.75, true)
+        GameTooltip:Show()
+    end)
 
-    local function HandleLeave()
+    btn:SetScript("OnLeave", function()
         btn:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
         GameTooltip:Hide()
-    end
+    end)
 
-    btn:SetScript("OnClick", HandleClick)
-    btn:SetScript("OnEnter", HandleEnter)
-    btn:SetScript("OnLeave", HandleLeave)
-
-    btn.hitbox = CreateFrame("Button", nil, OAK_SEARCH)
-    btn.hitbox:SetAllPoints(btn)
-    btn.hitbox:SetFrameStrata("DIALOG")
-    btn.hitbox:SetFrameLevel(btn:GetFrameLevel() + 5)
-    btn.hitbox:EnableMouse(true)
-    btn.hitbox.sortKey = sortKey
-    btn.hitbox:SetScript("OnClick", HandleClick)
-    btn.hitbox:SetScript("OnEnter", HandleEnter)
-    btn.hitbox:SetScript("OnLeave", HandleLeave)
     table.insert(headers, btn)
     return btn
 end
@@ -2171,28 +2183,28 @@ end
 addonTable.GetSearchHeaderTooltipData = function(sortKey, mode)
     if sortKey == "dungeon" then
         if mode == "raid" or mode == "legacy_raid" then
-            return "Raid", "Sort by raid name."
+            return "Raid", "The raid instance this group is forming for."
         elseif mode == "rated_pvp" or mode == "pvp" then
-            return "Activity", "Sort by activity or bracket."
+            return "Activity", "The PvP activity or bracket this group is queuing for."
         end
-        return "Dungeon", "Sort by dungeon or activity name."
+        return "Dungeon", "The dungeon or activity this group is forming for."
     elseif sortKey == "members" then
-        return "Comp", "Sort by party setup and group composition."
+        return "Comp", "The current role composition of the group — Tank, Healer, and DPS slots filled and open."
     elseif sortKey == "title" then
-        return "Title", "Sort by the listing title shown by the group leader."
+        return "Title", "The listing title written by the group leader. Often includes key level, goals, or requirements."
     elseif sortKey == "mode" then
-        return "Difficulty", "Sort by the raid difficulty on the listing."
+        return "Difficulty", "The raid difficulty this group is running — Normal, Heroic, or Mythic."
     elseif sortKey == "rating" then
         if mode == "raid" or mode == "legacy_raid" then
-            return "Kills", "Sort by the number of bosses already defeated in the listed raid."
+            return "Kills", "The number of bosses already defeated in this group's current raid lockout."
         elseif mode == "rated_pvp" or mode == "pvp" then
-            return "PVP Rating", "Sort by the leader's PVP rating."
+            return "PVP Rating", "The PvP rating of the group leader."
         end
-        return "Rating", "Sort by the leader's Mythic+ rating."
+        return "Rating", "The Mythic+ Rating of the group leader."
     elseif sortKey == "age" then
-        return L["Age"], L["Sort by how long ago the listing was created."]
+        return L["Age"], "How long ago this listing was posted. Older listings may have already filled their spots."
     elseif sortKey == "note" then
-        return L["Notes"], L["Sort by the listing note text."]
+        return L["Notes"], "The note left by the group leader. Often contains sign-up requirements or group goals."
     end
     return nil, nil
 end
@@ -2600,6 +2612,7 @@ ResetSearchFilters = function()
     OAK_F.NeedBrez = false
     OAK_F.PartyFit = false
     OAK_F.MatchMyRaidLockout = false
+    OAK_F.HideDeclined = false
     OAK_F.RaidBossesRange = ""
     OAK_F.RaidTankRange = ""
     OAK_F.RaidHealerRange = ""
@@ -3376,6 +3389,9 @@ UpdateSearchFilterPane = function()
     boxLust:SetState(OAK_F.NeedLust)
     boxBrez:SetState(OAK_F.NeedBrez)
     filterPanel.matchMyRaidLockoutBox:SetState(OAK_F.MatchMyRaidLockout)
+    if boxHideDeclined then
+        boxHideDeclined:SetState(OAK_F.HideDeclined)
+    end
     SetControlVisible(divTexture, showActivityFilters)
     SetControlVisible(filterActivityTitle, showActivityFilters)
     SetControlVisible(filterDungeonContainer, showActivityFilters)
@@ -3831,15 +3847,28 @@ local function CreateRow(index)
     row.bg = row:CreateTexture(nil, "BACKGROUND"); row.bg:SetAllPoints()
     row.hoverBg = row:CreateTexture(nil, "ARTWORK"); row.hoverBg:SetAllPoints(); row.hoverBg:SetColorTexture(1, 1, 1, 0.1); row.hoverBg:Hide()
 
-    row:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
-    row:SetScript("OnDoubleClick", function(self)
-        if self.groupData and self.groupData.id and not self.groupData.isApplied and not self.groupData.isDeclined then
+    row:RegisterForClicks("LeftButtonUp")
+    row:SetScript("OnClick", function(self, button)
+        if button ~= "LeftButton" then return end
+        if not (self.groupData and self.groupData.id) then return end
+        if self.groupData.isApplied or self.groupData.isDeclined then return end
+        if playerIsListed then return end
+        local now = GetTime()
+        local id = self.groupData.id
+        if id == lastSearchClickID and (now - lastSearchClickTime) < 0.5 then
+            -- Second click within window — confirmed double-click
             if addonTable.BeginSearchSignup then
-                addonTable.BeginSearchSignup(self.groupData.id)
+                addonTable.BeginSearchSignup(id)
             else
-                LFGListSearchPanel_SelectResult(LFGListFrame.SearchPanel, self.groupData.id)
+                LFGListSearchPanel_SelectResult(LFGListFrame.SearchPanel, id)
                 LFGListSearchPanel_SignUp(LFGListFrame.SearchPanel)
             end
+            lastSearchClickID = nil
+            lastSearchClickTime = 0
+        else
+            -- First click — record and wait for potential second
+            lastSearchClickID = id
+            lastSearchClickTime = now
         end
     end)
 
@@ -4121,7 +4150,7 @@ local function CreateRow(index)
     end)
     row.applyBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
     row.applyBtn:SetScript("OnClick", function(self)
-        if row.groupData and row.groupData.id and not row.groupData.isApplied and not row.groupData.isDeclined then
+        if row.groupData and row.groupData.id and not row.groupData.isApplied and not row.groupData.isDeclined and not playerIsListed then
             self:Disable()
             if addonTable.BeginSearchSignup then
                 addonTable.BeginSearchSignup(row.groupData.id)
@@ -4317,10 +4346,28 @@ local function RenderSearchGroupRow(row, group, isAltColor)
             end)
         end
     else
-        row.applyBtn:Show()
         row.cancelBtn:Hide()
         row.ageText:SetText(FormatTime(group.age))
         row.ageText:SetTextColor(1, 1, 1)
+        row.applyBtn:Show()
+        if playerIsListed then
+            row.applyBtn:GetNormalTexture():SetDesaturated(true)
+            row.applyBtn:SetAlpha(0.45)
+            row.applyBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Can't Sign Up", 1, 0.35, 0.35)
+                GameTooltip:AddLine("You can't do this while your group is listed in Premade Groups.", 1, 1, 1, true)
+                GameTooltip:Show()
+            end)
+        else
+            row.applyBtn:GetNormalTexture():SetDesaturated(false)
+            row.applyBtn:SetAlpha(1)
+            row.applyBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Sign Up", 0.2, 1, 0.2)
+                GameTooltip:Show()
+            end)
+        end
     end
 
     row:Show()
@@ -4328,6 +4375,14 @@ end
 
 function OAK_SEARCH:UpdateDisplay()
     SyncOakFiltersFromNativeAdvancedFilter()
+
+    -- Cache whether the player is currently running an active LFG listing
+    if C_LFGList and C_LFGList.GetActiveEntryInfo then
+        local entryInfo = C_LFGList.GetActiveEntryInfo()
+        playerIsListed = (entryInfo ~= nil and (entryInfo.activityID or 0) > 0)
+    else
+        playerIsListed = false
+    end
 
     local filteredGroups = {}
     local pinnedGroups = {}
@@ -4351,7 +4406,9 @@ function OAK_SEARCH:UpdateDisplay()
         group.isRoleFilled = addonTable.IsAppliedRoleFilled and addonTable.IsAppliedRoleFilled(group) or false
 
         if not group.isApplied then
-            if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(group) then
+            if OAK_F.HideDeclined and group.isDeclined then skip = true end
+
+            if not skip and addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(group) then
                 skip = true
             end
 

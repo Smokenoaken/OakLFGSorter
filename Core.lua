@@ -1196,8 +1196,8 @@ end
 OAK_LFG:RegisterEvent("LFG_LIST_APPLICANT_LIST_UPDATED")
 OAK_LFG:RegisterEvent("LFG_LIST_APPLICANT_UPDATED")
 OAK_LFG:RegisterEvent("LFG_LIST_ACTIVE_ENTRY_UPDATE")
-OAK_LFG:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED")
-OAK_LFG:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED")
+    -- OAK_LFG:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED")
+    --     -- OAK_LFG:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED")
 OAK_LFG:RegisterEvent("LFG_LIST_APPLICATION_STATUS_UPDATED")
 
 OAK_LFG:SetScript("OnEvent", function(self, event, ...) 
@@ -1221,8 +1221,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         return
     elseif event == "LFG_LIST_ACTIVE_ENTRY_UPDATE" then
         if not C_LFGList.HasActiveEntryInfo() then
-            FetchSearchResultData()
-            if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end
+            if OAK_LFG:IsShown() then OAK_LFG:Hide() end
             return
         end
     end
@@ -1341,8 +1340,7 @@ addonTable.ResizeGrip:SetScript("OnMouseUp", function(self, button)
     if OakLFGSorterDB then OakLFGSorterDB.frameSize = { OAK_LFG:GetWidth(), OAK_LFG:GetHeight() } end
 end)
 
-SLASH_OAKLFG1 = "/oaklfg"
-SlashCmdList["OAKLFG"] = function(msg)
+local function OakLFGCommand(msg)
     if msg and msg:lower() == "reset" then
         if OakLFGSorterDB then
             OakLFGSorterDB.framePos = nil
@@ -1369,6 +1367,21 @@ SlashCmdList["OAKLFG"] = function(msg)
 
         print("|cFF00FF00Oak LFG Sorter:|r Applicant and search window position, scale, and note settings reset.")
     else
-        if OAK_LFG:IsShown() then OAK_LFG:Hide() else OAK_LFG:Show() end
+        -- Show the appropriate browser: applicant browser when listing, search browser otherwise
+        if C_LFGList.HasActiveEntryInfo() then
+            if OAK_LFG:IsShown() then OAK_LFG:Hide() else OAK_LFG:Show() end
+        elseif addonTable.OAK_SEARCH then
+            local OAK_SEARCH = addonTable.OAK_SEARCH
+            if OAK_SEARCH:IsShown() then OAK_SEARCH:Hide() else OAK_SEARCH:Show() end
+        else
+            if OAK_LFG:IsShown() then OAK_LFG:Hide() else OAK_LFG:Show() end
+        end
     end
 end
+
+SLASH_OAKLFG1 = "/oaklfg"
+SLASH_OAKLFG2 = "/lfg"
+SlashCmdList["OAKLFG"] = OakLFGCommand
+
+
+

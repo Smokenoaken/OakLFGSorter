@@ -26,6 +26,10 @@ local quickSignupState = {
     originalDialogShow = nil,
 }
 
+local SIGNUP_COOLDOWN_DURATION = 1.5  -- Blizzard server-side throttle estimate (seconds)
+local lastDirectSignupTime = 0
+local cooldownTimerRunning = false
+
 local SEARCH_ROLE_CAPABILITIES = {
     DEATHKNIGHT = { TANK = true, DAMAGER = true },
     DEMONHUNTER = { TANK = true, DAMAGER = true },
@@ -154,6 +158,10 @@ local function ApplyQuickSignupDirect(searchResultID)
         addonTable.OAK_SEARCH:UpdateDisplay()
     end
 
+    if addonTable.StartSignupCooldown then
+        addonTable.StartSignupCooldown()
+    end
+
     return true
 end
 
@@ -249,18 +257,24 @@ local function QueueApplySavedQuickSignupRoles(dialog, onApplied)
     end
 
     local expectedResultID = dialog.resultID
-    local function applyRoles(shouldRunCallback)
+    local function applyRoles()
         if not dialog:IsShown() or dialog.resultID ~= expectedResultID then
             return
         end
-
         ApplySavedQuickSignupRoles(dialog)
-        if shouldRunCallback and onApplied then
+        if onApplied then
             onApplied(dialog, expectedResultID)
         end
     end
 
-    applyRoles(true)
+    -- Try immediately, then retry after short delays in case the dialog
+    -- finishes initializing its SignUpButton a frame or two after OnShow fires.
+    applyRoles()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.05, applyRoles)
+        C_Timer.After(0.2,  applyRoles)
+        C_Timer.After(0.5,  applyRoles)
+    end
 end
 
 local function ApplySavedRolesToVisibleDialog()
@@ -399,6 +413,22 @@ signupLimitNote:SetJustifyH("LEFT")
 signupLimitNote:SetWordWrap(false)
 signupLimitNote:SetScale(0.9)
 
+local cooldownLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+cooldownLabel:SetTextColor(1, 0.6, 0.1, 1)
+cooldownLabel:SetJustifyH("LEFT")
+cooldownLabel:SetWordWrap(false)
+cooldownLabel:SetScale(0.9)
+cooldownLabel:Hide()
+
+local cancelOldestBtn = CreateFrame("Button", nil, quickSignupBar, "BackdropTemplate")
+cancelOldestBtn:SetSize(72, 15)
+cancelOldestBtn:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
+cancelOldestBtn:SetBackdropColor(0.45, 0.08, 0.08, 0.92)
+cancelOldestBtn:SetBackdropBorderColor(0.6, 0.1, 0.1, 1)
+local cancelOldestLabel = cancelOldestBtn:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+cancelOldestLabel:SetPoint("CENTER")
+cancelOldestLabel:SetText("Cancel Oldest")
+cancelOldestLabel:SetTextColor(1, 0.75, 0.75)
 local persistNoteToggleLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 persistNoteToggleLabel:SetPoint("RIGHT", quickSignupBar, "RIGHT", -12, 0)
 persistNoteToggleLabel:SetText(L["Persist Note"])
@@ -455,12 +485,135 @@ function addonTable.UpdateSearchQuickSignupControls()
         end
     end
 
-    signupLimitNote:ClearAllPoints()
-    signupLimitNote:SetPoint("LEFT", quickSignupState.roleButtons.DAMAGER, "RIGHT", 10, 0)
-    signupLimitNote:SetPoint("RIGHT", persistNoteToggleBox, "LEFT", -14, 0)
+    -- cancelOldestBtn sits just left of the Persist Note toggle
+    cancelOldestBtn:ClearAllPoints()
+    cancelOldestBtn:SetPoint("RIGHT", persistNoteToggleBox, "LEFT", -20, 0)
 
     UpdatePersistentNotePatch()
+
+    -- UpdateSignupLimitDisplay handles signupLimitNote + cooldownLabel anchors, text, and cancelOldestBtn visibility
+    if addonTable.UpdateSignupLimitDisplay then
+        addonTable.UpdateSignupLimitDisplay()
+    end
 end
+
+local function UpdateSignupCooldownDisplay()
+    local elapsed = GetTime() - lastDirectSignupTime
+    local remaining = SIGNUP_COOLDOWN_DURATION - elapsed
+    if remaining > 0 then
+        cooldownLabel:SetText(string.format("Server cooldown: %.1fs", remaining))
+        signupLimitNote:Hide()
+        cooldownLabel:Show()
+        C_Timer.After(0.1, UpdateSignupCooldownDisplay)
+    else
+        cooldownLabel:Hide()
+        cooldownTimerRunning = false
+        -- Let UpdateSignupLimitDisplay restore the correct note state (may be max-groups message)
+        if addonTable.UpdateSignupLimitDisplay then
+            addonTable.UpdateSignupLimitDisplay()
+        else
+            signupLimitNote:Show()
+        end
+    end
+end
+
+function addonTable.StartSignupCooldown()
+    lastDirectSignupTime = GetTime()
+    if not cooldownTimerRunning then
+        cooldownTimerRunning = true
+        C_Timer.After(0, UpdateSignupCooldownDisplay)
+    end
+    -- Refresh the max-groups indicator so Cancel Oldest appears if we just hit the cap
+    C_Timer.After(0.1, function()
+        if addonTable.UpdateSignupLimitDisplay then
+            addonTable.UpdateSignupLimitDisplay()
+        end
+    end)
+end
+
+local function FindAndCancelOldestApplication()
+    if not (C_LFGList and C_LFGList.GetSearchResults and C_LFGList.GetApplicationInfo) then return end
+    local first, second = C_LFGList.GetSearchResults()
+    local results = type(first) == "table" and first or (type(second) == "table" and second) or {}
+    local oldestDuration = -1
+    local oldestResultID = nil
+    for _, resultID in ipairs(results) do
+        local _, appStatus, _, appDuration = C_LFGList.GetApplicationInfo(resultID)
+        if appStatus == "applied" then
+            local dur = tonumber(appDuration) or 0
+            if dur > oldestDuration then
+                oldestDuration = dur
+                oldestResultID = resultID
+            end
+        end
+    end
+    if oldestResultID then
+        C_LFGList.CancelApplication(oldestResultID)
+        if addonTable.MarkSearchResultCanceled then
+            addonTable.MarkSearchResultCanceled(oldestResultID)
+        end
+    end
+end
+
+cancelOldestBtn:SetScript("OnClick", function()
+    FindAndCancelOldestApplication()
+    C_Timer.After(0.25, function()
+        if addonTable.UpdateSignupLimitDisplay then
+            addonTable.UpdateSignupLimitDisplay()
+        end
+    end)
+end)
+cancelOldestBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Cancel Oldest Application", 1, 0.5, 0.5)
+    GameTooltip:AddLine("Cancels your oldest pending group application to free up a signup slot.", 0.9, 0.9, 0.9, true)
+    GameTooltip:Show()
+end)
+cancelOldestBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+function addonTable.UpdateSignupLimitDisplay()
+    if not (C_LFGList and C_LFGList.GetNumApplications) then return end
+    local _, numActive = C_LFGList.GetNumApplications()
+    local maxApps = MAX_LFG_LIST_APPLICATIONS or 5
+    local atMax = numActive and numActive >= maxApps
+
+    -- cancelOldestBtn is always visible; labels anchor against it
+    cancelOldestBtn:Show()
+
+    local leftAnchor = quickSignupState.roleButtons.DAMAGER
+    signupLimitNote:ClearAllPoints()
+    signupLimitNote:SetPoint("LEFT", leftAnchor, "RIGHT", 10, 0)
+    signupLimitNote:SetPoint("RIGHT", cancelOldestBtn, "LEFT", -6, 0)
+
+    cooldownLabel:ClearAllPoints()
+    cooldownLabel:SetPoint("LEFT", leftAnchor, "RIGHT", 10, 0)
+    cooldownLabel:SetPoint("RIGHT", cancelOldestBtn, "LEFT", -6, 0)
+
+    if atMax then
+        if not cooldownTimerRunning then   -- don't overwrite cooldown label text when it's active
+            signupLimitNote:SetText("Signed up to max groups!")
+            signupLimitNote:SetTextColor(1, 0.35, 0.35)
+            signupLimitNote:Show()
+        end
+    else
+        signupLimitNote:SetText("Note: You can only sign up for a total of 5 groups at a time")
+        signupLimitNote:SetTextColor(0.85, 0.85, 0.85)
+        if not cooldownTimerRunning then
+            signupLimitNote:Show()
+        end
+    end
+end
+
+-- Refresh limit display whenever an application status changes (accepted, declined, cancelled)
+local signupStatusEventFrame = CreateFrame("Frame")
+signupStatusEventFrame:RegisterEvent("LFG_LIST_APPLICATION_STATUS_UPDATED")
+signupStatusEventFrame:SetScript("OnEvent", function()
+    C_Timer.After(0.3, function()
+        if addonTable.UpdateSignupLimitDisplay then
+            addonTable.UpdateSignupLimitDisplay()
+        end
+    end)
+end)
 
 local function TryPanelSignup(panel, searchResultID)
     if not (panel and searchResultID) then
@@ -564,9 +717,16 @@ function addonTable.EnsureSearchSignupHooks()
     LFGListApplicationDialog:HookScript("OnShow", function(self)
         RaiseSignupDialogAboveOak(self)
         local shouldQuickSignup = quickSignupState.pending
+        local hasClicked = false
         QueueApplySavedQuickSignupRoles(self, function(dialog, expectedResultID)
-            if shouldQuickSignup and dialog.SignUpButton and dialog.SignUpButton:IsEnabled() and dialog.resultID == expectedResultID then
+            if not hasClicked and shouldQuickSignup
+                    and dialog.SignUpButton and dialog.SignUpButton:IsEnabled()
+                    and dialog.resultID == expectedResultID then
+                hasClicked = true
                 dialog.SignUpButton:Click()
+                if addonTable.StartSignupCooldown then
+                    addonTable.StartSignupCooldown()
+                end
             end
         end)
         quickSignupState.pending = false
