@@ -8,7 +8,7 @@ addonTable.CurrentIsAscending = false
 local ROW_HEIGHT = 22 
 local FULL_FRAME_WIDTH = 660
 local COLLAPSED_FRAME_WIDTH = 460
-local BROWSER_COLLAPSED_WIDTH = 552
+local BROWSER_COLLAPSED_WIDTH = 535
 local BASE_HEADER_TOP_OFFSET = -43
 local BASE_SCROLL_TOP_OFFSET = -70
 local APPLICANT_CONTEXT_BAR_HEIGHT = 24
@@ -393,7 +393,7 @@ local B_COMP    = { x = 155, w = 103, align = "CENTER" }   -- [155, 258]  comp s
 local B_TITLE   = { x = 258, w = 102, align = "LEFT" }     -- [258, 360]  listing title
 local B_RATING  = { x = 360, w = 70,  align = "CENTER" }   -- [360, 430]
 local B_AGE     = { x = 430, w = 45,  align = "CENTER" }   -- [430, 475]
-local B_NOTE    = { x = 475, w = 155, align = "LEFT" }     -- [475, 630]
+local B_NOTE    = { x = 475, w = 130, align = "LEFT" }     -- [475, 605]
 local ROW_X_OFFSET = 10
 local REGION_TAG_WIDTH = 42
 
@@ -654,7 +654,7 @@ local function UpdateNotesToggleLayout()
     if hideNotes then
         notesToggleBtn:ClearAllPoints()
         notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", xOffset, HEADER_TOP_OFFSET)
-        notesToggleBtn:SetWidth(75)
+        notesToggleBtn:SetWidth(55)
         -- Left-justify the "Notes" label in collapsed state
         notesToggleBtn.text:ClearAllPoints()
         notesToggleBtn.text:SetPoint("LEFT", notesToggleBtn, "LEFT", 6, 0)
@@ -943,15 +943,12 @@ local function ConfigureApplicantRowLayout(row)
     ConfigureTextColumn(row.noteText, row, GetCurrentRowNoteColumn(), 5)
 end
 
-local COMP_ROLE_ATLAS = {
-    ["TANK"]    = "roleicon-tank",
-    ["HEALER"]  = "roleicon-healer",
-    ["DAMAGER"] = "roleicon-dps",
-}
-
 local function SetBrowserCompSlot(slotFrame, role, className, filled)
-    local atlas = COMP_ROLE_ATLAS[role] or COMP_ROLE_ATLAS["DAMAGER"]
-    slotFrame.icon:SetAtlas(atlas, false)
+    local coords = addonTable.RoleTexCoords[role]
+    if coords then
+        slotFrame.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
+        slotFrame.icon:SetTexCoord(unpack(coords))
+    end
 
     if filled then
         slotFrame.icon:SetDesaturated(false)
@@ -1254,18 +1251,18 @@ local function CreateRow(index)
 
     row.compSlots = {}
     local compRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
-    -- 16px atlas icons, 18px center-to-center spacing; centered in the 103px Comp column
+    -- 16px icons, 18px center-to-center spacing; centered in the 103px Comp column
     local COMP_SLOT_SIZE = 16
     local COMP_SLOT_SPACING = 18
     local compTotalSpan = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 4*18+16 = 88px
     local compSlotOffset = math.floor((BR_COMP.w - compTotalSpan) / 2)   -- (103-88)/2 = 7
     for index, role in ipairs(compRoles) do
-        -- Plain frame, no backdrop — the atlas icon provides its own visual
         local slot = CreateFrame("Frame", nil, row)
         slot:SetSize(COMP_SLOT_SIZE, COMP_SLOT_SIZE)
         slot:SetPoint("LEFT", row, "LEFT", BR_COMP.x + compSlotOffset + ((index - 1) * COMP_SLOT_SPACING), 0)
-        slot.icon = slot:CreateTexture(nil, "ARTWORK")
+        slot.icon = slot:CreateTexture(nil, "OVERLAY")
         slot.icon:SetAllPoints(slot)
+        slot.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
         row.compSlots[index] = slot
     end
 
@@ -1368,7 +1365,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         if isBrowser and row.inviteBtn then
             row.inviteBtn:ClearAllPoints()
             if hideNotes then
-                row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 37, 0)
+                row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 27, 0)
             else
                 row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
             end
@@ -1470,7 +1467,7 @@ function addonTable.UpdateDisplay()
             if row.inviteBtn then
                 row.inviteBtn:ClearAllPoints()
                 if hideNotes then
-                    row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 37, 0)
+                    row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 27, 0)
                 else
                     row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
                 end

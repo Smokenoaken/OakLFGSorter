@@ -446,6 +446,12 @@ local function ResultMatchesPartyFit(result)
 end
 
 function addonTable.ResultPassesBrowserFilters(result)
+    -- Hide groups that are completely full (no open slots)
+    local maxP = result.maxPlayers or 0
+    if maxP > 0 and (result.numMembers or 0) >= maxP then
+        return false
+    end
+
     local filters = BrowserFilterState()
     if filters.hideDeclined and string.find(result.applicationStatus or "", "declined", 1, true) then
         return false
@@ -704,11 +710,13 @@ function addonTable.UpdateTopBarActions()
 
         refreshBtn.text:SetText(L["Refresh"])
         refreshBtn:SetScript("OnClick", function()
-            if addonTable.FetchSearchResultData then
+            -- Trigger an actual new search via Blizzard's panel, then re-fetch after results arrive
+            if LFGListFrame and LFGListFrame.SearchPanel and LFGListSearchPanel_DoSearch then
+                LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
+            elseif addonTable.FetchSearchResultData then
+                -- Fallback: just re-read cached results
                 addonTable.FetchSearchResultData()
-            end
-            if addonTable.UpdateDisplay then
-                addonTable.UpdateDisplay()
+                if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
             end
         end)
     else
