@@ -10,7 +10,7 @@ local quickFilterButtons = {}
 local browserFilterButtons = {}
 local browserActivityButtons = {}
 local BrowserFilterState
-local BROWSER_FILTER_VERSION = 5
+local BROWSER_FILTER_VERSION = 6
 local GetPartyRoleSupply
 local ROLE_REMAINING_KEYS = {
     TANK = "TANK_REMAINING",
@@ -25,7 +25,16 @@ local regionFilterButtons = {}
 local regionFilterLabels = {}
 
 local function GetBrowserMode()
-    return (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
+    local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode
+    if not mode or mode == "generic" then
+        -- Context hasn't been resolved yet (e.g. first open before results load).
+        -- Try to infer mode from the first available search result.
+        local first = addonTable.SearchResults and addonTable.SearchResults[1]
+        if first and first.mode and first.mode ~= "generic" then
+            mode = first.mode
+        end
+    end
+    return mode or "generic"
 end
 
 local function BrowserModeUsesDifficulty(mode)
@@ -570,10 +579,68 @@ local function SyncBrowserNativeRoleFilters()
         advancedFilter = {}
     end
 
-    advancedFilter.roleTank = filters.needsTank or false
-    advancedFilter.roleHealer = filters.needsHealer or false
-    advancedFilter.roleDamage = filters.needsDPS or false
+    -- Role need filters (server-side)
+    advancedFilter.needsTank   = filters.needsTank and true or nil
+    advancedFilter.needsHealer = filters.needsHealer and true or nil
+    advancedFilter.needsDamage = filters.needsDPS and true or nil
+    -- Has-role filters (server-side)
+    advancedFilter.hasTank   = filters.hasTank and true or nil
+    advancedFilter.hasHealer = filters.hasHealer and true or nil
+    -- "No [player class]" filter (server-side)
+    advancedFilter.needsMyClass = filters.needsMyClass and true or nil
+    -- Min rating (server-side)
+    local minR = tonumber(filters.minRating)
+    advancedFilter.minimumRating = (minR and minR > 0) and minR or nil
 
+    pcall(C_LFGList.SaveAdvancedFilter, advancedFilter)
+end
+
+-- Also push selected activities to Blizzard's native filter
+local function SyncBrowserNativeDifficulty()
+    if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then return end
+    -- Use GetBrowserMode() which falls back to SearchResults[1].mode, ensuring we
+    -- always get the real mode even when CurrentSearchContext is still "generic".
+    local mode = GetBrowserMode()
+    if mode ~= "mythic_plus" and mode ~= "dungeon" then return end
+
+    local filters = BrowserFilterState()
+    local diff = filters.difficulty or "ANY"
+
+    local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+    if not ok or type(adv) ~= "table" then adv = {} end
+
+    -- Both dungeon and mythic_plus share the same difficulty options (ANY/NORMAL/HEROIC/MYTHIC/MYTHIC_PLUS).
+    -- Always write exactly what the user selected — never override based on detected mode,
+    -- because isMythicPlusActivity=true on current-season dungeons causes mode detection to
+    -- return "mythic_plus" even during a plain Normal/Heroic/Mythic dungeon search.
+    adv.difficultyNormal     = (diff == "NORMAL")      and true or nil
+    adv.difficultyHeroic     = (diff == "HEROIC")      and true or nil
+    adv.difficultyMythic     = (diff == "MYTHIC")      and true or nil
+    adv.difficultyMythicPlus = (diff == "MYTHIC_PLUS") and true or nil
+
+    pcall(C_LFGList.SaveAdvancedFilter, adv)
+    -- Difficulty filter is server-side; the user must click Refresh to apply it.
+    -- Do NOT call LFGListSearchPanel_DoSearch here — Search() is a protected
+    -- function and can only be invoked from a hardware-event (user click) context.
+end
+
+local function SyncBrowserNativeActivities()
+    if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then return end
+    local filters = BrowserFilterState()
+    local success, advancedFilter = pcall(C_LFGList.GetAdvancedFilter)
+    if not success or type(advancedFilter) ~= "table" then advancedFilter = {} end
+
+    local groupIDs = {}
+    local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
+    for _, entry in ipairs(activities) do
+        if filters.selectedActivities[entry.filterKey] then
+            local gid = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(entry.activityInfo) or nil
+            if gid and gid > 0 then
+                table.insert(groupIDs, gid)
+            end
+        end
+    end
+    advancedFilter.activities = groupIDs
     pcall(C_LFGList.SaveAdvancedFilter, advancedFilter)
 end
 
@@ -1031,8 +1098,8 @@ end)
 
 local browserFilterPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.BrowserFilterPanel = browserFilterPanel
-browserFilterPanel:SetSize(210, 452)
-browserFilterPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
+browserFilterPanel:SetSize(210, 520)
+browserFilterPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", 0, 0)
 browserFilterPanel:Hide()
 browserFilterPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1)
 browserFilterPanel:SetBackdrop({
@@ -1044,6 +1111,12 @@ browserFilterPanel:SetBackdrop({
     browserFilterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 browserFilterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 browserFilterPanel:HookScript("OnShow", function()
+    -- Populate/refresh the panel contents every time it becomes visible.
+    -- This is the single authoritative place that calls UpdateBrowserFilterPanel on open
+    -- so the panel is always fully laid out regardless of what triggered the Show.
+    if addonTable.UpdateBrowserFilterPanel then
+        addonTable.UpdateBrowserFilterPanel()
+    end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
     elseif addonTable.AnchorRIOPanelToOak then
@@ -1092,6 +1165,8 @@ function BrowserFilterState()
             hasHealer = false,
             needsHealer = false,
             needsDPS = false,
+            needsMyClass = false,
+            minRating = "",
             partyFit = false,
             needsLust = false,
             needsBrez = false,
@@ -1101,6 +1176,10 @@ function BrowserFilterState()
             selectedActivities = {},
         }
     end
+    -- Ensure new fields exist for upgrades
+    local f = OakLFGSorterDB.browserFilters
+    if f.needsMyClass == nil then f.needsMyClass = false end
+    if f.minRating == nil then f.minRating = "" end
     local filters = OakLFGSorterDB.browserFilters
     filters.version = BROWSER_FILTER_VERSION
 
@@ -1160,7 +1239,9 @@ local function CreateBrowserToggleBox(parent, key)
         local filters = BrowserFilterState()
         filters[key] = not filters[key]
         self:SetState(filters[key])
-        if key == "needsTank" or key == "needsHealer" or key == "needsDPS" then
+        -- Sync all role/class/rating-related keys to Blizzard native filter
+        local nativeKeys = { needsTank=1, needsHealer=1, needsDPS=1, hasTank=1, hasHealer=1, needsMyClass=1 }
+        if nativeKeys[key] then
             SyncBrowserNativeRoleFilters()
         end
         RefreshBrowserFilters()
@@ -1219,8 +1300,7 @@ local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLa
         for index, option in ipairs(options) do
             local optionButton = button.optionButtons[index]
             if not optionButton then
-                optionButton = CreateFrame("Button", nil, listFrame, "BackdropTemplate")
-                optionButton:SetBackdrop({ bgFile = addonTable.FLAT_TEX })
+                optionButton = CreateFrame("Button", nil, listFrame)
                 optionButton.bg = optionButton:CreateTexture(nil, "BACKGROUND")
                 optionButton.bg:SetAllPoints()
                 optionButton.hover = optionButton:CreateTexture(nil, "HIGHLIGHT")
@@ -1243,6 +1323,11 @@ local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLa
                 filters[button.filterKey] = option.value
                 UpdateText()
                 listFrame:Hide()
+                -- Sync difficulty to Blizzard's native advanced filter when the
+                -- difficulty dropdown changes (filterKey == "difficulty").
+                if button.filterKey == "difficulty" then
+                    SyncBrowserNativeDifficulty()
+                end
                 RefreshBrowserFilters()
             end)
             optionButton:Show()
@@ -1340,6 +1425,40 @@ local function GetRaidBossOptions()
     return options
 end
 
+-- Returns "No DKs", "No Pallies", etc. based on the player's own class.
+local function GetNeedsMyClassLabel()
+    local _, playerClass = UnitClass("player")
+    local labels = {
+        DEATHKNIGHT = "No DKs",
+        DEMONHUNTER = "No DHs",
+        DRUID       = "No Druids",
+        EVOKER      = "No Evokers",
+        HUNTER      = "No Hunters",
+        MAGE        = "No Mages",
+        MONK        = "No Monks",
+        PALADIN     = "No Pallies",
+        PRIEST      = "No Priests",
+        ROGUE       = "No Rogues",
+        SHAMAN      = "No Shammies",
+        WARLOCK     = "No Locks",
+        WARRIOR     = "No Warriors",
+    }
+    return labels[playerClass] or "No [class]"
+end
+addonTable.GetNeedsMyClassLabel = GetNeedsMyClassLabel
+
+-- Returns a hint string for the search query box based on the current search mode.
+local function GetSearchQueryLabel(mode)
+    if mode == "mythic_plus" or mode == "dungeon" then
+        -- Dungeon and M+ share the same filter panel layout
+        return "Examples: 10-11, <10, <12"
+    elseif mode == "raid" or mode == "legacy_raid" then
+        return "Search raid groups..."
+    end
+    return ""
+end
+addonTable.GetSearchQueryLabel = GetSearchQueryLabel
+
 local playstyleDropdown = CreateBrowserDropdown(browserContent, 188, function()
     return {
         { value = "ANY", label = "Any Playstyle" },
@@ -1359,16 +1478,18 @@ local keyMinBox = CreateBrowserNumberBox(browserContent, "keyMin", 48)
 local keyRangeTo = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 keyRangeTo:SetText("to")
 local keyMaxBox = CreateBrowserNumberBox(browserContent, "keyMax", 48)
+-- Role + utility toggle boxes (matching old Search.lua layout: Need/Has columns)
 local browserToggleKeys = {
-    { key = "hasTank", label = "Has Tank", column = 1 },
-    { key = "needsTank", label = "Need Tank", column = 2 },
-    { key = "hasHealer", label = "Has Heal", column = 1 },
-    { key = "needsHealer", label = "Need Heal", column = 2 },
-    { key = "needsDPS", label = "Need DPS", column = 1 },
-    { key = "partyFit", label = "Party Fit", column = 2 },
-    { key = "needsLust", label = "Need Lust", column = 1 },
-    { key = "needsBrez", label = "Need BRez", column = 2 },
-    { key = "hideDeclined", label = "Hide Declined", column = 1, span = 2 },
+    { key = "needsTank",   label = "Need Tank",    column = 1 },
+    { key = "hasTank",     label = "Has Tank",     column = 2 },
+    { key = "needsHealer", label = "Need Healer",  column = 1 },
+    { key = "hasHealer",   label = "Has Healer",   column = 2 },
+    { key = "needsDPS",    label = "Need Damage",  column = 1 },
+    -- column 2 of needsDPS row = "No [class]" handled separately below
+    { key = "partyFit",    label = "Party Fit",    column = 1 },
+    { key = "needsLust",   label = "Need Lust",    column = 2 },
+    { key = "needsBrez",   label = "Need BRez",    column = 1 },
+    { key = "hideDeclined",label = "Hide Declined",column = 2 },
     { key = "matchMyRaidLockout", label = "Match My Lockout", column = 1, span = 2, raidOnly = true },
 }
 
@@ -1377,9 +1498,297 @@ for _, toggleInfo in ipairs(browserToggleKeys) do
     local box = CreateBrowserToggleBox(browserContent, toggleInfo.key)
     local text = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     browserToggleRows[toggleInfo.key] = { box = box, text = text, label = toggleInfo.label }
-    text:SetPoint("LEFT", box, "RIGHT", 8, 0)
+    text:SetPoint("LEFT", box, "RIGHT", 6, 0)
     text:SetText(toggleInfo.label)
 end
+
+-- Override OnClick for the 5 native-backed role toggles so they write directly to
+-- C_LFGList.SaveAdvancedFilter — the same pattern v2.0.12 used in Search.lua.
+-- This avoids the BrowserFilterState intermediary and keeps Blizzard's filter as the
+-- single source of truth for these keys.
+local function MakeNativeAdvToggle(advKey)
+    return function(self)
+        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+        if not ok or type(adv) ~= "table" then adv = {} end
+        adv[advKey] = not (adv[advKey] == true) and true or nil
+        self:SetState(adv[advKey] == true)
+        pcall(C_LFGList.SaveAdvancedFilter, adv)
+        RefreshBrowserFilters()
+    end
+end
+browserToggleRows["needsTank"].box:SetScript("OnClick",   MakeNativeAdvToggle("needsTank"))
+browserToggleRows["hasTank"].box:SetScript("OnClick",     MakeNativeAdvToggle("hasTank"))
+browserToggleRows["needsHealer"].box:SetScript("OnClick", MakeNativeAdvToggle("needsHealer"))
+browserToggleRows["hasHealer"].box:SetScript("OnClick",   MakeNativeAdvToggle("hasHealer"))
+browserToggleRows["needsDPS"].box:SetScript("OnClick",    MakeNativeAdvToggle("needsDamage"))  -- Blizzard uses "needsDamage"
+
+-- "No [player class]" toggle — column 2 of the Need Damage row
+local browserNoClassBox = CreateBrowserToggleBox(browserContent, "needsMyClass")
+local browserNoClassText = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+browserNoClassText:SetPoint("LEFT", browserNoClassBox, "RIGHT", 6, 0)
+browserNoClassBox:SetScript("OnClick", MakeNativeAdvToggle("needsMyClass"))
+
+-- Min Rating input
+local browserMinRatingLabel = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+browserMinRatingLabel:SetText("Min Rating")
+browserMinRatingLabel:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+
+local browserMinRatingBox = CreateFrame("EditBox", nil, browserContent, "BackdropTemplate")
+browserMinRatingBox:SetSize(60, 20)
+browserMinRatingBox:SetAutoFocus(false)
+browserMinRatingBox:SetFontObject("OakLFG_FontRegular")
+browserMinRatingBox:SetJustifyH("CENTER")
+browserMinRatingBox:SetBackdrop({ bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1 })
+browserMinRatingBox:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
+browserMinRatingBox:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+local function CommitMinRating()
+    -- Write directly to Blizzard's native advanced filter (no taint)
+    local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+    if not ok or type(adv) ~= "table" then adv = {} end
+    local text = browserMinRatingBox:GetText() or ""
+    local minR = tonumber(text)
+    adv.minimumRating = (minR and minR > 0) and minR or nil
+    pcall(C_LFGList.SaveAdvancedFilter, adv)
+    RefreshBrowserFilters()
+end
+browserMinRatingBox:SetScript("OnEnterPressed", function(self) CommitMinRating(); self:ClearFocus() end)
+browserMinRatingBox:SetScript("OnEditFocusLost", CommitMinRating)
+browserMinRatingBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+-- "Select Filters then Click Refresh" instruction label (shown above the hint)
+local browserQueryLabel = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+browserQueryLabel:SetTextColor(0.70, 0.70, 0.70)
+browserQueryLabel:SetText("Select Filters then Click Refresh")
+browserQueryLabel:Hide()
+
+-- Search query hint text
+local browserQueryHint = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+browserQueryHint:SetTextColor(0.60, 0.60, 0.60)
+
+-- Container frame for the native Blizzard SearchBox.
+-- We reparent LFGListFrame.SearchPanel.SearchBox into this frame when the panel
+-- is shown, and restore it when the panel is hidden.  This is the same taint-free
+-- approach used by the retired Search.lua (v2.0.12).
+local browserQueryBoxFrame = CreateFrame("Frame", nil, browserContent, "BackdropTemplate")
+browserQueryBoxFrame:SetHeight(20)
+browserQueryBoxFrame:SetBackdrop({ bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1 })
+browserQueryBoxFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
+browserQueryBoxFrame:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+
+local browserNativeSearchOriginalState    = nil
+local browserNativeAutoCompleteOriginalState = nil
+
+local function AttachBrowserNativeSearchBox()
+    local searchBox = LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel.SearchBox
+    if not (searchBox and browserQueryBoxFrame) then return end
+    if not browserFilterPanel:IsShown() then return end
+    if browserNativeSearchOriginalState then return end  -- already attached
+
+    local point, relativeTo, relativePoint, xOfs, yOfs = searchBox:GetPoint(1)
+    browserNativeSearchOriginalState = {
+        parent        = searchBox:GetParent(),
+        point         = point,
+        relativeTo    = relativeTo,
+        relativePoint = relativePoint,
+        xOfs          = xOfs,
+        yOfs          = yOfs,
+        width         = searchBox:GetWidth(),
+        height        = searchBox:GetHeight(),
+        frameStrata   = searchBox:GetFrameStrata(),
+        frameLevel    = searchBox:GetFrameLevel(),
+        onEnterPressed = searchBox:GetScript("OnEnterPressed"),
+        onEscapePressed = searchBox:GetScript("OnEscapePressed"),
+    }
+
+    -- Reparent the autocomplete dropdown too
+    if LFGListFrame.SearchPanel.AutoCompleteFrame then
+        local acf = LFGListFrame.SearchPanel.AutoCompleteFrame
+        local p, rt, rp, x, y2 = acf:GetPoint(1)
+        browserNativeAutoCompleteOriginalState = {
+            parent = acf:GetParent(), point = p, relativeTo = rt,
+            relativePoint = rp, xOfs = x, yOfs = y2,
+            frameStrata = acf:GetFrameStrata(), frameLevel = acf:GetFrameLevel(),
+        }
+        acf:SetParent(browserFilterPanel)
+        acf:ClearAllPoints()
+        acf:SetPoint("TOPLEFT", browserQueryBoxFrame, "BOTTOMLEFT", 0, -2)
+        acf:SetFrameStrata("TOOLTIP")
+        acf:SetFrameLevel(browserFilterPanel:GetFrameLevel() + 30)
+    end
+
+    searchBox:ClearAllPoints()
+    searchBox:SetParent(browserQueryBoxFrame)
+    searchBox:SetPoint("TOPLEFT",     browserQueryBoxFrame, "TOPLEFT",     2, -2)
+    searchBox:SetPoint("BOTTOMRIGHT", browserQueryBoxFrame, "BOTTOMRIGHT", -2,  2)
+    searchBox:SetFrameStrata("DIALOG")
+    searchBox:SetFrameLevel(browserQueryBoxFrame:GetFrameLevel() + 5)
+    -- Blizzard's OnTextChanged calls LFGListSearchPanel_UpdateAutoComplete(self:GetParent())
+    -- which expects parent.SearchBox to exist.  Set it so autocomplete doesn't error.
+    browserQueryBoxFrame.SearchBox = searchBox
+    if LFGListFrame.SearchPanel.AutoCompleteFrame then
+        browserQueryBoxFrame.AutoCompleteFrame = LFGListFrame.SearchPanel.AutoCompleteFrame
+    end
+    searchBox:SetScript("OnEnterPressed", function(self)
+        if LFGListFrame and LFGListFrame.SearchPanel and LFGListSearchPanel_DoSearch then
+            LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
+        end
+        if addonTable.FetchSearchResultData then
+            C_Timer.After(0.15, function()
+                addonTable.FetchSearchResultData()
+                if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+            end)
+        end
+        self:ClearFocus()
+    end)
+    searchBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    searchBox:Show()
+end
+
+local function RestoreBrowserNativeSearchBox()
+    if not browserNativeSearchOriginalState then return end
+    local searchBox = LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel.SearchBox
+    if not searchBox then browserNativeSearchOriginalState = nil; return end
+
+    -- Restore autocomplete frame
+    if browserNativeAutoCompleteOriginalState and LFGListFrame.SearchPanel.AutoCompleteFrame then
+        local acf = LFGListFrame.SearchPanel.AutoCompleteFrame
+        acf:SetParent(browserNativeAutoCompleteOriginalState.parent)
+        acf:ClearAllPoints()
+        if browserNativeAutoCompleteOriginalState.point and browserNativeAutoCompleteOriginalState.relativeTo then
+            acf:SetPoint(
+                browserNativeAutoCompleteOriginalState.point,
+                browserNativeAutoCompleteOriginalState.relativeTo,
+                browserNativeAutoCompleteOriginalState.relativePoint,
+                browserNativeAutoCompleteOriginalState.xOfs,
+                browserNativeAutoCompleteOriginalState.yOfs)
+        end
+        if browserNativeAutoCompleteOriginalState.frameStrata then acf:SetFrameStrata(browserNativeAutoCompleteOriginalState.frameStrata) end
+        if browserNativeAutoCompleteOriginalState.frameLevel then acf:SetFrameLevel(browserNativeAutoCompleteOriginalState.frameLevel) end
+        browserNativeAutoCompleteOriginalState = nil
+    end
+
+    searchBox:ClearAllPoints()
+    if browserNativeSearchOriginalState.parent then
+        searchBox:SetParent(browserNativeSearchOriginalState.parent)
+    end
+    if browserNativeSearchOriginalState.point and browserNativeSearchOriginalState.relativeTo then
+        searchBox:SetPoint(
+            browserNativeSearchOriginalState.point,
+            browserNativeSearchOriginalState.relativeTo,
+            browserNativeSearchOriginalState.relativePoint,
+            browserNativeSearchOriginalState.xOfs,
+            browserNativeSearchOriginalState.yOfs)
+    end
+    if browserNativeSearchOriginalState.width and browserNativeSearchOriginalState.height then
+        searchBox:SetSize(browserNativeSearchOriginalState.width, browserNativeSearchOriginalState.height)
+    end
+    if browserNativeSearchOriginalState.frameStrata then searchBox:SetFrameStrata(browserNativeSearchOriginalState.frameStrata) end
+    if browserNativeSearchOriginalState.frameLevel  then searchBox:SetFrameLevel(browserNativeSearchOriginalState.frameLevel) end
+    if browserNativeSearchOriginalState.onEnterPressed  then searchBox:SetScript("OnEnterPressed",  browserNativeSearchOriginalState.onEnterPressed) end
+    if browserNativeSearchOriginalState.onEscapePressed then searchBox:SetScript("OnEscapePressed", browserNativeSearchOriginalState.onEscapePressed) end
+    -- Clear the SearchBox/AutoCompleteFrame references we set on the host frame
+    browserQueryBoxFrame.SearchBox = nil
+    browserQueryBoxFrame.AutoCompleteFrame = nil
+    searchBox:Show()
+    browserNativeSearchOriginalState = nil
+end
+
+-- Hook filter panel hide to restore the search box to Blizzard's panel
+browserFilterPanel:HookScript("OnHide", function() RestoreBrowserNativeSearchBox() end)
+
+local function ApplyBrowserQueryAndRefresh()
+    if LFGListFrame and LFGListFrame.SearchPanel and LFGListSearchPanel_DoSearch then
+        LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
+    end
+    if addonTable.FetchSearchResultData then
+        C_Timer.After(0.15, function()
+            addonTable.FetchSearchResultData()
+            if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+        end)
+    end
+end
+
+-- Refresh and Reset buttons (2-column layout inside filter panel)
+local BFP_BTN_W = 88
+local browserInRefreshBtn = addonTable.CreateFlatButton(browserContent, "Refresh", BFP_BTN_W)
+browserInRefreshBtn:SetScript("OnClick", ApplyBrowserQueryAndRefresh)
+
+local browserResetBtn = addonTable.CreateFlatButton(browserContent, "Reset", BFP_BTN_W)
+browserResetBtn:SetScript("OnClick", function()
+    -- Reset client-side only filter state
+    local filters = BrowserFilterState()
+    filters.difficulty = "ANY"
+    filters.playstyle  = "ANY"
+    filters.keyMin = ""; filters.keyMax = ""
+    filters.partyFit = false; filters.needsLust = false
+    filters.needsBrez = false; filters.hideDeclined = false
+    filters.raidBossesMin = "ANY"; filters.matchMyRaidLockout = false
+    filters.selectedActivities = {}
+    -- Wipe ALL Blizzard native advanced filter fields (role, rating, activities)
+    if C_LFGList and C_LFGList.SaveAdvancedFilter then
+        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+        if not ok or type(adv) ~= "table" then adv = {} end
+        adv.needsTank = nil; adv.needsHealer = nil; adv.needsDamage = nil
+        adv.needsMyClass = nil; adv.hasTank = nil; adv.hasHealer = nil
+        adv.minimumRating = nil; adv.maximumRating = nil; adv.activities = {}
+        adv.difficultyNormal = nil; adv.difficultyHeroic = nil
+        adv.difficultyMythic = nil; adv.difficultyMythicPlus = nil
+        pcall(C_LFGList.SaveAdvancedFilter, adv)
+    end
+    -- NOTE: We deliberately do NOT clear the native SearchBox text here.
+    -- The native SearchBox is owned by Blizzard; calling SetText on it causes taint.
+    -- The user can clear it themselves, or it will be reset on the next search context change.
+    RefreshBrowserFilters()
+    if LFGListFrame and LFGListFrame.SearchPanel and LFGListSearchPanel_DoSearch then
+        LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
+    end
+end)
+
+-- Activity Select All / None buttons
+local activitySelectAllBtn = addonTable.CreateFlatButton(browserContent, "A", 18)
+activitySelectAllBtn.text:SetFontObject("OakLFG_FontSmall")
+activitySelectAllBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Select All", 1, 1, 1)
+    GameTooltip:AddLine("Select every dungeon in this list.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+activitySelectAllBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+activitySelectAllBtn:SetScript("OnClick", function()
+    local filters = BrowserFilterState()
+    local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
+    for _, entry in ipairs(activities) do
+        filters.selectedActivities[entry.filterKey] = true
+    end
+    SyncBrowserNativeActivities()
+    RefreshBrowserFilters()
+end)
+
+local activitySelectNoneBtn = addonTable.CreateFlatButton(browserContent, "N", 18)
+activitySelectNoneBtn.text:SetFontObject("OakLFG_FontSmall")
+activitySelectNoneBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Select None", 1, 1, 1)
+    GameTooltip:AddLine("Clear every dungeon in this list.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+activitySelectNoneBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+activitySelectNoneBtn:SetScript("OnClick", function()
+    local filters = BrowserFilterState()
+    for k in pairs(filters.selectedActivities) do
+        filters.selectedActivities[k] = nil
+    end
+    SyncBrowserNativeActivities()
+    RefreshBrowserFilters()
+end)
 
 local activityDivider = browserContent:CreateTexture(nil, "ARTWORK")
 activityDivider:SetTexture(addonTable.FLAT_TEX)
@@ -1425,7 +1834,7 @@ local function UpdateBrowserActivityButtons(startY)
     local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
     local validKeys = {}
     local mode = GetBrowserMode()
-    local showScoreColumn = (mode == "mythic_plus")
+    local showScoreColumn = (mode == "mythic_plus" or mode == "dungeon")
 
     for _, entry in ipairs(activities) do
         validKeys[entry.filterKey] = true
@@ -1442,20 +1851,10 @@ local function UpdateBrowserActivityButtons(startY)
         if button.scoreHitbox then button.scoreHitbox:Hide() end
     end
 
-    -- Position "Gives Score" column header when in M+ mode
-    if showScoreColumn then
-        givesScoreHeader:ClearAllPoints()
-        givesScoreHeader:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, startY + 2)
-        givesScoreHeader:Show()
-        givesScoreHeaderHitbox:ClearAllPoints()
-        givesScoreHeaderHitbox:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, startY + 2)
-        givesScoreHeaderHitbox:Show()
-    else
-        givesScoreHeader:Hide()
-        givesScoreHeaderHitbox:Hide()
-    end
+    -- givesScoreHeader is now positioned inline with the section header row
+    -- (handled by UpdateBrowserFilterPanel), not here.
 
-    local y = startY - (showScoreColumn and 14 or 0)
+    local y = startY
     for index, entry in ipairs(activities) do
         local button = browserActivityButtons[index]
         if not button then
@@ -1489,6 +1888,7 @@ local function UpdateBrowserActivityButtons(startY)
         button:SetScript("OnClick", function(self)
             filters.selectedActivities[self.filterKey] = not filters.selectedActivities[self.filterKey]
             self:SetState(filters.selectedActivities[self.filterKey] == true)
+            SyncBrowserNativeActivities()
             RefreshBrowserFilters()
         end)
         button.text:Show()
@@ -1547,7 +1947,7 @@ local function UpdateBrowserActivityButtons(startY)
             button.scoreHitbox:Hide()
         end
 
-        y = y - 22
+        y = y - 16
     end
 
     return y
@@ -1557,12 +1957,13 @@ function addonTable.UpdateBrowserFilterPanel()
     local filters = BrowserFilterState()
     local mode = GetBrowserMode()
     local showDifficulty = BrowserModeUsesDifficulty(mode)
-    local showKeyRange = BrowserModeUsesKeyRange(mode)
+    local showKeyRange    = BrowserModeUsesKeyRange(mode)
     local showActivityFilters = BrowserModeUsesActivityFilter(mode)
-    local showRaidBosses = mode == "raid" or mode == "legacy_raid"
-    local isRaidMode = showRaidBosses
-    local validDifficulty = {}
+    local showRaidBosses  = (mode == "raid") or (mode == "legacy_raid")
+    local isRaidMode      = showRaidBosses
 
+    -- Validate difficulty for current mode
+    local validDifficulty = {}
     for _, option in ipairs(GetBrowserDifficultyOptions()) do
         validDifficulty[option.value] = true
     end
@@ -1570,124 +1971,262 @@ function addonTable.UpdateBrowserFilterPanel()
         filters.difficulty = "ANY"
     end
 
-    difficultyDropdown:ClearAllPoints()
-    difficultyDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, 0)
-    difficultyDropdown.UpdateText()
+    playstyleDropdown:Hide()
+    HideAllBrowserDropdowns()
+
+    -- Layout constants
+    local COL2_X  = 96   -- right column x offset (relative to browserContent)
+    local BTN_W   = 88   -- Refresh / Reset button width
+    local BTN_GAP = 6    -- gap between the two buttons
+    local ROW_H   = 22   -- standard toggle row height
+
+    -- y tracks the "next available top" (goes negative, WoW UI convention)
+    local y = 0
+
+    -- ── 1. Difficulty dropdown ────────────────────────────────────────────────
     if showDifficulty then
+        difficultyDropdown:ClearAllPoints()
+        difficultyDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        difficultyDropdown.UpdateText()
         difficultyDropdown:Show()
+        y = y - 28
     else
         difficultyDropdown:Hide()
     end
 
-    raidBossesDropdown:ClearAllPoints()
-    raidBossesDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, -34)
-    raidBossesDropdown.UpdateText()
+    -- ── 2. Raid Boss dropdown (raid mode only) ────────────────────────────────
     if showRaidBosses then
+        raidBossesDropdown:ClearAllPoints()
+        raidBossesDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        raidBossesDropdown.UpdateText()
         raidBossesDropdown:Show()
+        y = y - 28
     else
         raidBossesDropdown:Hide()
         filters.raidBossesMin = "ANY"
     end
 
-    playstyleDropdown:Hide()
-    HideAllBrowserDropdowns()
+    -- ── 3. Key Range — removed (Blizzard's native SearchBox handles key range queries) ──
+    keyRangeLabel:Hide()
+    keyMinBox:Hide()
+    keyRangeTo:Hide()
+    keyMaxBox:Hide()
 
-    keyRangeLabel:ClearAllPoints()
-    keyRangeLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, showRaidBosses and -68 or -34)
-    keyMinBox:ClearAllPoints()
-    keyMinBox:SetPoint("TOPLEFT", keyRangeLabel, "BOTTOMLEFT", 0, -4)
-    keyMinBox:SetText(filters.keyMin or "")
+    -- ── 4. "Select Filters then Click Refresh" label + search query hint ─────
+    local hintText = GetSearchQueryLabel(mode)
+    if hintText ~= "" then
+        browserQueryLabel:ClearAllPoints()
+        browserQueryLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        browserQueryLabel:Show()
+        y = y - 14
 
-    keyRangeTo:ClearAllPoints()
-    keyRangeTo:SetPoint("LEFT", keyMinBox, "RIGHT", 6, 0)
-    keyMaxBox:ClearAllPoints()
-    keyMaxBox:SetPoint("LEFT", keyRangeTo, "RIGHT", 6, 0)
-    keyMaxBox:SetText(filters.keyMax or "")
-    if showKeyRange then
-        keyRangeLabel:Show()
-        keyMinBox:Show()
-        keyRangeTo:Show()
-        keyMaxBox:Show()
+        browserQueryHint:ClearAllPoints()
+        browserQueryHint:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        browserQueryHint:SetText(hintText)
+        browserQueryHint:Show()
+        y = y - 14
     else
-        keyRangeLabel:Hide()
-        keyMinBox:Hide()
-        keyRangeTo:Hide()
-        keyMaxBox:Hide()
+        browserQueryLabel:Hide()
+        browserQueryHint:Hide()
     end
 
-    local leftColumnX = 0
-    local rightColumnX = 108
-    local toggleY = 0
-    if showDifficulty then
-        toggleY = toggleY - 34
-    end
-    if showRaidBosses then
-        toggleY = toggleY - 34
-    end
-    if showKeyRange then
-        toggleY = toggleY - 36
-    end
-    local rowHeight = 20
-    for _, toggleInfo in ipairs(browserToggleKeys) do
-        local row = browserToggleRows[toggleInfo.key]
-        local showRow = not toggleInfo.raidOnly or isRaidMode
-        row.box:ClearAllPoints()
-        row.text:ClearAllPoints()
-        if showRow then
-            local x = toggleInfo.column == 2 and rightColumnX or leftColumnX
-            row.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", x, toggleY)
-            row.box:SetState(filters[toggleInfo.key] == true)
-            row.text:SetText(row.label)
-            row.text:SetPoint("LEFT", row.box, "RIGHT", 8, 0)
-            row.box:Show()
-            row.text:Show()
+    -- ── 5. Search query box (hosts the native Blizzard SearchBox) ────────────
+    browserQueryBoxFrame:ClearAllPoints()
+    browserQueryBoxFrame:SetPoint("TOPLEFT",  browserContent, "TOPLEFT",  0, y)
+    browserQueryBoxFrame:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y)
+    browserQueryBoxFrame:Show()
+    -- Reparent Blizzard's SearchBox into our container (taint-free approach from v2.0.12)
+    AttachBrowserNativeSearchBox()
 
-            if toggleInfo.span == 2 then
-                toggleY = toggleY - rowHeight
-            elseif toggleInfo.column == 2 then
-                toggleY = toggleY - rowHeight
-            end
+    y = y - 26
+
+    -- ── 6. Refresh | Reset buttons ────────────────────────────────────────────
+    browserInRefreshBtn:ClearAllPoints()
+    browserInRefreshBtn:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+    browserInRefreshBtn:SetWidth(BTN_W)
+    browserInRefreshBtn:Show()
+
+    browserResetBtn:ClearAllPoints()
+    browserResetBtn:SetPoint("TOPLEFT", browserContent, "TOPLEFT", BTN_W + BTN_GAP, y)
+    browserResetBtn:SetWidth(BTN_W)
+    browserResetBtn:Show()
+
+    y = y - 28
+
+    -- Read the current native Blizzard advanced filter for display of native-backed toggles.
+    -- Using pcall so a nil C_LFGList never causes an error.
+    local advOk, adv = pcall(C_LFGList.GetAdvancedFilter)
+    if not advOk or type(adv) ~= "table" then adv = {} end
+
+    -- ── 7. Toggle rows (2-column layout) ──────────────────────────────────────
+    -- Row 1: Need Tank | Has Tank  (native-backed: state from Blizzard's advanced filter)
+    do
+        local r1 = browserToggleRows["needsTank"]
+        local r2 = browserToggleRows["hasTank"]
+        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        r1.box:SetState(adv.needsTank == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+        r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+        r2.box:SetState(adv.hasTank == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+        y = y - ROW_H
+    end
+
+    -- Row 2: Need Healer | Has Healer  (native-backed)
+    do
+        local r1 = browserToggleRows["needsHealer"]
+        local r2 = browserToggleRows["hasHealer"]
+        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        r1.box:SetState(adv.needsHealer == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+        r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+        r2.box:SetState(adv.hasHealer == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+        y = y - ROW_H
+    end
+
+    -- Row 3: Need Damage | No [Class] (Dynamic)
+    do
+        local r1 = browserToggleRows["needsDPS"]
+        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        r1.box:SetState(adv.needsDamage == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+        browserNoClassBox:ClearAllPoints()
+        browserNoClassBox:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+        browserNoClassBox:SetState(adv.needsMyClass == true)
+        browserNoClassText:SetText(GetNeedsMyClassLabel())
+        browserNoClassBox:Show(); browserNoClassText:Show()
+        y = y - ROW_H
+    end
+
+    -- Row 4: Min Rating (label left | input right)  (native-backed)
+    do
+        browserMinRatingLabel:ClearAllPoints()
+        browserMinRatingLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 2)
+        browserMinRatingLabel:Show()
+
+        browserMinRatingBox:ClearAllPoints()
+        browserMinRatingBox:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y - 2)
+        if not browserMinRatingBox:HasFocus() then
+            local minR = tonumber(adv.minimumRating)
+            browserMinRatingBox:SetText(minR and tostring(math.floor(minR)) or "")
+        end
+        browserMinRatingBox:Show()
+        y = y - ROW_H
+    end
+
+    -- Row 5: Party Fit | Hide Declined
+    do
+        local r1 = browserToggleRows["partyFit"]
+        local r2 = browserToggleRows["hideDeclined"]
+        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        r1.box:SetState(filters.partyFit == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+        r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+        r2.box:SetState(filters.hideDeclined == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+        y = y - ROW_H
+    end
+
+    -- Row 6: Need BRez | Need Lust
+    do
+        local r1 = browserToggleRows["needsBrez"]
+        local r2 = browserToggleRows["needsLust"]
+        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        r1.box:SetState(filters.needsBrez == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+        r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+        r2.box:SetState(filters.needsLust == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+        y = y - ROW_H
+    end
+
+    -- Row 7: Match My Lockout (Dynamic, Raid Only)
+    do
+        local r = browserToggleRows["matchMyRaidLockout"]
+        if isRaidMode then
+            r.box:ClearAllPoints(); r.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r.box:SetState(filters.matchMyRaidLockout == true); r.text:SetText(r.label)
+            r.box:Show(); r.text:Show()
+            y = y - ROW_H
         else
-            row.box:Hide()
-            row.text:Hide()
+            r.box:Hide(); r.text:Hide()
         end
     end
 
+    -- ── 8. Activity section ───────────────────────────────────────────────────
     if showActivityFilters then
-        activityDivider:Show()
-        activityHeader:Show()
+        -- Divider line
         activityDivider:ClearAllPoints()
-        activityDivider:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, toggleY - 4)
-        activityDivider:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, toggleY - 4)
+        activityDivider:SetPoint("TOPLEFT",  browserContent, "TOPLEFT",  0, y - 4)
+        activityDivider:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 4)
         activityDivider:SetHeight(1)
+        activityDivider:Show()
 
+        -- Activity section header + [A] [N] select buttons + "Gives Score" (inline, right side)
         activityHeader:ClearAllPoints()
-        activityHeader:SetText(GetBrowserActivitySectionTitle() or "")
-        activityHeader:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, toggleY - 16)
+        activityHeader:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 16)
+        activityHeader:SetText(GetBrowserActivitySectionTitle() or "Filter Activities")
+        activityHeader:Show()
 
-        local endY = UpdateBrowserActivityButtons(toggleY - 34)
-        browserContent:SetHeight(math.max(1, math.abs(endY) + 20))
+        activitySelectAllBtn:ClearAllPoints()
+        activitySelectAllBtn:SetPoint("LEFT", activityHeader, "RIGHT", 6, 0)
+        activitySelectAllBtn:Show()
+
+        activitySelectNoneBtn:ClearAllPoints()
+        activitySelectNoneBtn:SetPoint("LEFT", activitySelectAllBtn, "RIGHT", 3, 0)
+        activitySelectNoneBtn:Show()
+
+        -- "Gives Score" header: same row as section title, pinned to the right edge.
+        -- Always shown whenever the dungeon activity list is visible, regardless of
+        -- selected difficulty — the column stays anchored even when individual
+        -- score values are blank (e.g. Normal/Heroic/Mythic difficulty groups).
+        givesScoreHeader:ClearAllPoints()
+        givesScoreHeader:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
+        givesScoreHeader:Show()
+        givesScoreHeaderHitbox:ClearAllPoints()
+        givesScoreHeaderHitbox:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
+        givesScoreHeaderHitbox:Show()
+
+        -- Activity buttons start immediately below the header row
+        local endY = UpdateBrowserActivityButtons(y - 34)
+        local contentH = math.max(1, math.abs(endY) + 20)
+        browserContent:SetHeight(contentH)
+        browserFilterPanel:SetHeight(32 + contentH + 8)
     else
         activityDivider:Hide()
         activityHeader:Hide()
+        activitySelectAllBtn:Hide()
+        activitySelectNoneBtn:Hide()
+        givesScoreHeader:Hide()
+        givesScoreHeaderHitbox:Hide()
         for _, button in ipairs(browserActivityButtons) do
             button:Hide()
+            if button.scoreText then button.scoreText:Hide() end
+            if button.scoreHitbox then button.scoreHitbox:Hide() end
         end
-        browserContent:SetHeight(math.max(1, math.abs(toggleY) + 20))
+        local contentH = math.max(1, math.abs(y) + 20)
+        browserContent:SetHeight(contentH)
+        browserFilterPanel:SetHeight(32 + contentH + 8)
     end
 end
 
 function addonTable.UpdateFilterPaneMode()
     local isBrowser = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
     if isBrowser then
+        -- Hide the applicant filter panel; do NOT auto-show the browser filter panel.
+        -- The user controls browser filter visibility via the Filters button.
+        -- Content refresh is driven by the browserFilterPanel OnShow hook and the
+        -- LFG_LIST_SEARCH_RESULTS_RECEIVED event hook below.
         filterPanel:Hide()
-        browserFilterPanel:Show()
-        addonTable.UpdateBrowserFilterPanel()
     else
         HideAllBrowserDropdowns()
+        RestoreBrowserNativeSearchBox()
         browserFilterPanel:Hide()
     end
 end
+
+-- Filter panel re-layout after search results arrive is handled by
+-- ScheduleSearchRefresh in Core.lua (called after FetchSearchResultData),
+-- which ensures GetBrowserMode() returns the correct updated value.
+-- A direct OnEvent hook here would fire before FetchSearchResultData runs
+-- and would see stale mode/results.
 
 -- Supporters Flyout Panel
 local supportersPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
@@ -2187,8 +2726,17 @@ function addonTable.SetupBlizzardLFGHook()
         addonTable.SearchPanelHooked = true
         LFGListFrame.SearchPanel:HookScript("OnShow", function()
             if not C_LFGList.HasActiveEntryInfo() then
+                -- Mark this as a system-initiated hide so OAK_LFG:OnHide doesn't
+                -- treat it as a user explicit close (which would suppress auto-reopen).
+                addonTable.systemHidingBrowser = true
                 OAK_LFG:Hide()
+                addonTable.systemHidingBrowser = false
             end
+        end)
+        -- When Blizzard's search panel hides (user closed the LFG panel or navigated away),
+        -- reset the explicit-close flag so auto-open works fresh next time.
+        LFGListFrame.SearchPanel:HookScript("OnHide", function()
+            addonTable.userExplicitlyClosed = false
         end)
     end
 end

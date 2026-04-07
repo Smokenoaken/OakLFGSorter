@@ -338,7 +338,9 @@ clBg:SetColorTexture(0, 0, 0, 0)
 closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 closeBtn.text:SetPoint("CENTER")
 closeBtn.text:SetText("X")
-closeBtn:SetScript("OnClick", function() OAK_LFG:Hide() end)
+closeBtn:SetScript("OnClick", function()
+    OAK_LFG:Hide()  -- OnHide hook sets userExplicitlyClosed when not a system hide
+end)
 closeBtn:SetScript("OnEnter", function() clBg:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.5) end)
 closeBtn:SetScript("OnLeave", function() clBg:SetColorTexture(0, 0, 0, 0) end)
 addonTable.CloseButton = closeBtn
@@ -346,7 +348,7 @@ addonTable.CloseButton = closeBtn
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
-VersionText:SetText("|cff888888v2.5.0-alpha4|r")
+VersionText:SetText("|cff888888v2.5.0-alpha17|r")
 VersionText:Hide()
 
 local resizeGrip = CreateFrame("Button", nil, OAK_LFG, "PanelResizeButtonTemplate")
@@ -381,4 +383,9 @@ StaticPopupDialogs["OAK_LFG_URL_COPY"] = {
 
 OAK_LFG:HookScript("OnHide", function()
     GameTooltip:Hide()
+    -- If the browser wasn't hidden by a system call (SearchPanel:OnShow),
+    -- the user closed it intentionally (X button or Escape) — suppress auto-reopen.
+    if not addonTable.systemHidingBrowser then
+        addonTable.userExplicitlyClosed = true
+    end
 end)

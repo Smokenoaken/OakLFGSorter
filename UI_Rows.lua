@@ -125,7 +125,24 @@ local scrollChild = CreateFrame("Frame")
 scrollChild:SetSize(scrollFrame:GetWidth(), 1)
 scrollFrame:SetScrollChild(scrollChild)
 
--- Browser mode: visual separator between applied (pinned) groups and the rest
+-- Browser mode: sticky panel that floats above the scroll area, holding applied (pending) groups
+local stickyPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
+stickyPanel:SetBackdrop({ bgFile = addonTable.FLAT_TEX })
+stickyPanel:SetBackdropColor(0.05, 0.10, 0.05, 0.95)
+stickyPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() + 5)
+stickyPanel:Hide()
+local stickyRows = {}
+-- Separator line drawn below the sticky panel
+local stickySeparatorLine = CreateFrame("Frame", nil, OAK_LFG)
+stickySeparatorLine:SetHeight(2)
+stickySeparatorLine:SetFrameLevel(OAK_LFG:GetFrameLevel() + 6)
+local _ssLineTex = stickySeparatorLine:CreateTexture(nil, "OVERLAY")
+_ssLineTex:SetAllPoints(stickySeparatorLine)
+_ssLineTex:SetColorTexture(addonTable.ClassColor.r * 0.9, addonTable.ClassColor.g * 0.9, addonTable.ClassColor.b * 0.9, 1.0)
+stickySeparatorLine:Hide()
+local stickyPanelHeight = 0
+
+-- (kept for safety, no longer shown in browser mode since applied rows move to sticky panel)
 local browserAppliedSeparator = CreateFrame("Frame", nil, scrollChild)
 browserAppliedSeparator:SetHeight(3)
 browserAppliedSeparator:SetFrameLevel(scrollChild:GetFrameLevel() + 20)
@@ -168,8 +185,27 @@ local function UpdateApplicantContextLayout()
     local isBrowser = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
     local bottomOffset = isBrowser and SCROLL_BOTTOM_BROWSER or SCROLL_BOTTOM_APPLICANT
 
+    -- Sticky panel: shown above scroll area when there are applied groups in browser mode
+    local hasStickyRows = isBrowser and stickyPanelHeight > 0
+    if hasStickyRows then
+        stickyPanel:ClearAllPoints()
+        stickyPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET)
+        stickyPanel:SetPoint("RIGHT", OAK_LFG, "RIGHT", -25, 0)
+        stickyPanel:SetHeight(stickyPanelHeight)
+        stickyPanel:Show()
+        stickySeparatorLine:ClearAllPoints()
+        stickySeparatorLine:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET - stickyPanelHeight)
+        stickySeparatorLine:SetPoint("RIGHT", OAK_LFG, "RIGHT", -25, 0)
+        stickySeparatorLine:Show()
+    else
+        stickyPanel:Hide()
+        stickySeparatorLine:Hide()
+    end
+
+    -- Push scroll area down past the sticky panel (+ 2px for the separator line)
+    local stickyOffset = hasStickyRows and (stickyPanelHeight + 2) or 0
     scrollFrame:ClearAllPoints()
-    scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET)
+    scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET - stickyOffset)
     scrollFrame:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -25, bottomOffset)
 end
 
@@ -966,30 +1002,224 @@ local function SetBrowserCompSlot(slotFrame, role, className, filled)
     if filled then
         local classKey = string.upper(className or "")
         local classColor = (classKey ~= "" and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classKey]) or addonTable.ClassColor
-        if slotFrame.SetBackdropColor then
-            slotFrame:SetBackdropColor(classColor.r, classColor.g, classColor.b, 0.95)
-        end
+        -- Solid class-colored background tile; border is a darker shade of the same color
+        slotFrame:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1.0)
+        slotFrame:SetBackdropBorderColor(classColor.r * 0.55, classColor.g * 0.55, classColor.b * 0.55, 1)
         slotFrame.icon:SetDesaturated(false)
-        slotFrame.icon:SetAlpha(1)
+        slotFrame.icon:SetAlpha(1.0)
     else
-        if slotFrame.SetBackdropColor then
-            slotFrame:SetBackdropColor(0.10, 0.10, 0.12, 0.95)
-        end
+        -- Empty slot: very dark background, desaturated dim icon
+        slotFrame:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        slotFrame:SetBackdropBorderColor(0, 0, 0, 1)
         slotFrame.icon:SetDesaturated(true)
-        slotFrame.icon:SetAlpha(0.45)
+        slotFrame.icon:SetAlpha(0.35)
     end
 end
 
-local function CreateRow(index)
-    local row = CreateFrame("Button", nil, scrollChild)
+-- Role icon texture markup (LFG portrait-roles spritesheet)
+local ROLE_ICON = {
+    TANK    = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:13:13:0:0:64:64:0:19:22:41|t ",
+    HEALER  = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:13:13:0:0:64:64:20:39:1:20|t ",
+    DAMAGER = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:13:13:0:0:64:64:20:39:22:41|t ",
+}
+
+-- Append RIO milestones (Best Run, Best for Dungeon, Timed X-Y Runs) without
+-- the "Raider.IO M+ Score" section header — the caller adds the header with the score value.
+local function AppendRIOMilestonesNoHeader(tooltip, rioProfile)
+    local mPlus = rioProfile and rioProfile.mythicKeystoneProfile
+    if type(mPlus) ~= "table" then return end
+    local milestones = mPlus.sortedMilestones
+    if type(milestones) ~= "table" or #milestones == 0 then return end
+    for _, m in ipairs(milestones) do
+        if type(m) == "table" and m.label and m.text then
+            tooltip:AddDoubleLine(m.label, m.text, 1, 1, 1, 1, 1, 1)
+        end
+    end
+end
+
+-- Build the rich hover tooltip for a browser search-result row (screenshot 1 style).
+-- Shift-held is handled upstream and shows the full RIO profile panel instead.
+local function BuildBrowserGroupTooltip(result)
+    -- Fetch the RIO profile lazily at tooltip time (not stored in the result to save memory)
+    local rioProfile = nil
+    if result.leaderName and result.leaderName ~= "" and RaiderIO and RaiderIO.GetProfile then
+        local charName, charRealm = strsplit("-", result.leaderName)
+        if not charRealm or charRealm == "" then
+            charRealm = GetNormalizedRealmName() or ""
+        end
+        rioProfile = RaiderIO.GetProfile(charName, charRealm)
+    end
+    local listingMode = result.mode or "generic"
+
+    -- ── Title: "+13 Competitive" ──────────────────────────────────────────────
+    local titleParts = {}
+    if result.keyLevel and result.keyLevel > 0 then
+        table.insert(titleParts, "+" .. result.keyLevel)
+    end
+    if result.playstyleLabel and result.playstyleLabel ~= "" and result.playstyleLabel ~= "Any" then
+        table.insert(titleParts, result.playstyleLabel)
+    end
+    local titleStr = #titleParts > 0 and table.concat(titleParts, " ")
+                     or (result.displayName ~= "" and result.displayName
+                        or (result.activityName ~= "" and result.activityName or "Group"))
+    GameTooltip:AddLine(titleStr, 1, 1, 0)
+
+    -- ── Activity name: "Maisara Caverns (Mythic Keystone)" ───────────────────
+    if result.activityName and result.activityName ~= "" then
+        GameTooltip:AddLine(result.activityName, 0.70, 0.70, 0.70)
+    end
+
+    -- ── Playstyle label ───────────────────────────────────────────────────────
+    if result.playstyleLabel and result.playstyleLabel ~= "" and result.playstyleLabel ~= "Any" then
+        GameTooltip:AddLine(result.playstyleLabel, 0.50, 0.80, 1.0)
+    end
+
+    GameTooltip:AddLine(" ")
+
+    -- ── Leader: name + M+ score ───────────────────────────────────────────────
+    local leaderName = result.leaderName or ""
+    if leaderName ~= "" then
+        local score = math.floor(result.ratingValue or result.rating or 0)
+        if score > 0 then
+            local cR, cG, cB = GetPreferredScoreColor(score, 1, 1, 1)
+            GameTooltip:AddDoubleLine("Leader:  " .. leaderName, tostring(score), 1, 1, 1, cR, cG, cB)
+        else
+            GameTooltip:AddDoubleLine("Leader:", leaderName, 1, 1, 1, 1, 1, 1)
+        end
+    end
+
+    -- ── RIO best run + best for this dungeon ──────────────────────────────────
+    if rioProfile and type(rioProfile.mythicKeystoneProfile) == "table" then
+        local mPlus = rioProfile.mythicKeystoneProfile
+        if type(mPlus.sortedDungeons) == "table" and #mPlus.sortedDungeons > 0 then
+            -- Best run overall (sortedDungeons is sorted highest first)
+            local best = mPlus.sortedDungeons[1]
+            if best then
+                local lvl  = tonumber(best.level) or 0
+                local abbr = best.shortName or best.mapShortName or ""
+                if lvl > 0 then
+                    GameTooltip:AddDoubleLine("Best Run:", "+" .. lvl .. (abbr ~= "" and " " .. abbr or ""), 1, 1, 1, 1, 1, 1)
+                end
+            end
+            -- Best for the specific dungeon being viewed
+            local targetKey = strlower(result.dungeonName or result.activityFilterLabel or "")
+            if targetKey ~= "" then
+                for _, dng in ipairs(mPlus.sortedDungeons) do
+                    local dngName = strlower(dng.name or dng.mapName or "")
+                    if dngName ~= "" and (
+                        targetKey:find(dngName:sub(1, 5), 1, true) or
+                        dngName:find(targetKey:sub(1, 5), 1, true)
+                    ) then
+                        local lvl  = tonumber(dng.level) or 0
+                        local abbr = dng.shortName or dng.mapShortName or ""
+                        if lvl > 0 then
+                            GameTooltip:AddDoubleLine("Best for Dungeon:", "+" .. lvl .. (abbr ~= "" and " " .. abbr or ""), 1, 1, 1, 1, 1, 1)
+                        end
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    -- ── Member list ───────────────────────────────────────────────────────────
+    if result.players and #result.players > 0 then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Members:", 1, 0.82, 0)
+        for i, player in ipairs(result.players) do
+            local cc = player.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[player.class]
+            local r, g, b = cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1
+            local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[player.class])
+                              or player.class or "?"
+            local roleIcon = ROLE_ICON[player.role] or ROLE_ICON.DAMAGER
+            local line
+            if player.specName and player.specName ~= "" then
+                line = roleIcon .. className .. " - " .. player.specName
+            else
+                line = roleIcon .. className
+            end
+            if i == 1 then line = line .. " ★" end   -- leader slot
+            GameTooltip:AddLine(line, r, g, b)
+        end
+    end
+
+    -- ── Raider.IO M+ section ──────────────────────────────────────────────────
+    if rioProfile and type(rioProfile.mythicKeystoneProfile) == "table" then
+        local mPlus   = rioProfile.mythicKeystoneProfile
+        local score   = math.floor(mPlus.currentScore or 0)
+        GameTooltip:AddLine(" ")
+        if score > 0 then
+            local cR, cG, cB = GetPreferredScoreColor(score, 1, 0.82, 0)
+            GameTooltip:AddDoubleLine("Raider.IO M+ Score", tostring(score), 1, 0.82, 0, cR, cG, cB)
+        else
+            GameTooltip:AddLine("Raider.IO M+ Score", 1, 0.82, 0)
+        end
+        AppendRIOMilestonesNoHeader(GameTooltip, rioProfile)
+    end
+
+    -- ── Raid Progress ─────────────────────────────────────────────────────────
+    if result.raidProgress then
+        local rp = result.raidProgress
+        local txt = rp.longText or rp.displayText or ""
+        if txt ~= "" then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("Raider.IO Raid Progress", 1, 0.82, 0)
+            GameTooltip:AddLine(txt, 1, 1, 1)
+        end
+    end
+
+    -- ── Non-M+ modes: fallback stats ─────────────────────────────────────────
+    if listingMode == "rated_pvp" or listingMode == "pvp" then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddDoubleLine("PVP Rating:", (result.pvpRating and result.pvpRating > 0) and result.pvpRating or "--", 1, 1, 1, 1, 1, 1)
+        if result.pvpBracket then
+            GameTooltip:AddDoubleLine("Bracket:", result.pvpBracket, 1, 1, 1, 1, 1, 1)
+        end
+    elseif (listingMode == "raid" or listingMode == "legacy_raid") and (not result.raidProgress) then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddDoubleLine("Progress:", "--", 1, 1, 1, 1, 1, 1)
+    end
+
+    -- ── Region ───────────────────────────────────────────────────────────────
+    if addonTable.AddRegionTooltipLine then
+        addonTable.AddRegionTooltipLine(GameTooltip, result.regionInfo)
+    end
+
+    -- ── Friends ───────────────────────────────────────────────────────────────
+    if (result.numBNetFriends or 0) > 0 or (result.numCharFriends or 0) > 0 then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddDoubleLine("Friends:", string.format("%d BNet / %d WoW", result.numBNetFriends or 0, result.numCharFriends or 0), 0.6, 0.85, 1, 0.6, 0.85, 1)
+    end
+
+    -- ── Note ──────────────────────────────────────────────────────────────────
+    if result.comment and result.comment ~= "" then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Note:", 1, 0.8, 0)
+        GameTooltip:AddLine(result.comment, 0.85, 0.85, 0.85, true)
+    end
+
+    -- ── Shift hint ────────────────────────────────────────────────────────────
+    if RaiderIO and RaiderIO.ShowProfile and leaderName ~= "" then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Hold Shift for full Raider.IO profile", 0.50, 0.50, 0.50)
+    end
+end
+
+local function CreateRow(index, parentOverride, prevRowOverride)
+    local parent = parentOverride or scrollChild
+    local row = CreateFrame("Button", nil, parent)
     row:SetHeight(ROW_HEIGHT)
-    
-    if index == 1 then 
-        row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
-        row:SetPoint("RIGHT", scrollChild, "RIGHT", 0, 0)
-    else 
-        row:SetPoint("TOPLEFT", rows[index-1], "BOTTOMLEFT", 0, 0) 
-        row:SetPoint("RIGHT", scrollChild, "RIGHT", 0, 0)
+
+    if prevRowOverride then
+        -- Sticky row: position relative to explicitly supplied previous row
+        row:SetPoint("TOPLEFT", prevRowOverride, "BOTTOMLEFT", 0, 0)
+        row:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+    elseif index == 1 then
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+        row:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+    else
+        row:SetPoint("TOPLEFT", rows[index-1], "BOTTOMLEFT", 0, 0)
+        row:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
     end
 
     row.bg = row:CreateTexture(nil, "BACKGROUND")
@@ -1019,67 +1249,14 @@ local function CreateRow(index)
             end)
 
             local result = self.searchResult
-            local listingMode = GetListingMode()
 
-            -- result.leaderName is "Name-Realm" format; TryShowRaiderIOProfileTooltip auto-splits it
+            -- Shift held: hand off to Raider.IO's full profile panel (screenshot 2)
             if addonTable.TryShowRaiderIOProfileTooltip and addonTable.TryShowRaiderIOProfileTooltip(GameTooltip, result.leaderName) then
                 return
             end
 
-            local regionBadge = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(result.regionInfo) or ""
-            local titleText = result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "Group Listing")
-            GameTooltip:AddLine((regionBadge ~= "" and (regionBadge .. " " .. titleText)) or titleText, 1, 1, 1)
-            if result.leaderName and result.leaderName ~= "" then
-                GameTooltip:AddDoubleLine("Leader:", addonTable.ApplyClassColor(result.leaderName, result.leaderClass), 1, 1, 1, 1, 1, 1)
-            end
-            if result.activityName and result.activityName ~= "" then
-                GameTooltip:AddDoubleLine("Activity:", result.activityName, 1, 1, 1, 1, 1, 1)
-            end
-            if addonTable.AddRegionTooltipLine then
-                addonTable.AddRegionTooltipLine(GameTooltip, result.regionInfo)
-            end
-            if (result.numBNetFriends or 0) > 0 or (result.numCharFriends or 0) > 0 then
-                GameTooltip:AddDoubleLine("Friends:", string.format("%d BNet / %d WoW", result.numBNetFriends or 0, result.numCharFriends or 0), 0.6, 0.85, 1, 0.6, 0.85, 1)
-            end
-
-            GameTooltip:AddDoubleLine("Members:", tostring(result.numMembers or 0), 1, 1, 1, 1, 1, 1)
-            GameTooltip:AddDoubleLine("Comp:", string.format("%d/%d/%d", result.roleCounts.TANK or 0, result.roleCounts.HEALER or 0, result.roleCounts.DAMAGER or 0), 1, 1, 1, 1, 1, 1)
-
-            if listingMode == "rated_pvp" or listingMode == "pvp" then
-                GameTooltip:AddDoubleLine("PVP Rating:", (result.pvpRating and result.pvpRating > 0) and result.pvpRating or "--", 1, 1, 1, 1, 1, 1)
-                if result.pvpBracket then
-                    GameTooltip:AddDoubleLine("Bracket:", result.pvpBracket, 1, 1, 1, 1, 1, 1)
-                end
-            elseif listingMode == "raid" or listingMode == "legacy_raid" then
-                GameTooltip:AddDoubleLine("Progress:", (result.raidProgress and result.raidProgress.longText) or "--", 1, 1, 1, 1, 1, 1)
-                if result.raidListing then
-                    GameTooltip:AddDoubleLine("Listing Difficulty:", result.raidListing.difficultyLabel or "--", 1, 1, 1, 1, 1, 1)
-                    GameTooltip:AddDoubleLine("Bosses Defeated:", result.raidListing.progressText or "--", 1, 1, 1, 1, 1, 1)
-                end
-            else
-                GameTooltip:AddDoubleLine("M+ Rating:", (result.rating and result.rating > 0) and result.rating or "--", 1, 1, 1, 1, 1, 1)
-                if result.keyLevel and result.keyLevel > 0 then
-                    GameTooltip:AddDoubleLine("Parsed Key:", "+" .. result.keyLevel, 1, 1, 1, 1, 1, 1)
-                end
-            end
-
-            if result.playstyleLabel and result.playstyleLabel ~= "" and result.playstyleLabel ~= "Any" then
-                GameTooltip:AddDoubleLine("Playstyle:", result.playstyleLabel, 1, 1, 1, 1, 1, 1)
-            end
-
-            if result.requiredItemLevel and result.requiredItemLevel > 0 then
-                GameTooltip:AddDoubleLine("Req iLvl:", tostring(result.requiredItemLevel), 1, 1, 1, 1, 1, 1)
-            end
-            if result.requiredDungeonScore and result.requiredDungeonScore > 0 then
-                GameTooltip:AddDoubleLine("Req Rating:", tostring(result.requiredDungeonScore), 1, 1, 1, 1, 1, 1)
-            end
-
-            if result.comment and result.comment ~= "" then
-                GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("Listing Note:", 1, 0.8, 0)
-                GameTooltip:AddLine(result.comment, 0.85, 0.85, 0.85, true)
-            end
-
+            -- Regular hover: rich group tooltip (screenshot 1)
+            BuildBrowserGroupTooltip(result)
             GameTooltip:Show()
         elseif self.applicantID and self.memberIdx then
             GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
@@ -1273,11 +1450,13 @@ local function CreateRow(index)
 
     row.compSlots = {}
     local compRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
-    -- 16px icons, 18px center-to-center spacing; centered in the 103px Comp column
-    local COMP_SLOT_SIZE = 16
-    local COMP_SLOT_SPACING = 18
-    local compTotalSpan = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 4*18+16 = 88px
-    local compSlotOffset = math.floor((BR_COMP.w - compTotalSpan) / 2)   -- (103-88)/2 = 7
+    -- 18px slot (background square), 20px center-to-center spacing
+    -- Role icon is 13px centered inside, leaving a 2.5px class-color border on each side
+    local COMP_SLOT_SIZE    = 18
+    local COMP_SLOT_ICON    = 13   -- icon inset inside the colored background square
+    local COMP_SLOT_SPACING = 20
+    local compTotalSpan = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 4*20+18 = 98px
+    local compSlotOffset = math.floor((BR_COMP.w - compTotalSpan) / 2)
     for index, role in ipairs(compRoles) do
         local slot = CreateFrame("Frame", nil, row, "BackdropTemplate")
         slot:SetSize(COMP_SLOT_SIZE, COMP_SLOT_SIZE)
@@ -1286,7 +1465,10 @@ local function CreateRow(index)
         slot:SetBackdropBorderColor(0, 0, 0, 1)
         slot:SetBackdropColor(0.10, 0.10, 0.12, 0.95)
         slot.icon = slot:CreateTexture(nil, "OVERLAY")
-        slot.icon:SetAllPoints(slot)
+        -- Icon is smaller than the slot so the class-colored backdrop is visible
+        -- around all edges, producing the "role badge on class-colored tile" look.
+        slot.icon:SetSize(COMP_SLOT_ICON, COMP_SLOT_ICON)
+        slot.icon:SetPoint("CENTER", slot, "CENTER", 0, 0)
         slot.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
         row.compSlots[index] = slot
     end
@@ -1308,15 +1490,60 @@ local function CreateRow(index)
         GameTooltip:Show()
     end)
     row.declineBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
+    -- Static OnClick: reads groupID at call time — no closure over mutable data
+    row.declineBtn:SetScript("OnClick", function(self)
+        local r = self:GetParent()
+        if r.groupID then
+            C_LFGList.DeclineApplicant(r.groupID)
+        end
+    end)
 
     row.inviteBtn = CreateFrame("Button", nil, row)
     row.inviteBtn:SetSize(20, 20)
     row.inviteBtn:SetPoint("RIGHT", row.declineBtn, "LEFT", -10, 0)
     row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
     row.inviteBtn:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
+    -- Static OnClick: handles both browser (apply/cancel) and applicant (invite) modes
+    row.inviteBtn:SetScript("OnClick", function(self)
+        local r = self:GetParent()
+        if r.searchResult then
+            -- Browser mode
+            local result = r.searchResult
+            if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+                C_LFGList.CancelApplication(result.id)
+            else
+                if addonTable.ApplyToSearchResult then
+                    addonTable.ApplyToSearchResult(result.id)
+                end
+                addonTable.UpdateDisplay()
+            end
+        elseif r.groupID then
+            -- Applicant mode
+            C_LFGList.InviteApplicant(r.groupID)
+            self:Hide()
+            r.declineBtn:Hide()
+            r.statusText:SetText("Invited")
+            r.statusText:Show()
+        end
+    end)
+    -- Static OnEnter: tooltip text depends on current row state at hover time
     row.inviteBtn:SetScript("OnEnter", function(self)
+        local r = self:GetParent()
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Invite", 0.2, 1, 0.2)
+        if r.searchResult then
+            local result = r.searchResult
+            if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+                if result.isRoleFilled then
+                    GameTooltip:SetText("Role Filled - Cancel", 1, 0.82, 0.30)
+                else
+                    GameTooltip:SetText("Cancel", 1, 0.2, 0.2)
+                end
+            else
+                GameTooltip:SetText("Apply", 0.2, 1, 0.2)
+            end
+        else
+            GameTooltip:SetText("Invite", 0.2, 1, 0.2)
+        end
         GameTooltip:Show()
     end)
     row.inviteBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
@@ -1397,6 +1624,31 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         end
     end
 
+    -- Also update sticky rows (always browser-mode layout)
+    for _, row in ipairs(stickyRows) do
+        if row.keyText then row.keyText:Hide() end
+        if row.noteText then
+            ConfigureBrowserRowLayout(row)
+            if hideNotes then row.noteText:Hide() else row.noteText:Show() end
+        end
+        if row.dungeonText then row.dungeonText:Show() end
+        if row.roleIcon then row.roleIcon:Hide() end
+        if row.ilvlText then row.ilvlText:Hide() end
+        if row.specText then row.specText:Hide() end
+        if row.ageText then row.ageText:Show() end
+        if row.compSlots then
+            for _, slot in pairs(row.compSlots) do slot:Show() end
+        end
+        if row.inviteBtn then
+            row.inviteBtn:ClearAllPoints()
+            if hideNotes then
+                row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 27, 0)
+            else
+                row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+            end
+        end
+    end
+
     SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
     scrollChild:SetWidth(scrollFrame:GetWidth())
     UpdateNotesToggleLayout()
@@ -1424,6 +1676,86 @@ UpdateNotesToggleLayout()
 UpdateNotesToggleVisual()
 addonTable.ApplyHideNotesLayout()
 
+-- Shared helper: populate a browser-mode row (used for both sticky and scroll rows)
+local function PopulateBrowserRow(row, result, isAltColor)
+    row.searchResultID = result.id
+    row.searchResult = result
+    row.groupID = nil
+    row.applicantID = nil
+    row.memberIdx = nil
+    row.fullComment = result.comment
+    row.rioProfile = nil          -- browser rows: RIO profile fetched lazily in BuildBrowserGroupTooltip
+    row.memberRating = result.rating
+    row.memberPvpRating = result.pvpRating
+    row.memberPvpBracket = result.pvpBracket
+    row.memberRaidProgress = result.raidProgress  -- non-nil only for raid/legacy_raid mode
+    row.regionInfo = result.regionInfo
+
+    row.bg:SetColorTexture(GetBrowserRowColor(result, isAltColor))
+
+    ConfigureBrowserRowLayout(row)
+    row.dungeonText:Show()
+    row.roleIcon:Hide()
+    row.ilvlText:Hide()
+    row.specText:Hide()
+    row.keyText:Hide()
+    if row.ageText then row.ageText:Show() end
+
+    local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
+    if row.inviteBtn then
+        row.inviteBtn:ClearAllPoints()
+        if hideNotes then
+            row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 27, 0)
+        else
+            row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+        end
+    end
+    for _, slot in pairs(row.compSlots) do
+        slot:Show()
+    end
+
+    local setupSummary = GetBrowserSetupSummary(result)
+    for idx, slotInfo in ipairs(setupSummary) do
+        SetBrowserCompSlot(row.compSlots[idx], slotInfo.role, slotInfo.class, slotInfo.filled)
+    end
+
+    if GetListingMode() == "raid" or GetListingMode() == "legacy_raid" then
+        row.nameText:SetText(GetRaidBrowserTitle(result))
+    else
+        row.nameText:SetText(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--"))
+    end
+    row.ratingText:SetText(GetBrowserRatingDisplay(result))
+
+    if row.ageText then
+        if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
+            row.ageText:SetText("Declined")
+            row.ageText:SetTextColor(1, 0.2, 0.2)
+        elseif result.isRoleFilled then
+            row.ageText:SetText("Filled")
+            row.ageText:SetTextColor(1.0, 0.82, 0.30)
+        elseif addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+            row.ageText:SetText("Pending")
+            row.ageText:SetTextColor(0.2, 1, 0.2)
+        else
+            row.ageText:SetText(FormatAge(result.age))
+            row.ageText:SetTextColor(1, 1, 1)
+        end
+    end
+
+    row.noteText:SetText(result.comment or "")
+    row.dungeonText:SetText(result.dungeonName ~= "" and result.dungeonName or "--")
+
+    row.statusText:Hide()
+    row.declineBtn:Hide()
+    row.inviteBtn:Show()
+    -- Texture only — OnClick/OnEnter/OnLeave are static handlers set once in CreateRow
+    if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+        row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
+    else
+        row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
+    end
+end
+
 function addonTable.UpdateDisplay()
     addonTable.UpdateGroupBuffs()
     if addonTable.UpdateTopBarActions then
@@ -1433,10 +1765,33 @@ function addonTable.UpdateDisplay()
     addonTable.UpdateHeaderVisuals()
     UpdateNotesToggleLayout()
 
-    for _, row in ipairs(rows) do row:Hide() end
+    -- Hide rows AND clear their data references so stale result entries can be GC'd.
+    -- Without this, hidden rows keep old players/memberCounts/roleCounts tables alive
+    -- even after those results have been removed from addonTable.SearchResults.
+    for _, row in ipairs(rows) do
+        row:Hide()
+        row.searchResult    = nil
+        row.rioProfile      = nil
+        row.memberRaidProgress = nil
+        row.fullComment     = nil
+        row.regionInfo      = nil
+    end
+    for _, row in ipairs(stickyRows) do
+        row:Hide()
+        row.searchResult    = nil
+        row.rioProfile      = nil
+        row.memberRaidProgress = nil
+        row.fullComment     = nil
+        row.regionInfo      = nil
+    end
     browserAppliedSeparator:Hide()
 
     local isBrowser = IsBrowserMode()
+    -- Reset sticky state when in applicant mode so it doesn't bleed over
+    if not isBrowser and stickyPanelHeight ~= 0 then
+        stickyPanelHeight = 0
+        UpdateApplicantContextLayout()
+    end
     local displayIndex = 1
     local isAltColor = false
     local showSecondaryMetric = UsesSecondaryMetricColumn()
@@ -1445,7 +1800,10 @@ function addonTable.UpdateDisplay()
         local activeResults = {}
         for _, result in ipairs(addonTable.SearchResults or {}) do
             result.isRoleFilled = addonTable.IsAppliedRoleFilled and addonTable.IsAppliedRoleFilled(result) or false
-            if not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result) then
+            -- Groups the player has applied to are always shown regardless of filters
+            -- so the user can always see and cancel their pending sign-ups.
+            local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
+            if isApplied or not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result) then
                 table.insert(activeResults, result)
             end
         end
@@ -1461,137 +1819,43 @@ function addonTable.UpdateDisplay()
             return SortGroups(a, b, addonTable.CurrentSortBy, addonTable.CurrentIsAscending)
         end)
 
-        -- Count applied (pinned) results at the top and show visual separator
-        local pinnedCount = 0
+        -- Hide all sticky rows before re-rendering (data already cleared by the top-of-display loop)
+        for _, row in ipairs(stickyRows) do row:Hide() end
+        browserAppliedSeparator:Hide()
+
+        -- Split activeResults: applied groups go to sticky panel, rest scroll normally
+        local appliedResults = {}
+        local normalResults = {}
         for _, r in ipairs(activeResults) do
             if GetBrowserApplicationPriority(r) >= 3 then
-                pinnedCount = pinnedCount + 1
+                table.insert(appliedResults, r)
             else
-                break
+                table.insert(normalResults, r)
             end
         end
-        if pinnedCount > 0 and pinnedCount < #activeResults then
-            browserAppliedSeparator:ClearAllPoints()
-            browserAppliedSeparator:SetPoint("LEFT", scrollChild, "LEFT", 0, 0)
-            browserAppliedSeparator:SetPoint("RIGHT", scrollChild, "RIGHT", 0, 0)
-            browserAppliedSeparator:SetPoint("TOP", scrollChild, "TOP", 0, -(pinnedCount * ROW_HEIGHT))
-            browserAppliedSeparator:Show()
-        else
-            browserAppliedSeparator:Hide()
+
+        -- Render applied groups into the sticky panel (always visible above scroll)
+        local stickyIndex = 1
+        for _, result in ipairs(appliedResults) do
+            if not stickyRows[stickyIndex] then
+                local prevRow = stickyRows[stickyIndex - 1]  -- nil for first row
+                stickyRows[stickyIndex] = CreateRow(stickyIndex, stickyPanel, prevRow)
+            end
+            local sRow = stickyRows[stickyIndex]
+            PopulateBrowserRow(sRow, result, stickyIndex % 2 == 0)
+            sRow:Show()
+            stickyIndex = stickyIndex + 1
         end
 
-        for _, result in ipairs(activeResults) do
+        -- Update sticky panel height and reposition scroll frame accordingly
+        stickyPanelHeight = #appliedResults * ROW_HEIGHT
+        UpdateApplicantContextLayout()
+
+        -- Render non-applied groups in the scroll area
+        for _, result in ipairs(normalResults) do
             if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
             local row = rows[displayIndex]
-
-            row.searchResultID = result.id
-            row.searchResult = result
-            row.groupID = nil
-            row.applicantID = nil
-            row.memberIdx = nil
-            row.fullComment = result.comment
-            row.rioProfile = result.leaderProfile
-            row.memberRating = result.rating
-            row.memberPvpRating = result.pvpRating
-            row.memberPvpBracket = result.pvpBracket
-            row.memberRaidProgress = result.raidProgress
-            row.regionInfo = result.regionInfo
-
-            row.bg:SetColorTexture(GetBrowserRowColor(result, isAltColor))
-
-            ConfigureBrowserRowLayout(row)
-            row.dungeonText:Show()
-            row.roleIcon:Hide()
-            row.ilvlText:Hide()
-            row.specText:Hide()
-            row.keyText:Hide()
-            if row.ageText then row.ageText:Show() end
-
-            -- Center the apply/cancel button in the collapsed notes column, or restore to right edge
-            local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
-            if row.inviteBtn then
-                row.inviteBtn:ClearAllPoints()
-                if hideNotes then
-                    row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 27, 0)
-                else
-                    row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
-                end
-            end
-            for _, slot in pairs(row.compSlots) do
-                slot:Show()
-            end
-
-            local setupSummary = GetBrowserSetupSummary(result)
-            for index, slotInfo in ipairs(setupSummary) do
-                SetBrowserCompSlot(row.compSlots[index], slotInfo.role, slotInfo.class, slotInfo.filled)
-            end
-
-            if GetListingMode() == "raid" or GetListingMode() == "legacy_raid" then
-                row.nameText:SetText(GetRaidBrowserTitle(result))
-            else
-                row.nameText:SetText(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--"))
-            end
-            row.ratingText:SetText(GetBrowserRatingDisplay(result))
-
-            -- Age column: show application status if applied/declined, otherwise listing age
-            if row.ageText then
-                if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
-                    row.ageText:SetText("Declined")
-                    row.ageText:SetTextColor(1, 0.2, 0.2)
-                elseif result.isRoleFilled then
-                    row.ageText:SetText("Filled")
-                    row.ageText:SetTextColor(1.0, 0.82, 0.30)
-                elseif addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
-                    row.ageText:SetText("Pending")
-                    row.ageText:SetTextColor(0.2, 1, 0.2)
-                else
-                    row.ageText:SetText(FormatAge(result.age))
-                    row.ageText:SetTextColor(1, 1, 1)
-                end
-            end
-
-            row.noteText:SetText(result.comment or "")
-            row.dungeonText:SetText(result.dungeonName ~= "" and result.dungeonName or "--")
-
-            row.statusText:Hide()
-            row.declineBtn:Hide()
-            row.inviteBtn:Show()
-            if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
-                row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
-                row.inviteBtn:SetScript("OnClick", function()
-                    C_LFGList.CancelApplication(result.id)
-                end)
-                row.inviteBtn:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    if result.isRoleFilled then
-                        GameTooltip:SetText("Role Filled - Cancel", 1, 0.82, 0.30)
-                    else
-                        GameTooltip:SetText("Cancel", 1, 0.2, 0.2)
-                    end
-                    GameTooltip:Show()
-                end)
-                row.inviteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                if result.isRoleFilled then
-                    row.statusText:SetText("Filled")
-                    row.statusText:SetTextColor(1.0, 0.82, 0.30)
-                    row.statusText:Show()
-                end
-            else
-                row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
-                row.inviteBtn:SetScript("OnClick", function()
-                    if addonTable.ApplyToSearchResult then
-                        addonTable.ApplyToSearchResult(result.id)
-                    end
-                    addonTable.UpdateDisplay()
-                end)
-                row.inviteBtn:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText("Apply", 0.2, 1, 0.2)
-                    GameTooltip:Show()
-                end)
-                row.inviteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-            end
-
+            PopulateBrowserRow(row, result, isAltColor)
             row:Show()
             displayIndex = displayIndex + 1
             isAltColor = not isAltColor
@@ -1679,28 +1943,13 @@ function addonTable.UpdateDisplay()
                 if i == 1 then
                     row.noteText:SetText(group.comment or "")
                     row.statusText:Hide()
-                    row.inviteBtn:SetScript("OnClick", function()
-                        C_LFGList.InviteApplicant(group.id)
-                        row.inviteBtn:Hide()
-                        row.declineBtn:Hide()
-                        row.statusText:SetText("Invited")
-                        row.statusText:Show()
-                    end)
-                    row.inviteBtn:SetScript("OnEnter", function(self)
-                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                        GameTooltip:SetText("Invite", 0.2, 1, 0.2)
-                        GameTooltip:Show()
-                    end)
-                    row.inviteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                    row.declineBtn:SetScript("OnClick", function()
-                        C_LFGList.DeclineApplicant(group.id)
-                    end)
-                    row.declineBtn:SetScript("OnEnter", function(self)
-                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                        GameTooltip:SetText("Decline", 1, 0.2, 0.2)
-                        GameTooltip:Show()
-                    end)
-                    row.declineBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                    -- Restore applicant-mode button positions (rows may have been used in browser mode
+                    -- which repositions inviteBtn to the right edge, causing the two buttons to stack)
+                    row.declineBtn:ClearAllPoints()
+                    row.declineBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+                    row.inviteBtn:ClearAllPoints()
+                    row.inviteBtn:SetPoint("RIGHT", row.declineBtn, "LEFT", -10, 0)
+                    -- OnClick/OnEnter/OnLeave are static handlers in CreateRow; no per-update closures
                     row.inviteBtn:Show()
                     row.declineBtn:Show()
                 else

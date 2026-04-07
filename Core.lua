@@ -196,6 +196,12 @@ local function ScheduleSearchRefresh()
             -- forward-reference nil error.
             if addonTable.FetchSearchResultData then addonTable.FetchSearchResultData() end
             addonTable.UpdateDisplay()
+            -- Re-render the filter panel AFTER FetchSearchResultData has updated
+            -- mode and SearchResults — this is the only safe place to do it so
+            -- GetBrowserMode() returns the correct value.
+            if addonTable.UpdateBrowserFilterPanel then
+                addonTable.UpdateBrowserFilterPanel()
+            end
         end
     end)
 end
@@ -725,8 +731,6 @@ local function FetchSearchResultData()
                 local pvpRating = 0
                 local pvpBracket = nil
                 local raidListing = nil
-                local rioProfile = nil
-                local raidProgress = nil
                 local regionInfo = addonTable.GetRegionInfoFromLeaderName and addonTable.GetRegionInfoFromLeaderName(resultInfo.leaderName) or nil
 
                 if (listingMode == "rated_pvp" or listingMode == "pvp") and type(resultInfo.leaderPvpRatingInfo) == "table" then
@@ -735,18 +739,21 @@ local function FetchSearchResultData()
                     ratingValue = pvpRating
                 end
 
-                if resultInfo.leaderName and RaiderIO and RaiderIO.GetProfile then
-                    local charName, charRealm = strsplit("-", resultInfo.leaderName)
-                    if not charRealm or charRealm == "" then
-                        charRealm = GetNormalizedRealmName() or ""
-                    end
-                    rioProfile = RaiderIO.GetProfile(charName, charRealm)
-                end
-
+                -- For raid mode: fetch RIO profile to compute raidProgress (used for sorting + display).
+                -- For M+/dungeon (the common high-volume case): profile is NOT fetched here;
+                -- it is loaded lazily at tooltip time only, avoiding per-result RIO allocations.
+                local raidProgress = nil
                 if listingMode == "raid" or listingMode == "legacy_raid" then
                     raidListing = GetRaidListingInfo(searchResultID, resultInfo, activityInfo)
-                    if rioProfile and addonTable.GetRaidProgressSummary then
-                        raidProgress = addonTable.GetRaidProgressSummary(rioProfile, raidListing and raidListing.raidName or activityFilterLabel)
+                    if resultInfo.leaderName and RaiderIO and RaiderIO.GetProfile then
+                        local charName, charRealm = strsplit("-", resultInfo.leaderName)
+                        if not charRealm or charRealm == "" then
+                            charRealm = GetNormalizedRealmName() or ""
+                        end
+                        local rioProfile = RaiderIO.GetProfile(charName, charRealm)
+                        if rioProfile and addonTable.GetRaidProgressSummary then
+                            raidProgress = addonTable.GetRaidProgressSummary(rioProfile, raidListing and raidListing.raidName or activityFilterLabel)
+                        end
                     end
                 end
 
@@ -760,46 +767,36 @@ local function FetchSearchResultData()
                 local entry = {
                     id = searchResultID,
                     name = resultInfo.name or "",
-                    titleStr = resultInfo.name or "",
                     displayName = displayName,
                     comment = resultInfo.comment or "",
-                    commentStr = resultInfo.comment or "",
                     leaderName = resultInfo.leaderName or "",
-                    leaderNameRaw = resultInfo.leaderName or "",
                     leaderClass = leaderClass,
                     leaderRole = leaderRole,
                     numMembers = tonumber(resultInfo.numMembers) or #players,
-                    members = tonumber(resultInfo.numMembers) or #players,
                     activityID = activityID,
                     activityInfo = activityInfo,
                     mode = listingMode,
                     activityName = activityInfo.fullName or activityInfo.shortName or "",
                     dungeonName = activityFilterLabel,
-                    dungeon = activityFilterLabel,
                     activityFilterLabel = activityFilterLabel,
                     activityFilterKey = activityFilterKey,
                     keyLevel = keyLevel,
                     rating = ratingValue,
                     pvpRating = pvpRating,
                     pvpBracket = pvpBracket,
-                    raidProgress = raidProgress,
+                    raidProgress = raidProgress,  -- non-nil only for raid/legacy_raid mode
                     raidListing = raidListing,
                     playstyleValue = playstyleValue,
                     playstyleLabel = playstyleLabel,
                     playstyleShortLabel = playstyleShortLabel,
                     memberCounts = memberCounts,
                     roleCounts = roleCounts,
-                    tanks = roleCounts.TANK or 0,
-                    heals = roleCounts.HEALER or 0,
-                    dps = roleCounts.DAMAGER or 0,
                     players = players,
-                    memberDetails = players,
                     hasLust = hasLust,
                     hasBrez = hasBrez,
                     highestItemLevel = highestItemLevel,
                     maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or 0,
                     difficultyID = tonumber(activityInfo.difficultyID) or 0,
-                    difficulty = tonumber(activityInfo.difficultyID) or 0,
                     isMythicPlus = activityInfo.isMythicPlusActivity or false,
                     difficultyToken = GetSearchResultDifficultyToken(resultInfo, activityInfo),
                     requiredItemLevel = tonumber(resultInfo.requiredItemLevel) or 0,
@@ -813,8 +810,8 @@ local function FetchSearchResultData()
                     numCharFriends = tonumber(resultInfo.numCharFriends) or 0,
                     numGuildMates = tonumber(resultInfo.numGuildMates) or 0,
                     applicationStatus = applicationStatus,
-                    leaderProfile = rioProfile,
                     regionInfo = regionInfo,
+                    -- leaderProfile intentionally omitted: fetched lazily at tooltip time via leaderName
                 }
 
                 table.insert(addonTable.SearchResults, entry)
@@ -830,13 +827,18 @@ local function FetchSearchResultData()
         local activityInfo = firstContextResult.activityInfo
         searchContext.activityID = firstContextResult.activityID
         searchContext.activityInfo = activityInfo
+
         searchContext.mode = firstContextResult.mode or "generic"
         searchContext.categoryID = activityInfo and activityInfo.categoryID or searchContext.selectedCategoryID
         searchContext.groupID = (addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(activityInfo)) or searchContext.groupID
     else
         searchContext.activityID = nil
         searchContext.activityInfo = nil
-        searchContext.mode = "generic"
+        -- Do NOT reset mode to "generic" when results are empty.
+        -- Preserving the last known mode keeps the filter panel in the correct
+        -- state (dungeon list visible, difficulty dropdown intact) when a search
+        -- returns zero results (e.g. filtering by Heroic with no groups posted).
+        -- Mode will update naturally the next time results arrive.
         searchContext.categoryID = searchContext.selectedCategoryID
         searchContext.groupID = searchContext.groupID
     end
@@ -985,10 +987,50 @@ function addonTable.GetAvailableBrowserActivities()
     local activityEntries = {}
     local seen = {}
 
-    -- Pre-compute score targets for M+ mode
     local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode or "generic"
     local scoreTargets = (mode == "mythic_plus") and addonTable.GetMythicPlusScoreTargets and addonTable.GetMythicPlusScoreTargets() or {}
 
+    -- ── M+ and dungeon mode: use C_ChallengeMode's map list as canonical source ──
+    -- context.groupID is set to a specific dungeon's activity group (e.g. "Skyreach"),
+    -- so calling GetAvailableActivities with it returns that dungeon's difficulty levels
+    -- (Normal/Heroic/Mythic/Mythic+) rather than all season dungeons.
+    -- GetLocalizedSeasonDungeonLabels() uses C_ChallengeMode.GetMapTable() which is
+    -- always the correct full list of current-season M+ dungeons.
+    if mode == "mythic_plus" or mode == "dungeon" then
+        local seasonLabels = addonTable.GetLocalizedSeasonDungeonLabels and addonTable.GetLocalizedSeasonDungeonLabels() or {}
+
+        -- Build a lookup: normalizedLabel → activityInfo from current search results
+        -- so we can populate activityInfo (and thus groupID) for each dungeon entry.
+        local resultInfoByLabel = {}
+        for _, result in ipairs(addonTable.SearchResults or {}) do
+            local rLabel = result.activityFilterLabel or result.activityName or ""
+            local rKey = NormalizeSearchScoreTargetLabel(rLabel)
+            if rKey ~= "" and not resultInfoByLabel[rKey] then
+                resultInfoByLabel[rKey] = { activityID = result.activityID, activityInfo = result.activityInfo }
+            end
+        end
+
+        for _, label in ipairs(seasonLabels) do
+            local filterKey = strlower(label)
+            if filterKey ~= "" and not seen[filterKey] then
+                seen[filterKey] = true
+                local normalizedKey = NormalizeSearchScoreTargetLabel(label)
+                local resultMatch = resultInfoByLabel[normalizedKey] or {}
+                table.insert(activityEntries, {
+                    activityID  = resultMatch.activityID,
+                    label       = label,
+                    filterKey   = filterKey,
+                    activityInfo = resultMatch.activityInfo,
+                    scoreTarget = scoreTargets[normalizedKey] or nil,
+                })
+            end
+        end
+
+        -- Preserve original insertion order (C_ChallengeMode order = canonical season order)
+        return activityEntries
+    end
+
+    -- ── All other modes (raid, delve, generic): build from search results ─────────
     for _, result in ipairs(addonTable.SearchResults or {}) do
         local label = result.activityFilterLabel or result.activityName or ""
         local filterKey = result.activityFilterKey or strlower(label)
@@ -996,39 +1038,12 @@ function addonTable.GetAvailableBrowserActivities()
             seen[filterKey] = true
             local normalizedKey = NormalizeSearchScoreTargetLabel(label)
             table.insert(activityEntries, {
-                activityID = result.activityID,
-                label = label,
-                filterKey = filterKey,
+                activityID   = result.activityID,
+                label        = label,
+                filterKey    = filterKey,
                 activityInfo = result.activityInfo,
-                scoreTarget = scoreTargets[normalizedKey] or nil,
+                scoreTarget  = scoreTargets[normalizedKey] or nil,
             })
-        end
-    end
-
-    if #activityEntries == 0 then
-        local context = addonTable.UpdateSearchContext()
-        local categoryID = context and (context.categoryID or context.selectedCategoryID) or nil
-        local groupID = context and context.groupID or nil
-        if categoryID and groupID and C_LFGList and C_LFGList.GetAvailableActivities then
-            local success, activityIDs = pcall(C_LFGList.GetAvailableActivities, categoryID, groupID, GetCurrentSeasonFilterMask())
-            if success and type(activityIDs) == "table" then
-                for _, activityID in ipairs(activityIDs) do
-                    local activityInfo = C_LFGList.GetActivityInfoTable(activityID)
-                    local label = CleanActivityLabel(activityInfo and (activityInfo.shortName or activityInfo.fullName) or "")
-                    local filterKey = strlower(label or "")
-                    if label ~= "" and filterKey ~= "" and not seen[filterKey] then
-                        seen[filterKey] = true
-                        local normalizedKey2 = NormalizeSearchScoreTargetLabel(label)
-                        table.insert(activityEntries, {
-                            activityID = activityID,
-                            label = label,
-                            filterKey = filterKey,
-                            activityInfo = activityInfo,
-                            scoreTarget = scoreTargets[normalizedKey2] or nil,
-                        })
-                    end
-                end
-            end
         end
     end
 
@@ -1430,12 +1445,21 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
                 end
             end
         end
-        if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end
+        -- Defer UpdateDisplay by one frame — calling it synchronously here
+        -- redraws all rows+comp slots in the same frame as the sign-up click,
+        -- causing a visible frame skip.  C_Timer.After(0) yields to the engine
+        -- and spreads the work across frames.
+        if OAK_LFG:IsShown() then
+            C_Timer.After(0, function()
+                if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end
+            end)
+        end
         return
     elseif event == "LFG_LIST_SEARCH_RESULTS_RECEIVED" or event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
         -- Auto-open when the Blizzard search panel is visible and autoOpenSearch is on.
         -- This handles category switches where SearchPanel:OnShow doesn't re-fire.
         if OakLFGSorterDB and OakLFGSorterDB.autoOpenSearch and not OAK_LFG:IsShown()
+                and not addonTable.userExplicitlyClosed
                 and LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel:IsShown() then
             addonTable.SetCurrentViewMode("browser")
             OAK_LFG:Show()  -- OnShow triggers FetchSearchResultData + UpdateDisplay
@@ -1501,6 +1525,7 @@ end)
 
 local VarEventFrame = CreateFrame("Frame")
 VarEventFrame:RegisterEvent("ADDON_LOADED")
+VarEventFrame:RegisterEvent("PLAYER_LOGIN")
 VarEventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
     if event == "ADDON_LOADED" then
@@ -1543,6 +1568,20 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             SetupApplicantPingMuteHook()
             addonTable.SetupBlizzardLFGHook()
         end
+    elseif event == "PLAYER_LOGIN" then
+        -- Clear the activity (dungeon) selection filter every login/reload so the
+        -- browser starts with all dungeons visible, not a stale saved selection.
+        if OakLFGSorterDB and OakLFGSorterDB.browserFilters then
+            OakLFGSorterDB.browserFilters.selectedActivities = {}
+        end
+        -- Also clear Blizzard's native activities filter so it matches.
+        if C_LFGList and C_LFGList.GetAdvancedFilter and C_LFGList.SaveAdvancedFilter then
+            local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+            if ok and type(adv) == "table" then
+                adv.activities = {}
+                pcall(C_LFGList.SaveAdvancedFilter, adv)
+            end
+        end
     elseif event == "GROUP_ROSTER_UPDATE" then
         if OAK_LFG:IsShown() then 
             -- Check if the joining player triggered a group fill/delist
@@ -1553,6 +1592,13 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             end
         end
     end
+end)
+
+-- Periodic GC nudge: WoW's incremental collector can lag behind addon-heavy sessions.
+-- Running a full cycle every 60 s keeps unreachable tables (old closures, stale result
+-- objects) from accumulating between natural GC steps.
+C_Timer.NewTicker(60, function()
+    collectgarbage("collect")
 end)
 
 OAK_LFG:SetScript("OnDragStop", function(self)
@@ -1606,6 +1652,8 @@ local function OakLFGCommand(msg)
         print("|cFF00FF00Oak LFG Sorter:|r Applicant and search window position, scale, and note settings reset.")
     else
         -- Show the appropriate browser: applicant browser when listing, search browser otherwise
+        -- User is explicitly toggling — clear the close flag so auto-open resumes if they re-open.
+        addonTable.userExplicitlyClosed = false
         if C_LFGList.HasActiveEntryInfo() then
             if OAK_LFG:IsShown() then OAK_LFG:Hide() else OAK_LFG:Show() end
         elseif addonTable.OAK_SEARCH then
