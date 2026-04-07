@@ -863,20 +863,144 @@ local function ResolveActivityGroupID(activityInfo)
 end
 addonTable.ResolveActivityGroupID = ResolveActivityGroupID
 
+-- Score target utilities (ported from retired Search.lua)
+local function GetSearchRaidFilterLabel(activityInfo)
+    local label = tostring(activityInfo and (activityInfo.fullName or activityInfo.shortName) or "")
+    label = label:gsub("%s*%(.+%)", "")
+    return label
+end
+addonTable.GetSearchRaidFilterLabel = GetSearchRaidFilterLabel
+
+local function NormalizeSearchScoreTargetLabel(label)
+    local normalized = strlower(GetSearchRaidFilterLabel({ fullName = tostring(label or "") }))
+    normalized = normalized:gsub("[^%w%s]", " ")
+    normalized = normalized:gsub("%s+", " ")
+    normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+    return normalized
+end
+addonTable.NormalizeSearchScoreTargetLabel = NormalizeSearchScoreTargetLabel
+
+addonTable.GetMythicPlusScoreTargets = function()
+    if not (C_ChallengeMode and C_ChallengeMode.GetMapTable and C_ChallengeMode.GetMapUIInfo and C_MythicPlus and C_MythicPlus.GetSeasonBestAffixScoreInfoForMap) then
+        return {}
+    end
+
+    if C_MythicPlus.RequestMapInfo then
+        pcall(C_MythicPlus.RequestMapInfo)
+    end
+
+    local function GetRatingCalcValues()
+        local seasonCalcValues = {
+            [11] = { baseRating=20, firstAffixLevel=2, fistAffixValue=10, secondAffixLevel=7, secondAffixValue=10, thirdAffixLevel=14, thirdAffixValue=10, thresholdLevel=10, preThresholdValue=5, postThresholdValue=7 },
+            [12] = { baseRating=70, firstAffixLevel=2, fistAffixValue=10, secondAffixLevel=5, secondAffixValue=10, thirdAffixLevel=10, thirdAffixValue=10, thresholdLevel=1, preThresholdValue=7, postThresholdValue=7 },
+            [13] = { baseRating=120, firstAffixLevel=2, fistAffixValue=15, secondAffixLevel=4, secondAffixValue=10, thirdAffixLevel=7, thirdAffixValue=15, fourthAffixLevel=10, fourthAffixValue=10, fifthAffixLevel=12, fifthAffixValue=15, thresholdLevel=1, preThresholdValue=15, postThresholdValue=15 },
+            [14] = { baseRating=125, firstAffixLevel=4, fistAffixValue=15, secondAffixLevel=7, secondAffixValue=15, thirdAffixLevel=10, thirdAffixValue=15, fourthAffixLevel=12, fourthAffixValue=15, fifthAffixLevel=12, fifthAffixValue=0, thresholdLevel=1, preThresholdValue=15, postThresholdValue=15 },
+        }
+        local currentSeason = tonumber(C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetCurrentSeason()) or 0
+        if seasonCalcValues[currentSeason] then return seasonCalcValues[currentSeason] end
+        local fallbackSeason = 0
+        for s in pairs(seasonCalcValues) do if s > fallbackSeason then fallbackSeason = s end end
+        return seasonCalcValues[fallbackSeason]
+    end
+
+    local seasonVars = GetRatingCalcValues()
+    if not seasonVars then return {} end
+
+    local function GetTimedRunScore(level)
+        level = tonumber(level) or 0
+        if level < 2 then return 0 end
+        local baseRating = seasonVars.baseRating
+        local firstRating = (level >= seasonVars.thresholdLevel) and (seasonVars.thresholdLevel * seasonVars.preThresholdValue) or (level * seasonVars.preThresholdValue)
+        local secondRating = (level > seasonVars.thresholdLevel) and ((level - seasonVars.thresholdLevel) * seasonVars.postThresholdValue) or 0
+        local affixScore = 0
+        if level >= seasonVars.firstAffixLevel then affixScore = affixScore + seasonVars.fistAffixValue end
+        if level >= seasonVars.secondAffixLevel then affixScore = affixScore + seasonVars.secondAffixValue end
+        if level >= seasonVars.thirdAffixLevel then affixScore = affixScore + seasonVars.thirdAffixValue end
+        if seasonVars.fourthAffixLevel and seasonVars.fourthAffixValue and level >= seasonVars.fourthAffixLevel then affixScore = affixScore + seasonVars.fourthAffixValue end
+        if seasonVars.fifthAffixLevel and seasonVars.fifthAffixValue and level >= seasonVars.fifthAffixLevel then affixScore = affixScore + seasonVars.fifthAffixValue end
+        return baseRating + firstRating + secondRating + affixScore
+    end
+
+    local function BuildEstimatedScoreGain(baseLevel, currentOverall)
+        local level = tonumber(baseLevel)
+        if not level or level <= 0 then return nil end
+        local timedScore = GetTimedRunScore(level)
+        local twoChestScore = GetTimedRunScore(math.min(30, level + 1))
+        local threeChestScore = GetTimedRunScore(math.min(30, level + 2))
+        return {
+            timed = math.max(1, math.floor((timedScore - currentOverall) + 0.5)),
+            plusTwo = math.max(1, math.floor((twoChestScore - currentOverall) + 0.5)),
+            plusThree = math.max(1, math.floor((threeChestScore - currentOverall) + 0.5)),
+        }
+    end
+
+    local targets = {}
+    local mapIDs = C_ChallengeMode.GetMapTable() or {}
+    local missingMapNames = false
+    local missingMapData = #mapIDs == 0
+
+    for _, mapID in ipairs(mapIDs) do
+        local name = C_ChallengeMode.GetMapUIInfo(mapID)
+        if not name or name == "" then missingMapNames = true end
+        local labelKey = NormalizeSearchScoreTargetLabel(name)
+        if labelKey ~= "" then
+            local mapScores, bestOverallScore = C_MythicPlus.GetSeasonBestAffixScoreInfoForMap(mapID)
+            local currentOverall = tonumber(bestOverallScore) or 0
+            if currentOverall <= 0 and type(mapScores) == "table" then
+                for _, info in ipairs(mapScores) do
+                    if type(info) == "table" then currentOverall = math.max(currentOverall, tonumber(info.score) or 0) end
+                end
+            end
+            local targetLevel
+            for level = 2, 30 do
+                if GetTimedRunScore(level) > currentOverall then targetLevel = level; break end
+            end
+            if targetLevel then
+                local estimatedGain = BuildEstimatedScoreGain(targetLevel, currentOverall)
+                targets[labelKey] = {
+                    level = targetLevel,
+                    estimatedGain = estimatedGain and estimatedGain.timed or nil,
+                    estimatedGainBreakdown = estimatedGain,
+                    projectedScore = GetTimedRunScore(targetLevel),
+                    currentScore = currentOverall,
+                }
+            end
+        end
+    end
+
+    if next(targets) == nil and (missingMapNames or missingMapData) and not addonTable.PendingScoreTargetRefresh then
+        addonTable.PendingScoreTargetRefresh = true
+        C_Timer.After(0.5, function()
+            addonTable.PendingScoreTargetRefresh = false
+            if addonTable.UpdateBrowserFilterPanel then
+                addonTable.UpdateBrowserFilterPanel()
+            end
+        end)
+    end
+
+    return targets
+end
+
 function addonTable.GetAvailableBrowserActivities()
     local activityEntries = {}
     local seen = {}
+
+    -- Pre-compute score targets for M+ mode
+    local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode or "generic"
+    local scoreTargets = (mode == "mythic_plus") and addonTable.GetMythicPlusScoreTargets and addonTable.GetMythicPlusScoreTargets() or {}
 
     for _, result in ipairs(addonTable.SearchResults or {}) do
         local label = result.activityFilterLabel or result.activityName or ""
         local filterKey = result.activityFilterKey or strlower(label)
         if label ~= "" and filterKey ~= "" and not seen[filterKey] then
             seen[filterKey] = true
+            local normalizedKey = NormalizeSearchScoreTargetLabel(label)
             table.insert(activityEntries, {
                 activityID = result.activityID,
                 label = label,
                 filterKey = filterKey,
                 activityInfo = result.activityInfo,
+                scoreTarget = scoreTargets[normalizedKey] or nil,
             })
         end
     end
@@ -894,11 +1018,13 @@ function addonTable.GetAvailableBrowserActivities()
                     local filterKey = strlower(label or "")
                     if label ~= "" and filterKey ~= "" and not seen[filterKey] then
                         seen[filterKey] = true
+                        local normalizedKey2 = NormalizeSearchScoreTargetLabel(label)
                         table.insert(activityEntries, {
                             activityID = activityID,
                             label = label,
                             filterKey = filterKey,
                             activityInfo = activityInfo,
+                            scoreTarget = scoreTargets[normalizedKey2] or nil,
                         })
                     end
                 end

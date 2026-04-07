@@ -1389,6 +1389,24 @@ local activityHeader = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_F
 activityHeader:SetText("Filter Activities")
 activityHeader:SetTextColor(1, 1, 1)
 
+-- "Gives Score" column header (shown right of dungeon names for M+ mode)
+local givesScoreHeader = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+givesScoreHeader:SetText("Gives Score")
+givesScoreHeader:SetTextColor(0.40, 1.00, 0.55)
+givesScoreHeader:SetJustifyH("RIGHT")
+givesScoreHeader:Hide()
+
+local givesScoreHeaderHitbox = CreateFrame("Button", nil, browserContent)
+givesScoreHeaderHitbox:SetSize(72, 16)
+givesScoreHeaderHitbox:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Gives Score", 1, 1, 1)
+    GameTooltip:AddLine("Shows the lowest timed key level that should increase your score for that dungeon, plus the estimated score gain.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+givesScoreHeaderHitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+givesScoreHeaderHitbox:Hide()
+
 local function GetBrowserActivitySectionTitle()
     local mode = GetBrowserMode()
     if mode == "raid" then
@@ -1406,6 +1424,8 @@ local function UpdateBrowserActivityButtons(startY)
     local filters = BrowserFilterState()
     local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
     local validKeys = {}
+    local mode = GetBrowserMode()
+    local showScoreColumn = (mode == "mythic_plus")
 
     for _, entry in ipairs(activities) do
         validKeys[entry.filterKey] = true
@@ -1418,18 +1438,46 @@ local function UpdateBrowserActivityButtons(startY)
 
     for _, button in ipairs(browserActivityButtons) do
         button:Hide()
+        if button.scoreText then button.scoreText:Hide() end
+        if button.scoreHitbox then button.scoreHitbox:Hide() end
     end
 
-    local y = startY
+    -- Position "Gives Score" column header when in M+ mode
+    if showScoreColumn then
+        givesScoreHeader:ClearAllPoints()
+        givesScoreHeader:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, startY + 2)
+        givesScoreHeader:Show()
+        givesScoreHeaderHitbox:ClearAllPoints()
+        givesScoreHeaderHitbox:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, startY + 2)
+        givesScoreHeaderHitbox:Show()
+    else
+        givesScoreHeader:Hide()
+        givesScoreHeaderHitbox:Hide()
+    end
+
+    local y = startY - (showScoreColumn and 14 or 0)
     for index, entry in ipairs(activities) do
         local button = browserActivityButtons[index]
         if not button then
             button = CreateBrowserToggleBox(browserContent, "")
             button.text = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-            button.text:SetPoint("LEFT", button, "RIGHT", 8, 0)
-            button.text:SetPoint("RIGHT", browserContent, "RIGHT", -4, 0)
             button.text:SetJustifyH("LEFT")
+            button.scoreText = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+            button.scoreText:SetWidth(60)
+            button.scoreText:SetJustifyH("RIGHT")
+            button.scoreHitbox = CreateFrame("Button", nil, browserContent)
+            button.scoreHitbox:SetSize(64, 16)
+            button.scoreHitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
             browserActivityButtons[index] = button
+        end
+
+        -- Resize label depending on whether score column is shown
+        button.text:ClearAllPoints()
+        button.text:SetPoint("LEFT", button, "RIGHT", 6, 0)
+        if showScoreColumn then
+            button.text:SetPoint("RIGHT", browserContent, "RIGHT", -68, 0)
+        else
+            button.text:SetPoint("RIGHT", browserContent, "RIGHT", -4, 0)
         end
 
         button:ClearAllPoints()
@@ -1445,6 +1493,60 @@ local function UpdateBrowserActivityButtons(startY)
         end)
         button.text:Show()
         button:Show()
+
+        -- Score column
+        if showScoreColumn and entry.scoreTarget then
+            local targetLevel = tonumber(entry.scoreTarget.level)
+            local estimatedGain = tonumber(entry.scoreTarget.estimatedGain)
+            local scoreData = entry.scoreTarget
+            button.scoreText:ClearAllPoints()
+            button.scoreText:SetPoint("RIGHT", browserContent, "RIGHT", -2, 0)
+            button.scoreText:SetPoint("TOP", button, "TOP", 0, 0)
+            if targetLevel and targetLevel > 0 then
+                if estimatedGain and estimatedGain > 0 then
+                    button.scoreText:SetText(string.format("|cff66ff8a+%d|r |cff9dffb8(%d)|r", targetLevel, estimatedGain))
+                else
+                    button.scoreText:SetText(string.format("|cff66ff8a+%d|r", targetLevel))
+                end
+            else
+                button.scoreText:SetText("")
+            end
+            button.scoreText:Show()
+
+            button.scoreHitbox:ClearAllPoints()
+            button.scoreHitbox:SetPoint("RIGHT", browserContent, "RIGHT", -2, 0)
+            button.scoreHitbox:SetPoint("TOP", button, "TOP", 0, 0)
+            button.scoreHitbox.entryData = entry
+            button.scoreHitbox:SetScript("OnEnter", function(self)
+                local data = self.entryData
+                if not data or not data.scoreTarget then return end
+                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                GameTooltip:SetText(data.label or "Gives Score", 1, 1, 1)
+                local tLevel = tonumber(data.scoreTarget.level)
+                local eGain = tonumber(data.scoreTarget.estimatedGain)
+                local breakdown = data.scoreTarget.estimatedGainBreakdown
+                if tLevel and tLevel > 0 then
+                    if eGain and eGain > 0 then
+                        GameTooltip:AddLine(string.format("A timed +%d should increase your score by about %d points for this dungeon.", tLevel, eGain), 0.40, 1.00, 0.55, true)
+                    else
+                        GameTooltip:AddLine(string.format("A timed +%d should increase your score for this dungeon.", tLevel), 0.40, 1.00, 0.55, true)
+                    end
+                    if type(breakdown) == "table" then
+                        GameTooltip:AddLine(" ")
+                        GameTooltip:AddLine(string.format("+%d timed: %d  ++%d: %d  +++%d: %d", tLevel, tonumber(breakdown.timed) or 0, tLevel, tonumber(breakdown.plusTwo) or 0, tLevel, tonumber(breakdown.plusThree) or 0), 0.75, 1.00, 0.80, true)
+                    end
+                else
+                    GameTooltip:AddLine("Oak could not determine a score-gain target for this dungeon yet.", 1, 1, 1, true)
+                end
+                GameTooltip:Show()
+            end)
+            button.scoreHitbox:Show()
+        else
+            button.scoreText:SetText("")
+            button.scoreText:Hide()
+            button.scoreHitbox:Hide()
+        end
+
         y = y - 22
     end
 

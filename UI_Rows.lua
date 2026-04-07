@@ -125,6 +125,15 @@ local scrollChild = CreateFrame("Frame")
 scrollChild:SetSize(scrollFrame:GetWidth(), 1)
 scrollFrame:SetScrollChild(scrollChild)
 
+-- Browser mode: visual separator between applied (pinned) groups and the rest
+local browserAppliedSeparator = CreateFrame("Frame", nil, scrollChild)
+browserAppliedSeparator:SetHeight(3)
+browserAppliedSeparator:SetFrameLevel(scrollChild:GetFrameLevel() + 20)
+local _bsepTex = browserAppliedSeparator:CreateTexture(nil, "OVERLAY")
+_bsepTex:SetAllPoints(browserAppliedSeparator)
+_bsepTex:SetColorTexture(addonTable.ClassColor.r * 0.7, addonTable.ClassColor.g * 0.7, addonTable.ClassColor.b * 0.7, 0.9)
+browserAppliedSeparator:Hide()
+
 local applicantContextBar = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 applicantContextBar:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 1, -31)
 applicantContextBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -1, -31)
@@ -574,6 +583,10 @@ GetBrowserApplicationPriority = function(result)
     if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
         return 1
     end
+    -- Friends: shown above normal results but below applied
+    if (result.numBNetFriends or 0) > 0 or (result.numCharFriends or 0) > 0 then
+        return 2.5
+    end
     return 2
 end
 
@@ -951,11 +964,19 @@ local function SetBrowserCompSlot(slotFrame, role, className, filled)
     end
 
     if filled then
+        local classKey = string.upper(className or "")
+        local classColor = (classKey ~= "" and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classKey]) or addonTable.ClassColor
+        if slotFrame.SetBackdropColor then
+            slotFrame:SetBackdropColor(classColor.r, classColor.g, classColor.b, 0.95)
+        end
         slotFrame.icon:SetDesaturated(false)
         slotFrame.icon:SetAlpha(1)
     else
+        if slotFrame.SetBackdropColor then
+            slotFrame:SetBackdropColor(0.10, 0.10, 0.12, 0.95)
+        end
         slotFrame.icon:SetDesaturated(true)
-        slotFrame.icon:SetAlpha(0.30)
+        slotFrame.icon:SetAlpha(0.45)
     end
 end
 
@@ -1000,7 +1021,8 @@ local function CreateRow(index)
             local result = self.searchResult
             local listingMode = GetListingMode()
 
-            if addonTable.TryShowRaiderIOProfileTooltip and addonTable.TryShowRaiderIOProfileTooltip(GameTooltip, result.leaderName, result.leaderRealm) then
+            -- result.leaderName is "Name-Realm" format; TryShowRaiderIOProfileTooltip auto-splits it
+            if addonTable.TryShowRaiderIOProfileTooltip and addonTable.TryShowRaiderIOProfileTooltip(GameTooltip, result.leaderName) then
                 return
             end
 
@@ -1257,9 +1279,12 @@ local function CreateRow(index)
     local compTotalSpan = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 4*18+16 = 88px
     local compSlotOffset = math.floor((BR_COMP.w - compTotalSpan) / 2)   -- (103-88)/2 = 7
     for index, role in ipairs(compRoles) do
-        local slot = CreateFrame("Frame", nil, row)
+        local slot = CreateFrame("Frame", nil, row, "BackdropTemplate")
         slot:SetSize(COMP_SLOT_SIZE, COMP_SLOT_SIZE)
         slot:SetPoint("LEFT", row, "LEFT", BR_COMP.x + compSlotOffset + ((index - 1) * COMP_SLOT_SPACING), 0)
+        slot:SetBackdrop({ bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1 })
+        slot:SetBackdropBorderColor(0, 0, 0, 1)
+        slot:SetBackdropColor(0.10, 0.10, 0.12, 0.95)
         slot.icon = slot:CreateTexture(nil, "OVERLAY")
         slot.icon:SetAllPoints(slot)
         slot.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
@@ -1409,6 +1434,7 @@ function addonTable.UpdateDisplay()
     UpdateNotesToggleLayout()
 
     for _, row in ipairs(rows) do row:Hide() end
+    browserAppliedSeparator:Hide()
 
     local isBrowser = IsBrowserMode()
     local displayIndex = 1
@@ -1434,6 +1460,25 @@ function addonTable.UpdateDisplay()
         table.sort(activeResults, function(a, b)
             return SortGroups(a, b, addonTable.CurrentSortBy, addonTable.CurrentIsAscending)
         end)
+
+        -- Count applied (pinned) results at the top and show visual separator
+        local pinnedCount = 0
+        for _, r in ipairs(activeResults) do
+            if GetBrowserApplicationPriority(r) >= 3 then
+                pinnedCount = pinnedCount + 1
+            else
+                break
+            end
+        end
+        if pinnedCount > 0 and pinnedCount < #activeResults then
+            browserAppliedSeparator:ClearAllPoints()
+            browserAppliedSeparator:SetPoint("LEFT", scrollChild, "LEFT", 0, 0)
+            browserAppliedSeparator:SetPoint("RIGHT", scrollChild, "RIGHT", 0, 0)
+            browserAppliedSeparator:SetPoint("TOP", scrollChild, "TOP", 0, -(pinnedCount * ROW_HEIGHT))
+            browserAppliedSeparator:Show()
+        else
+            browserAppliedSeparator:Hide()
+        end
 
         for _, result in ipairs(activeResults) do
             if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
