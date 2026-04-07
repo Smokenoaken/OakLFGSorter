@@ -943,21 +943,22 @@ local function ConfigureApplicantRowLayout(row)
     ConfigureTextColumn(row.noteText, row, GetCurrentRowNoteColumn(), 5)
 end
 
+local COMP_ROLE_ATLAS = {
+    ["TANK"]    = "roleicon-tank",
+    ["HEALER"]  = "roleicon-healer",
+    ["DAMAGER"] = "roleicon-dps",
+}
+
 local function SetBrowserCompSlot(slotFrame, role, className, filled)
-    local coords = addonTable.RoleTexCoords[role]
-    if coords then
-        slotFrame.icon:SetTexCoord(unpack(coords))
-    end
+    local atlas = COMP_ROLE_ATLAS[role] or COMP_ROLE_ATLAS["DAMAGER"]
+    slotFrame.icon:SetAtlas(atlas, false)
 
     if filled then
-        local classColor = RAID_CLASS_COLORS[string.upper(className or "")] or addonTable.ClassColor
-        slotFrame:SetBackdropColor(classColor.r, classColor.g, classColor.b, 0.95)
         slotFrame.icon:SetDesaturated(false)
         slotFrame.icon:SetAlpha(1)
     else
-        slotFrame:SetBackdropColor(0.10, 0.10, 0.12, 0.95)
         slotFrame.icon:SetDesaturated(true)
-        slotFrame.icon:SetAlpha(0.45)
+        slotFrame.icon:SetAlpha(0.30)
     end
 end
 
@@ -1253,21 +1254,18 @@ local function CreateRow(index)
 
     row.compSlots = {}
     local compRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
-    -- 14px slot, 12px icon, 16px center-to-center; center the group in the 103px column
-    local COMP_SLOT_SIZE = 14
-    local COMP_SLOT_SPACING = 16
-    local compTotalSpan = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 4*16+14 = 78px
-    local compSlotOffset = math.floor((BR_COMP.w - compTotalSpan) / 2)   -- (103-78)/2 = 12
+    -- 16px atlas icons, 18px center-to-center spacing; centered in the 103px Comp column
+    local COMP_SLOT_SIZE = 16
+    local COMP_SLOT_SPACING = 18
+    local compTotalSpan = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 4*18+16 = 88px
+    local compSlotOffset = math.floor((BR_COMP.w - compTotalSpan) / 2)   -- (103-88)/2 = 7
     for index, role in ipairs(compRoles) do
-        local slot = CreateFrame("Frame", nil, row, "BackdropTemplate")
+        -- Plain frame, no backdrop — the atlas icon provides its own visual
+        local slot = CreateFrame("Frame", nil, row)
         slot:SetSize(COMP_SLOT_SIZE, COMP_SLOT_SIZE)
         slot:SetPoint("LEFT", row, "LEFT", BR_COMP.x + compSlotOffset + ((index - 1) * COMP_SLOT_SPACING), 0)
-        slot:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-        slot:SetBackdropBorderColor(0, 0, 0, 1)
-        slot.icon = slot:CreateTexture(nil, "OVERLAY")
-        slot.icon:SetPoint("CENTER")
-        slot.icon:SetSize(12, 12)
-        slot.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
+        slot.icon = slot:CreateTexture(nil, "ARTWORK")
+        slot.icon:SetAllPoints(slot)
         row.compSlots[index] = slot
     end
 
