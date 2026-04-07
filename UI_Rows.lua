@@ -215,6 +215,13 @@ lustText:SetPoint("LEFT", footer, "LEFT", 10, 0)
 local brezText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 brezText:SetPoint("LEFT", lustText, "RIGHT", 20, 0)
 
+-- Browser mode: "Showing X of Y groups" replaces lust/brez indicators
+local groupCountText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+groupCountText:SetPoint("LEFT", footer, "LEFT", 10, 0)
+groupCountText:SetTextColor(0.75, 0.75, 0.75)
+groupCountText:Hide()
+addonTable.groupCountText = groupCountText
+
 local suppBtn = addonTable.CreateFlatButton(footer, "Supporters & Links", 150)
 suppBtn:SetPoint("LEFT", brezText, "RIGHT", 20, 0)
 suppBtn:SetScript("OnClick", function()
@@ -255,6 +262,21 @@ footerVersionText:SetPoint("RIGHT", footer, "RIGHT", -4, 0)
 footerVersionText:SetText(addonTable.VersionText and addonTable.VersionText:GetText() or "")
 
 function addonTable.UpdateGroupBuffs()
+    local isBrowser = IsBrowserMode()
+
+    if isBrowser then
+        -- Browser mode: show group count, hide lust/brez indicators
+        lustText:Hide()
+        brezText:Hide()
+        groupCountText:Show()
+        return
+    end
+
+    -- Applicant mode: show lust/brez indicators, hide group count
+    groupCountText:Hide()
+    lustText:Show()
+    brezText:Show()
+
     local hasLust, hasBrez = false, false
     local function CheckClass(c)
         if not c then return end
@@ -262,9 +284,9 @@ function addonTable.UpdateGroupBuffs()
         if c == "MAGE" or c == "SHAMAN" or c == "HUNTER" or c == "EVOKER" then hasLust = true end
         if c == "DEATHKNIGHT" or c == "DRUID" or c == "WARLOCK" or c == "PALADIN" then hasBrez = true end
     end
-    
+
     CheckClass(addonTable.PlayerClass)
-    
+
     local numGroup = GetNumGroupMembers()
     for i = 1, numGroup do
         local unit = IsInRaid() and "raid"..i or "party"..i
@@ -633,10 +655,19 @@ local function UpdateNotesToggleLayout()
         notesToggleBtn:ClearAllPoints()
         notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", xOffset, HEADER_TOP_OFFSET)
         notesToggleBtn:SetWidth(75)
+        -- Left-justify the "Notes" label in collapsed state
+        notesToggleBtn.text:ClearAllPoints()
+        notesToggleBtn.text:SetPoint("LEFT", notesToggleBtn, "LEFT", 6, 0)
+        notesToggleBtn.text:SetJustifyH("LEFT")
         notesToggleBtn:Show()
         notesHeader:Hide()
         noteVisibilityBtn:Hide()
     else
+        -- Restore centered text for the expanded toggle button
+        notesToggleBtn.text:ClearAllPoints()
+        notesToggleBtn.text:SetPoint("CENTER", notesToggleBtn, "CENTER", 0, 0)
+        notesToggleBtn.text:SetJustifyH("CENTER")
+
         local headerWidth = math.max(40, noteColumn.w - 24)
         notesHeader:SetWidth(headerWidth)
         notesHeader:ClearAllPoints()
@@ -1222,17 +1253,20 @@ local function CreateRow(index)
 
     row.compSlots = {}
     local compRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
+    -- 14px slot, 12px icon, 16px center-to-center; center the group in the 103px column
+    local COMP_SLOT_SIZE = 14
+    local COMP_SLOT_SPACING = 16
+    local compTotalSpan = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 4*16+14 = 78px
+    local compSlotOffset = math.floor((BR_COMP.w - compTotalSpan) / 2)   -- (103-78)/2 = 12
     for index, role in ipairs(compRoles) do
         local slot = CreateFrame("Frame", nil, row, "BackdropTemplate")
-        slot:SetSize(12, 12)
-        -- 5 slots × 12px each + 2px gap = 70px span; center in 103px column
-        local compSlotOffset = math.floor((BR_COMP.w - (5 * 12 + 4 * 2)) / 2)
-        slot:SetPoint("LEFT", row, "LEFT", BR_COMP.x + compSlotOffset + ((index - 1) * 14), 0)
+        slot:SetSize(COMP_SLOT_SIZE, COMP_SLOT_SIZE)
+        slot:SetPoint("LEFT", row, "LEFT", BR_COMP.x + compSlotOffset + ((index - 1) * COMP_SLOT_SPACING), 0)
         slot:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
         slot:SetBackdropBorderColor(0, 0, 0, 1)
         slot.icon = slot:CreateTexture(nil, "OVERLAY")
         slot.icon:SetPoint("CENTER")
-        slot.icon:SetSize(10, 10)
+        slot.icon:SetSize(12, 12)
         slot.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
         row.compSlots[index] = slot
     end
@@ -1332,6 +1366,15 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
                 if isBrowser then slot:Show() else slot:Hide() end
             end
         end
+        -- In browser: center the apply/cancel button in collapsed notes column or right edge
+        if isBrowser and row.inviteBtn then
+            row.inviteBtn:ClearAllPoints()
+            if hideNotes then
+                row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 37, 0)
+            else
+                row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+            end
+        end
     end
 
     SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
@@ -1386,6 +1429,13 @@ function addonTable.UpdateDisplay()
             end
         end
 
+        -- Update "Showing X of Y groups" in the footer
+        if addonTable.groupCountText then
+            local total = #(addonTable.SearchResults or {})
+            local shown = #activeResults
+            addonTable.groupCountText:SetText(string.format("Showing %d of %d groups", shown, total))
+        end
+
         table.sort(activeResults, function(a, b)
             return SortGroups(a, b, addonTable.CurrentSortBy, addonTable.CurrentIsAscending)
         end)
@@ -1416,6 +1466,17 @@ function addonTable.UpdateDisplay()
             row.specText:Hide()
             row.keyText:Hide()
             if row.ageText then row.ageText:Show() end
+
+            -- Center the apply/cancel button in the collapsed notes column, or restore to right edge
+            local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
+            if row.inviteBtn then
+                row.inviteBtn:ClearAllPoints()
+                if hideNotes then
+                    row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 37, 0)
+                else
+                    row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+                end
+            end
             for _, slot in pairs(row.compSlots) do
                 slot:Show()
             end
