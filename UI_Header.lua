@@ -348,7 +348,7 @@ addonTable.CloseButton = closeBtn
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
-VersionText:SetText("|cff888888v2.5.0|r")
+VersionText:SetText("|cff888888v2.5.1|r")
 VersionText:Hide()
 
 addonTable.RegisterThemeRefresh("ui_header_theme", function()

@@ -1,3 +1,9 @@
+## v2.5.1
+
+- Added a new theme selector in Oak's options panel with preset accent colors.
+- Added a custom color picker option so you can create and save your own Oak accent theme.
+- Applied theme accents live across Oak's main frame, filter and options panels, notes controls, sticky browser accents, and quick sign-up UI.
+
 ## v2.5.0
 
 - Unified Oak into a single browser window that replaces the old split search/browser setup, with mode-aware layouts for Mythic+, raids, PvP, delves, and open-world listings.
