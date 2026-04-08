@@ -10,6 +10,7 @@ local quickFilterButtons = {}
 local browserFilterButtons = {}
 local browserActivityButtons = {}
 local BrowserFilterState
+local browserMinRatingBox
 local BROWSER_FILTER_VERSION = 6
 local GetPartyRoleSupply
 local ROLE_REMAINING_KEYS = {
@@ -503,6 +504,30 @@ local function ResultMatchesPartyFit(result)
     return true
 end
 
+local function ResultMatchesMinimumRating(result)
+    local minRating = browserMinRatingBox and tonumber(browserMinRatingBox:GetText() or "")
+    if not minRating or minRating <= 0 then
+        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+        if ok and type(adv) == "table" then
+            minRating = tonumber(adv.minimumRating)
+        end
+    end
+
+    if not minRating or minRating <= 0 then
+        return true
+    end
+
+    local mode = result.mode or "generic"
+    local ratingValue
+    if mode == "rated_pvp" or mode == "pvp" then
+        ratingValue = tonumber(result.pvpRating) or tonumber(result.rating) or 0
+    else
+        ratingValue = tonumber(result.rating) or 0
+    end
+
+    return ratingValue >= minRating
+end
+
 function addonTable.ResultPassesBrowserFilters(result)
     -- Hide groups that are completely full (no open slots)
     local maxP = result.maxPlayers or 0
@@ -528,6 +553,9 @@ function addonTable.ResultPassesBrowserFilters(result)
         return false
     end
     if not ResultMatchesRoleNeeds(result, filters) then
+        return false
+    end
+    if not ResultMatchesMinimumRating(result) then
         return false
     end
     if filters.partyFit and not ResultMatchesPartyFit(result) then
@@ -1657,7 +1685,7 @@ local browserMinRatingLabel = browserContent:CreateFontString(nil, "OVERLAY", "O
 browserMinRatingLabel:SetText("Min Rating")
 browserMinRatingLabel:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
 
-local browserMinRatingBox = CreateFrame("EditBox", nil, browserContent, "BackdropTemplate")
+browserMinRatingBox = CreateFrame("EditBox", nil, browserContent, "BackdropTemplate")
 browserMinRatingBox:SetSize(60, 20)
 browserMinRatingBox:SetAutoFocus(false)
 browserMinRatingBox:SetFontObject("OakLFG_FontRegular")

@@ -17,6 +17,7 @@ local SCROLL_TOP_OFFSET = BASE_SCROLL_TOP_OFFSET
 local roleWeights = { ["TANK"] = 1, ["HEALER"] = 2, ["DAMAGER"] = 3 }
 local GetBrowserApplicationPriority
 local IsRaidBrowserMode  -- forward declaration (defined below IsBrowserMode)
+local IsPvpBrowserMode
 local MODE_CONFIGS = {
     mythic_plus = { ratingLabel = "M+ Rating", keyLabel = "Key" },
     rated_pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
@@ -40,6 +41,52 @@ local function GetModeConfig()
     return MODE_CONFIGS[GetListingMode()] or MODE_CONFIGS.generic
 end
 
+local function IsRatedBattlegroundResult(result)
+    if type(result) ~= "table" then
+        return false
+    end
+
+    if result.mode ~= "pvp" and result.mode ~= "rated_pvp" then
+        return false
+    end
+
+    local bracket = strlower(tostring(result.pvpBracket or ""))
+    if bracket == "rbg" then
+        return true
+    end
+
+    local activityText = strlower(table.concat({
+        tostring(result.activityName or ""),
+        tostring(result.dungeonName or ""),
+    }, " "))
+
+    return activityText:find("rated battleground", 1, true) ~= nil
+        or activityText:find("battleground", 1, true) ~= nil
+        or activityText:find("rbg", 1, true) ~= nil
+        or (tonumber(result.maxPlayers) or 0) > 3
+end
+
+local function IsRatedBattlegroundBrowserMode()
+    if not IsPvpBrowserMode() then
+        return false
+    end
+
+    local firstResult = addonTable.SearchResults and addonTable.SearchResults[1]
+    if IsRatedBattlegroundResult(firstResult) then
+        return true
+    end
+
+    local ctxInfo = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.activityInfo
+    local activityText = strlower(table.concat({
+        tostring(ctxInfo and ctxInfo.fullName or ""),
+        tostring(ctxInfo and ctxInfo.shortName or ""),
+    }, " "))
+
+    return activityText:find("rated battleground", 1, true) ~= nil
+        or activityText:find("battleground", 1, true) ~= nil
+        or activityText:find("rbg", 1, true) ~= nil
+end
+
 local function GetHeaderTooltipData(sortKey)
     local isBrowser = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
     local listingMode = GetListingMode()
@@ -49,6 +96,9 @@ local function GetHeaderTooltipData(sortKey)
             if IsRaidBrowserMode() then
                 return "Raid", "Sort by raid instance name."
             elseif listingMode == "pvp" or listingMode == "rated_pvp" then
+                if IsRatedBattlegroundBrowserMode() then
+                    return "Activity", "Sort by PvP activity type."
+                end
                 return "Arena", "Sort by arena bracket (2v2 / 3v3)."
             elseif listingMode == "delve" then
                 return "Delve", "Sort by delve name."
@@ -128,7 +178,7 @@ IsRaidBrowserMode = function()
     return m == "raid" or m == "legacy_raid"
 end
 
-local function IsPvpBrowserMode()
+IsPvpBrowserMode = function()
     if not IsBrowserMode() then return false end
     local m = GetListingMode()
     return m == "pvp" or m == "rated_pvp"
@@ -487,6 +537,12 @@ local B_PVP_TITLE  = { x = 170, w = 120, align = "LEFT"   }  -- [170, 290] listi
 local B_PVP_RATING = { x = 290, w = 80,  align = "CENTER" }  -- [290, 370]
 local B_PVP_AGE    = { x = 370, w = 45,  align = "CENTER" }  -- [370, 415]
 local B_PVP_NOTE   = { x = 415, w = 190, align = "LEFT"   }  -- [415, 605]
+local B_RBG_ACTIVITY = { x = 10,  w = 88,  align = "LEFT"   }
+local B_RBG_COMP     = { x = 98,  w = 96,  align = "CENTER" }
+local B_RBG_TITLE    = { x = 194, w = 96,  align = "LEFT"   }
+local B_RBG_RATING   = { x = 290, w = 80,  align = "CENTER" }
+local B_RBG_AGE      = { x = 370, w = 45,  align = "CENTER" }
+local B_RBG_NOTE     = { x = 415, w = 190, align = "LEFT"   }
 local ROW_X_OFFSET = 10
 local REGION_TAG_WIDTH = 42
 
@@ -513,6 +569,12 @@ local BR_PVP_TITLE  = RowColumn(B_PVP_TITLE)
 local BR_PVP_RATING = RowColumn(B_PVP_RATING)
 local BR_PVP_AGE    = RowColumn(B_PVP_AGE)
 local BR_PVP_NOTE   = RowColumn(B_PVP_NOTE)
+local BR_RBG_ACTIVITY = RowColumn(B_RBG_ACTIVITY)
+local BR_RBG_COMP     = RowColumn(B_RBG_COMP)
+local BR_RBG_TITLE    = RowColumn(B_RBG_TITLE)
+local BR_RBG_RATING   = RowColumn(B_RBG_RATING)
+local BR_RBG_AGE      = RowColumn(B_RBG_AGE)
+local BR_RBG_NOTE     = RowColumn(B_RBG_NOTE)
 
 -- Raid browser column constants: Raid | Difficulty | Comp | Title | Kills | Age | Notes
 local B_RAID_NAME  = { x = 10,  w = 120, align = "LEFT"   }  -- [10,  130]
@@ -575,6 +637,7 @@ function addonTable.UpdateHeaderVisuals()
     local isBrowser = IsBrowserMode()
     local isRaidBrowser = IsRaidBrowserMode()
     local isPvpBrowser = IsPvpBrowserMode()
+    local isRbgBrowser = IsRatedBattlegroundBrowserMode()
 
     local browserColumns = {
         role   = B_DUNGEON,
@@ -591,6 +654,14 @@ function addonTable.UpdateHeaderVisuals()
         ilvl   = B_PVP_COMP,
         rating = B_PVP_RATING,
         key    = B_PVP_AGE,
+    }
+    local rbgBrowserColumns = {
+        role   = B_RBG_ACTIVITY,
+        class  = B_RBG_TITLE,
+        spec   = nil,
+        ilvl   = B_RBG_COMP,
+        rating = B_RBG_RATING,
+        key    = B_RBG_AGE,
     }
     local raidBrowserColumns = {
         role   = B_RAID_NAME,
@@ -613,6 +684,8 @@ function addonTable.UpdateHeaderVisuals()
         local column
         if isRaidBrowser then
             column = raidBrowserColumns[header.sortKey]
+        elseif isRbgBrowser then
+            column = rbgBrowserColumns[header.sortKey]
         elseif isPvpBrowser then
             column = pvpBrowserColumns[header.sortKey]
         elseif isBrowser then
@@ -667,7 +740,7 @@ function addonTable.UpdateHeaderVisuals()
             if isRaidBrowser then
                 header.text:SetText("Raid")
             elseif isPvpBrowser then
-                header.text:SetText("Arena")
+                header.text:SetText(isRbgBrowser and "Activity" or "Arena")
             elseif GetListingMode() == "delve" then
                 header.text:SetText("Delve")
             elseif GetListingMode() == "generic" then
@@ -1188,6 +1261,16 @@ local function ConfigurePvpBrowserRowLayout(row)
     ConfigureTextColumn(row.ratingText, row, BR_PVP_RATING)
     if row.ageText then ConfigureTextColumn(row.ageText, row, BR_PVP_AGE) end
     ConfigureTextColumn(row.noteText, row, BR_PVP_NOTE, 5)
+end
+
+local function ConfigureRbgBrowserRowLayout(row)
+    local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_RBG_ACTIVITY, 5, regionMarkup)
+    ConfigureTextColumn(row.ilvlText, row, BR_RBG_COMP)
+    ConfigureTextColumn(row.nameText, row, BR_RBG_TITLE, 5)
+    ConfigureTextColumn(row.ratingText, row, BR_RBG_RATING)
+    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_RBG_AGE) end
+    ConfigureTextColumn(row.noteText, row, BR_RBG_NOTE, 5)
 end
 
 local function ConfigureRaidBrowserRowLayout(row)
@@ -1938,6 +2021,8 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
             if isBrowser then
                 if isRaidBrowser then
                     ConfigureRaidBrowserRowLayout(row)
+                elseif isPvpBrowser and row.searchResult and IsRatedBattlegroundResult(row.searchResult) then
+                    ConfigureRbgBrowserRowLayout(row)
                 elseif isPvpBrowser then
                     ConfigurePvpBrowserRowLayout(row)
                 else
@@ -1958,7 +2043,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         end
         if row.ilvlText then
             if isBrowser then
-                if isRaidBrowser then row.ilvlText:Show() else row.ilvlText:Hide() end
+                if isRaidBrowser or (row.searchResult and IsRatedBattlegroundResult(row.searchResult)) then row.ilvlText:Show() else row.ilvlText:Hide() end
             else
                 row.ilvlText:Show()
             end
@@ -2088,10 +2173,13 @@ local function PopulateBrowserRow(row, result, isAltColor)
     local isRaidMode = (result.mode == "raid" or result.mode == "legacy_raid")
                     or (IsBrowserMode() and (searchCtxMode == "raid" or searchCtxMode == "legacy_raid"))
     local isPvpMode = (result.mode == "pvp" or result.mode == "rated_pvp")
+    local isRbgMode = isPvpMode and IsRatedBattlegroundResult(result)
     local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
 
     if isRaidMode then
         ConfigureRaidBrowserRowLayout(row)
+    elseif isRbgMode then
+        ConfigureRbgBrowserRowLayout(row)
     elseif isPvpMode then
         ConfigurePvpBrowserRowLayout(row)
     else
@@ -2099,7 +2187,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
     end
     row.dungeonText:Show()
     row.roleIcon:Hide()
-    if not isRaidMode then row.ilvlText:Hide() end
+    if not isRaidMode and not isRbgMode then row.ilvlText:Hide() end
     row.keyText:Hide()
     if row.ageText then row.ageText:Show() end
 
@@ -2120,6 +2208,15 @@ local function PopulateBrowserRow(row, result, isAltColor)
     end
     if isRaidMode then
         -- Raid mode: hide comp slots, show Tank/Healer/DPS counts in ilvlText
+        for _, slot in pairs(row.compSlots) do slot:Hide() end
+        local rc = result.roleCounts or {}
+        local tanks   = tonumber(rc.TANK)    or 0
+        local healers = tonumber(rc.HEALER)  or 0
+        local dps     = tonumber(rc.DAMAGER) or 0
+        row.ilvlText:SetWordWrap(false)
+        row.ilvlText:SetText(ROLE_ICON.TANK .. tanks .. "  " .. ROLE_ICON.HEALER .. healers .. "  " .. ROLE_ICON.DAMAGER .. dps)
+        row.ilvlText:Show()
+    elseif isRbgMode then
         for _, slot in pairs(row.compSlots) do slot:Hide() end
         local rc = result.roleCounts or {}
         local tanks   = tonumber(rc.TANK)    or 0
@@ -2213,11 +2310,15 @@ local function PopulateBrowserRow(row, result, isAltColor)
 
     row.noteText:SetText(result.comment or "")
     if isPvpMode then
-        -- Show arena bracket size ("2v2" / "3v3") derived from pvpBracket or maxPlayers
-        local bracketText = result.pvpBracket
-            or (result.maxPlayers == 2 and "2v2")
-            or (result.maxPlayers == 3 and "3v3")
-            or (result.dungeonName ~= "" and result.dungeonName or "--")
+        local bracketText
+        if isRbgMode then
+            bracketText = "RBG"
+        else
+            bracketText = result.pvpBracket
+                or (result.maxPlayers == 2 and "2v2")
+                or (result.maxPlayers == 3 and "3v3")
+                or (result.dungeonName ~= "" and result.dungeonName or "--")
+        end
         row.dungeonText:SetText(bracketText)
     else
         row.dungeonText:SetText(result.dungeonName ~= "" and result.dungeonName or "--")
