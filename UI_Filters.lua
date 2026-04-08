@@ -209,37 +209,6 @@ local function ResultMatchesDifficulty(result, difficulty)
     return true
 end
 
-local function ResultMatchesPlaystyle(result, playstyle)
-    if playstyle == "ANY" then
-        return true
-    end
-
-    local short = strupper(result.playstyleShortLabel or "")
-    if playstyle == "LEARNING" and short == "LEARN" then
-        return true
-    elseif playstyle == "RELAXED" and short == "RELAX" then
-        return true
-    elseif playstyle == "COMPETITIVE" and short == "COMP" then
-        return true
-    elseif playstyle == "CARRY" and short == "CARRY" then
-        return true
-    end
-
-    local playstyleValue = tonumber(result.playstyleValue) or 0
-    if playstyle == "LEARNING" then
-        return playstyleValue == 1
-    elseif playstyle == "RELAXED" then
-        return playstyleValue == 2
-    elseif playstyle == "COMPETITIVE" then
-        return playstyleValue == 3 or playstyleValue == 4
-    elseif playstyle == "CARRY" then
-        local carryText = strlower((result.name or "") .. " " .. (result.comment or ""))
-        return carryText:find("carry", 1, true) or carryText:find("boost", 1, true)
-    end
-
-    return true
-end
-
 local function ResultMatchesKeyRange(result, filters)
     if not BrowserModeUsesKeyRange(result.mode or GetBrowserMode()) then
         return true

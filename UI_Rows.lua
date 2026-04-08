@@ -1194,21 +1194,6 @@ local function GetColoredRaidDifficultyLabel(label)
     return text
 end
 
-local function GetRaidBrowserTitle(result)
-    local title = result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--")
-    local difficultyLabel = result.raidListing and result.raidListing.difficultyLabel or nil
-    if not difficultyLabel or difficultyLabel == "" then
-        return title
-    end
-
-    local loweredTitle = strlower(title or "")
-    if loweredTitle:find(strlower(difficultyLabel), 1, true) then
-        return title
-    end
-
-    return string.format("%s: %s", GetColoredRaidDifficultyLabel(difficultyLabel), title)
-end
-
 local function GetBrowserSecondaryDisplay(result)
     local listingMode = GetListingMode()
 
