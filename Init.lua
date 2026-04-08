@@ -73,6 +73,10 @@ if browserFilters.needsLust == nil then browserFilters.needsLust = false end
 if browserFilters.needsBrez == nil then browserFilters.needsBrez = false end
 if browserFilters.hideDeclined == nil then browserFilters.hideDeclined = false end
 if type(browserFilters.selectedActivities) ~= "table" then browserFilters.selectedActivities = {} end
+if browserFilters.raidBossKills == nil then browserFilters.raidBossKills = "" end
+if browserFilters.raidTanks    == nil then browserFilters.raidTanks    = "" end
+if browserFilters.raidHealers  == nil then browserFilters.raidHealers  = "" end
+if browserFilters.raidDps      == nil then browserFilters.raidDps      = "" end
 
 -- Font Registration
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)

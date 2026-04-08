@@ -16,6 +16,7 @@ local HEADER_TOP_OFFSET = BASE_HEADER_TOP_OFFSET
 local SCROLL_TOP_OFFSET = BASE_SCROLL_TOP_OFFSET
 local roleWeights = { ["TANK"] = 1, ["HEALER"] = 2, ["DAMAGER"] = 3 }
 local GetBrowserApplicationPriority
+local IsRaidBrowserMode  -- forward declaration (defined below IsBrowserMode)
 local MODE_CONFIGS = {
     mythic_plus = { ratingLabel = "M+ Rating", keyLabel = "Key" },
     rated_pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
@@ -45,7 +46,24 @@ local function GetHeaderTooltipData(sortKey)
 
     if sortKey == "role" then
         if isBrowser then
-            return "Dungeon", "Sort by dungeon, raid, or activity name."
+            if IsRaidBrowserMode() then
+                return "Raid", "Sort by raid instance name."
+            elseif listingMode == "delve" then
+                return "Delve", "Sort by delve name."
+            elseif listingMode == "generic" or listingMode == "pvp" then
+                local ctxInfo = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.activityInfo
+                local firstResult = addonTable.SearchResults and addonTable.SearchResults[1]
+                local hint = strlower(
+                    (ctxInfo and (ctxInfo.fullName or ctxInfo.shortName or ""))
+                    or (firstResult and (firstResult.activityName or firstResult.dungeonName or ""))
+                    or ""
+                )
+                if hint:find("custom", 1, true) or listingMode == "pvp" then
+                    return "Activity", "Sort by activity type."
+                end
+                return "Zone", "Sort by zone name."
+            end
+            return "Dungeon", "Sort by dungeon or activity name."
         end
         return "Role", "Sort by the applicant's primary role."
     elseif sortKey == "class" then
@@ -54,7 +72,12 @@ local function GetHeaderTooltipData(sortKey)
         end
         return "Class", "Sort by the applicant's class."
     elseif sortKey == "spec" then
-        if isBrowser then return nil, nil end  -- hidden in browser
+        if isBrowser then
+            if IsRaidBrowserMode() then
+                return "Difficulty", "Sort by raid difficulty."
+            end
+            return nil, nil  -- hidden in non-raid browser
+        end
         return "Spec", "Sort by the applicant's specialization."
     elseif sortKey == "ilvl" then
         if isBrowser then
@@ -64,7 +87,10 @@ local function GetHeaderTooltipData(sortKey)
     elseif sortKey == "rating" then
         local modeConfig = GetModeConfig()
         if listingMode == "raid" or listingMode == "legacy_raid" then
-            return modeConfig.ratingLabel, isBrowser and "Sort by raid difficulty or raid metric for the listing." or "Sort by raid progress for the applicant."
+            if isBrowser then
+                return "Kills", "Sort by boss kills. Shows how many raid bosses the group leader has defeated in this lockout (e.g. 4/8)."
+            end
+            return modeConfig.ratingLabel, "Sort by raid progress for the applicant."
         elseif listingMode == "rated_pvp" or listingMode == "pvp" then
             return modeConfig.ratingLabel, "Sort by PVP rating."
         end
@@ -92,6 +118,12 @@ end
 
 local function IsBrowserMode()
     return addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
+end
+
+IsRaidBrowserMode = function()
+    if not IsBrowserMode() then return false end
+    local m = (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
+    return m == "raid" or m == "legacy_raid"
 end
 
 local scrollFrame = CreateFrame("ScrollFrame", "OakLFGScrollFrame", OAK_LFG, "UIPanelScrollFrameTemplate")
@@ -362,8 +394,9 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
             valB = ((bCounts.TANK or 0) * 100) + ((bCounts.HEALER or 0) * 10) + (bCounts.DAMAGER or 0)
         elseif sortBy == "rating" then
             if listingMode == "raid" or listingMode == "legacy_raid" then
-                valA = (grpA.raidProgress and grpA.raidProgress.sortValue) or 0
-                valB = (grpB.raidProgress and grpB.raidProgress.sortValue) or 0
+                -- Sort by actual boss kills shown in the Kills column
+                valA = tonumber(grpA.raidListing and grpA.raidListing.bossesKilled) or 0
+                valB = tonumber(grpB.raidListing and grpB.raidListing.bossesKilled) or 0
             else
                 valA, valB = grpA.rating or 0, grpB.rating or 0
             end
@@ -460,19 +493,51 @@ local BR_RATING  = RowColumn(B_RATING)
 local BR_AGE     = RowColumn(B_AGE)
 local BR_NOTE    = RowColumn(B_NOTE)
 
+-- Raid browser column constants: Raid | Difficulty | Comp | Title | Kills | Age | Notes
+local B_RAID_NAME  = { x = 10,  w = 120, align = "LEFT"   }  -- [10,  130]
+local B_RAID_DIFF  = { x = 130, w = 65,  align = "CENTER" }  -- [130, 195]
+local B_RAID_COMP  = { x = 195, w = 103, align = "CENTER" }  -- [195, 298]
+local B_RAID_TITLE = { x = 298, w = 107, align = "LEFT"   }  -- [298, 405]
+local B_RAID_KILLS = { x = 405, w = 50,  align = "CENTER" }  -- [405, 455]
+local B_RAID_AGE   = { x = 455, w = 45,  align = "CENTER" }  -- [455, 500]
+local B_RAID_NOTE  = { x = 500, w = 105, align = "LEFT"   }  -- [500, 605]
+local BR_RAID_NAME  = RowColumn(B_RAID_NAME)
+local BR_RAID_DIFF  = RowColumn(B_RAID_DIFF)
+local BR_RAID_COMP  = RowColumn(B_RAID_COMP)
+local BR_RAID_TITLE = RowColumn(B_RAID_TITLE)
+local BR_RAID_KILLS = RowColumn(B_RAID_KILLS)
+local BR_RAID_AGE   = RowColumn(B_RAID_AGE)
+local BR_RAID_NOTE  = RowColumn(B_RAID_NOTE)
+
+-- File-scope comp slot sizing (also used in CreateRow and RepositionCompSlots)
+local COMP_SLOT_SIZE    = 18
+local COMP_SLOT_ICON    = 13
+local COMP_SLOT_SPACING = 20
+local COMP_TOTAL_SPAN   = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 98px
+
 local headers = {}
 local keyHeader
 function addonTable.UpdateHeaderVisuals()
     local modeConfig = GetModeConfig()
     local showSecondaryMetric = UsesSecondaryMetricColumn()
     local isBrowser = IsBrowserMode()
+    local isRaidBrowser = IsRaidBrowserMode()
+
     local browserColumns = {
         role   = B_DUNGEON,
         class  = B_TITLE,
-        spec   = nil,       -- hidden in browser (Style removed)
+        spec   = nil,       -- hidden in non-raid browser
         ilvl   = B_COMP,    -- "Comp" in browser
         rating = B_RATING,
         key    = B_AGE,     -- "Age" in browser
+    }
+    local raidBrowserColumns = {
+        role   = B_RAID_NAME,
+        class  = B_RAID_TITLE,
+        spec   = B_RAID_DIFF,   -- "Difficulty" in raid browser
+        ilvl   = B_RAID_COMP,
+        rating = B_RAID_KILLS,
+        key    = B_RAID_AGE,
     }
     local defaultColumns = {
         role = C_ROLE,
@@ -484,7 +549,15 @@ function addonTable.UpdateHeaderVisuals()
     }
 
     for _, header in ipairs(headers) do
-        local column = (isBrowser and browserColumns[header.sortKey]) or defaultColumns[header.sortKey]
+        local column
+        if isRaidBrowser then
+            column = raidBrowserColumns[header.sortKey]
+        elseif isBrowser then
+            column = browserColumns[header.sortKey]
+        else
+            column = defaultColumns[header.sortKey]
+        end
+
         if column then
             header:ClearAllPoints()
             header:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", column.x, HEADER_TOP_OFFSET)
@@ -497,9 +570,13 @@ function addonTable.UpdateHeaderVisuals()
             header.text:SetJustifyH(column.align == "LEFT" and "LEFT" or "CENTER")
         end
 
-        -- In browser: hide "spec" (Style removed), always show "key" as "Age"
+        -- Visibility: spec shows in raid browser only; always show in applicant mode
         if isBrowser and header.sortKey == "spec" then
-            header:Hide()
+            if isRaidBrowser then
+                header:Show()
+            else
+                header:Hide()
+            end
         elseif header.sortKey == "key" then
             if isBrowser or showSecondaryMetric then
                 header:Show()
@@ -510,8 +587,13 @@ function addonTable.UpdateHeaderVisuals()
             header:Show()
         end
 
+        -- Text labels
         if header.sortKey == "rating" then
-            header.text:SetText(modeConfig.ratingLabel)
+            if isRaidBrowser then
+                header.text:SetText("Kills")
+            else
+                header.text:SetText(modeConfig.ratingLabel)
+            end
         elseif header.sortKey == "key" then
             if isBrowser then
                 header.text:SetText(L["Age"])
@@ -519,11 +601,34 @@ function addonTable.UpdateHeaderVisuals()
                 header.text:SetText(modeConfig.keyLabel)
             end
         elseif isBrowser and header.sortKey == "role" then
-            header.text:SetText(L["Dungeon"])
+            if isRaidBrowser then
+                header.text:SetText("Raid")
+            elseif GetListingMode() == "delve" then
+                header.text:SetText("Delve")
+            elseif GetListingMode() == "generic" or GetListingMode() == "pvp" then
+                -- Generic/pvp covers Custom Groups (shows Custom PvE/PvP activity types)
+                -- and Questing (shows zone names). Distinguish by examining the first result.
+                local ctxInfo = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.activityInfo
+                local firstResult = addonTable.SearchResults and addonTable.SearchResults[1]
+                local hint = strlower(
+                    (ctxInfo and (ctxInfo.fullName or ctxInfo.shortName or ""))
+                    or (firstResult and (firstResult.activityName or firstResult.dungeonName or ""))
+                    or ""
+                )
+                if hint:find("custom", 1, true) or GetListingMode() == "pvp" then
+                    header.text:SetText("Activity")
+                else
+                    header.text:SetText("Zone")
+                end
+            else
+                header.text:SetText(L["Dungeon"])
+            end
         elseif isBrowser and header.sortKey == "class" then
             header.text:SetText(L["Title"])
         elseif isBrowser and header.sortKey == "ilvl" then
             header.text:SetText(L["Comp"])
+        elseif isRaidBrowser and header.sortKey == "spec" then
+            header.text:SetText("Difficulty")
         else
             header.text:SetText(header.baseText)
         end
@@ -595,7 +700,7 @@ end
 
 local function GetCurrentNoteColumn()
     if IsBrowserMode() then
-        return B_NOTE
+        return IsRaidBrowserMode() and B_RAID_NOTE or B_NOTE
     end
 
     if UsesSecondaryMetricColumn() then
@@ -703,7 +808,11 @@ local function UpdateNotesToggleLayout()
     if hideNotes then
         notesToggleBtn:ClearAllPoints()
         notesToggleBtn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", xOffset, HEADER_TOP_OFFSET)
-        notesToggleBtn:SetWidth(55)
+        -- Clamp width so the button never overflows past the frame's right edge.
+        -- In raid-browser collapsed mode the note column starts at x=500 inside a
+        -- 535px frame, leaving only 33px — the old hard-coded 55 caused overflow.
+        local maxW = GetTargetFrameWidth() - xOffset - 2
+        notesToggleBtn:SetWidth(math.min(55, math.max(20, maxW)))
         -- Left-justify the "Notes" label in collapsed state
         notesToggleBtn.text:ClearAllPoints()
         notesToggleBtn.text:SetPoint("LEFT", notesToggleBtn, "LEFT", 6, 0)
@@ -972,14 +1081,35 @@ local function GetBrowserSecondaryDisplay(result)
     return (result.keyLevel and result.keyLevel > 0) and ("+" .. result.keyLevel) or "--"
 end
 
+local function RepositionCompSlots(row, col)
+    local slotOffset = math.floor((col.w - COMP_TOTAL_SPAN) / 2)
+    for index, slot in ipairs(row.compSlots) do
+        slot:ClearAllPoints()
+        slot:SetPoint("LEFT", row, "LEFT", col.x + slotOffset + ((index - 1) * COMP_SLOT_SPACING), 0)
+    end
+end
+
 local function ConfigureBrowserRowLayout(row)
     local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
     ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_DUNGEON, 5, regionMarkup)
-    -- comp slots are positioned at BR_COMP.x (handled separately via compSlots anchoring)
+    RepositionCompSlots(row, BR_COMP)
     ConfigureTextColumn(row.nameText, row, BR_TITLE, 5)
     ConfigureTextColumn(row.ratingText, row, BR_RATING)
     if row.ageText then ConfigureTextColumn(row.ageText, row, BR_AGE) end
     ConfigureTextColumn(row.noteText, row, BR_NOTE, 5)
+end
+
+local function ConfigureRaidBrowserRowLayout(row)
+    local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
+    -- Raid | Difficulty | Comp | Title | Kills | Age | Notes
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_RAID_NAME, 5, regionMarkup)
+    ConfigureTextColumn(row.specText, row, BR_RAID_DIFF)
+    -- ilvlText repurposed as raid comp (Tank/Healer/DPS counts); comp slots hidden in raid mode
+    ConfigureTextColumn(row.ilvlText, row, BR_RAID_COMP)
+    ConfigureTextColumn(row.nameText, row, BR_RAID_TITLE, 5)
+    ConfigureTextColumn(row.ratingText, row, BR_RAID_KILLS)
+    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_RAID_AGE) end
+    ConfigureTextColumn(row.noteText, row, BR_RAID_NOTE, 5)
 end
 
 local function ConfigureApplicantRowLayout(row)
@@ -1022,6 +1152,10 @@ local ROLE_ICON = {
     HEALER  = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:13:13:0:0:64:64:20:39:1:20|t ",
     DAMAGER = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:13:13:0:0:64:64:20:39:22:41|t ",
 }
+-- Text tag appended to the group leader's entry in the tooltip.
+-- Plain text is used intentionally — WoW texture/atlas paths for the leader crown
+-- vary across versions and font rendering of Unicode glyphs is inconsistent.
+local LEADER_CROWN = " - Leader"
 
 -- Append RIO milestones (Best Run, Best for Dungeon, Timed X-Y Runs) without
 -- the "Raider.IO M+ Score" section header — the caller adds the header with the score value.
@@ -1125,21 +1259,97 @@ local function BuildBrowserGroupTooltip(result)
     -- ── Member list ───────────────────────────────────────────────────────────
     if result.players and #result.players > 0 then
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Members:", 1, 0.82, 0)
-        for i, player in ipairs(result.players) do
-            local cc = player.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[player.class]
-            local r, g, b = cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1
-            local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[player.class])
-                              or player.class or "?"
-            local roleIcon = ROLE_ICON[player.role] or ROLE_ICON.DAMAGER
-            local line
-            if player.specName and player.specName ~= "" then
-                line = roleIcon .. className .. " - " .. player.specName
-            else
-                line = roleIcon .. className
+        GameTooltip:AddLine("Members: (" .. #result.players .. ")", 1, 0.82, 0)
+        local isRaidContext = (listingMode == "raid" or listingMode == "legacy_raid" or listingMode == "open_world")
+        if isRaidContext and #result.players > 5 then
+            -- Raid: grouped display (spec×count) to keep tooltip compact.
+            -- Show the group leader first with a crown, then group the rest.
+            local leaderPlayer = result.players[1]
+            if leaderPlayer then
+                local cc = leaderPlayer.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[leaderPlayer.class]
+                local r, g, b = cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1
+                local roleIcon = ROLE_ICON[leaderPlayer.role] or ROLE_ICON.DAMAGER
+                local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[leaderPlayer.class])
+                                  or leaderPlayer.class or "?"
+                local specPart = (leaderPlayer.specName and leaderPlayer.specName ~= "")
+                                 and (" - " .. leaderPlayer.specName) or ""
+                GameTooltip:AddLine(roleIcon .. className .. specPart .. LEADER_CROWN, r, g, b)
             end
-            if i == 1 then line = line .. " ★" end   -- leader slot
-            GameTooltip:AddLine(line, r, g, b)
+            -- Group remaining members by role+class+spec
+            local counts = {}
+            local order  = {}
+            for i = 2, #result.players do
+                local player = result.players[i]
+                local specKey = (player.role or "DAMAGER") .. "|" .. (player.class or "?") .. "|" .. (player.specName or "")
+                if not counts[specKey] then
+                    counts[specKey] = { role = player.role, class = player.class, specName = player.specName or "", count = 0 }
+                    table.insert(order, specKey)
+                end
+                counts[specKey].count = counts[specKey].count + 1
+            end
+            -- Sort: class first (keeps Holy/Ret Paladins together, etc.),
+            -- then role within class, then spec name for a stable order.
+            table.sort(order, function(a, b)
+                local ca = counts[a].class or ""
+                local cb = counts[b].class or ""
+                if ca ~= cb then return ca < cb end
+                local wa = roleWeights[counts[a].role] or 4
+                local wb = roleWeights[counts[b].role] or 4
+                if wa ~= wb then return wa < wb end
+                return (counts[a].specName or "") < (counts[b].specName or "")
+            end)
+            for _, key in ipairs(order) do
+                local entry = counts[key]
+                local cc = RAID_CLASS_COLORS and entry.class and RAID_CLASS_COLORS[entry.class]
+                local r, g, b = cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1
+                local roleIcon = ROLE_ICON[entry.role] or ROLE_ICON.DAMAGER
+                local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[entry.class])
+                                  or entry.class or "?"
+                local specPart  = entry.specName ~= "" and (" - " .. entry.specName) or ""
+                -- Use " x3" style count (Lua 5.1 has no \x hex escapes)
+                local countPart = entry.count > 1 and (" x" .. entry.count) or ""
+                GameTooltip:AddLine(roleIcon .. className .. specPart .. countPart, r, g, b)
+            end
+        else
+            -- Non-raid / small group: leader shown first with crown, rest sorted by class.
+            local function RenderMemberLine(player, isLeader)
+                local cc = player.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[player.class]
+                local r, g, b = cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1
+                local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[player.class])
+                                  or player.class or "?"
+                local roleIcon = ROLE_ICON[player.role] or ROLE_ICON.DAMAGER
+                local line
+                if player.specName and player.specName ~= "" then
+                    line = roleIcon .. className .. " - " .. player.specName
+                else
+                    line = roleIcon .. className
+                end
+                if isLeader then line = line .. LEADER_CROWN end
+                GameTooltip:AddLine(line, r, g, b)
+            end
+            -- Leader always first
+            if result.players[1] then
+                RenderMemberLine(result.players[1], true)
+            end
+            -- Remaining members sorted by class, then role, then spec
+            if #result.players > 1 then
+                local rest = {}
+                for i = 2, #result.players do
+                    table.insert(rest, result.players[i])
+                end
+                table.sort(rest, function(a, b)
+                    local ca = a.class or ""
+                    local cb = b.class or ""
+                    if ca ~= cb then return ca < cb end
+                    local wa = roleWeights[a.role] or 4
+                    local wb = roleWeights[b.role] or 4
+                    if wa ~= wb then return wa < wb end
+                    return (a.specName or "") < (b.specName or "")
+                end)
+                for _, player in ipairs(rest) do
+                    RenderMemberLine(player, false)
+                end
+            end
         end
     end
 
@@ -1450,13 +1660,8 @@ local function CreateRow(index, parentOverride, prevRowOverride)
 
     row.compSlots = {}
     local compRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
-    -- 18px slot (background square), 20px center-to-center spacing
-    -- Role icon is 13px centered inside, leaving a 2.5px class-color border on each side
-    local COMP_SLOT_SIZE    = 18
-    local COMP_SLOT_ICON    = 13   -- icon inset inside the colored background square
-    local COMP_SLOT_SPACING = 20
-    local compTotalSpan = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 4*20+18 = 98px
-    local compSlotOffset = math.floor((BR_COMP.w - compTotalSpan) / 2)
+    -- COMP_SLOT_SIZE/ICON/SPACING are file-scope constants
+    local compSlotOffset = math.floor((BR_COMP.w - COMP_TOTAL_SPAN) / 2)
     for index, role in ipairs(compRoles) do
         local slot = CreateFrame("Frame", nil, row, "BackdropTemplate")
         slot:SetSize(COMP_SLOT_SIZE, COMP_SLOT_SIZE)
@@ -1465,8 +1670,6 @@ local function CreateRow(index, parentOverride, prevRowOverride)
         slot:SetBackdropBorderColor(0, 0, 0, 1)
         slot:SetBackdropColor(0.10, 0.10, 0.12, 0.95)
         slot.icon = slot:CreateTexture(nil, "OVERLAY")
-        -- Icon is smaller than the slot so the class-colored backdrop is visible
-        -- around all edges, producing the "role badge on class-colored tile" look.
         slot.icon:SetSize(COMP_SLOT_ICON, COMP_SLOT_ICON)
         slot.icon:SetPoint("CENTER", slot, "CENTER", 0, 0)
         slot.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
@@ -1568,13 +1771,18 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         addonTable.CurrentIsAscending = false
     end
 
+    local isRaidBrowser = IsRaidBrowserMode()
     for _, row in ipairs(rows) do
         if row.keyText then
             if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
         end
         if row.noteText then
             if isBrowser then
-                ConfigureBrowserRowLayout(row)
+                if isRaidBrowser then
+                    ConfigureRaidBrowserRowLayout(row)
+                else
+                    ConfigureBrowserRowLayout(row)
+                end
             else
                 ConfigureApplicantRowLayout(row)
             end
@@ -1589,11 +1797,19 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
             if isBrowser then row.roleIcon:Hide() else row.roleIcon:Show() end
         end
         if row.ilvlText then
-            if isBrowser then row.ilvlText:Hide() else row.ilvlText:Show() end
+            if isBrowser then
+                if isRaidBrowser then row.ilvlText:Show() else row.ilvlText:Hide() end
+            else
+                row.ilvlText:Show()
+            end
         end
         if row.specText then
-            -- Hidden in browser (Style column removed); visible in applicant mode
-            if isBrowser then row.specText:Hide() else row.specText:Show() end
+            -- In non-raid browser: hidden; in raid browser: Difficulty column; in applicant: Spec column
+            if isBrowser then
+                if isRaidBrowser then row.specText:Show() else row.specText:Hide() end
+            else
+                row.specText:Show()
+            end
         end
         if row.keyText then
             -- In browser, keyText is replaced by ageText; in applicant, depends on mode
@@ -1610,17 +1826,24 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         end
         if row.compSlots then
             for _, slot in pairs(row.compSlots) do
-                if isBrowser then slot:Show() else slot:Hide() end
+                -- Raid browser: comp slots hidden (ilvlText shows role counts instead)
+                if isBrowser and isRaidBrowser then
+                    slot:Hide()
+                elseif isBrowser then
+                    slot:Show()
+                else
+                    slot:Hide()
+                end
             end
         end
-        -- In browser: center the apply/cancel button in collapsed notes column or right edge
+        -- In browser: pin the apply/cancel button to the row's right edge.
+        -- We intentionally do NOT use noteCol.x + offset here because in raid-browser
+        -- collapsed mode BR_RAID_NOTE.x + 27 = 517 which exceeds the 500px scrollChild
+        -- width (535px frame − 10 left − 25 scrollbar), clipping the button off-screen.
+        -- Note text is left-justified and never reaches the far-right anyway.
         if isBrowser and row.inviteBtn then
             row.inviteBtn:ClearAllPoints()
-            if hideNotes then
-                row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 27, 0)
-            else
-                row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
-            end
+            row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
         end
     end
 
@@ -1628,24 +1851,30 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
     for _, row in ipairs(stickyRows) do
         if row.keyText then row.keyText:Hide() end
         if row.noteText then
-            ConfigureBrowserRowLayout(row)
+            if isRaidBrowser then
+                ConfigureRaidBrowserRowLayout(row)
+            else
+                ConfigureBrowserRowLayout(row)
+            end
             if hideNotes then row.noteText:Hide() else row.noteText:Show() end
         end
         if row.dungeonText then row.dungeonText:Show() end
         if row.roleIcon then row.roleIcon:Hide() end
-        if row.ilvlText then row.ilvlText:Hide() end
-        if row.specText then row.specText:Hide() end
+        if row.ilvlText then
+            if isRaidBrowser then row.ilvlText:Show() else row.ilvlText:Hide() end
+        end
+        if row.specText then
+            if isRaidBrowser then row.specText:Show() else row.specText:Hide() end
+        end
         if row.ageText then row.ageText:Show() end
         if row.compSlots then
-            for _, slot in pairs(row.compSlots) do slot:Show() end
+            for _, slot in pairs(row.compSlots) do
+                if isRaidBrowser then slot:Hide() else slot:Show() end
+            end
         end
         if row.inviteBtn then
             row.inviteBtn:ClearAllPoints()
-            if hideNotes then
-                row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 27, 0)
-            else
-                row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
-            end
+            row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
         end
     end
 
@@ -1693,38 +1922,78 @@ local function PopulateBrowserRow(row, result, isAltColor)
 
     row.bg:SetColorTexture(GetBrowserRowColor(result, isAltColor))
 
-    ConfigureBrowserRowLayout(row)
+    -- Use the search context mode to determine layout: world bosses have result.mode="open_world"
+    -- but should still render with the raid column layout when searched in a raid context.
+    local searchCtxMode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode or "generic"
+    local isRaidMode = (result.mode == "raid" or result.mode == "legacy_raid")
+                    or (IsBrowserMode() and (searchCtxMode == "raid" or searchCtxMode == "legacy_raid"))
+    local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
+
+    if isRaidMode then
+        ConfigureRaidBrowserRowLayout(row)
+    else
+        ConfigureBrowserRowLayout(row)
+    end
     row.dungeonText:Show()
     row.roleIcon:Hide()
-    row.ilvlText:Hide()
-    row.specText:Hide()
+    if not isRaidMode then row.ilvlText:Hide() end
     row.keyText:Hide()
     if row.ageText then row.ageText:Show() end
 
-    local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
+    -- specText: hidden in non-raid browser, shown as Difficulty in raid browser
+    if isRaidMode then
+        row.specText:SetJustifyH("CENTER")
+        row.specText:Show()
+    else
+        row.specText:Hide()
+    end
+
     if row.inviteBtn then
+        -- Always anchor to right edge in browser mode; noteCol.x + offset is unreliable
+        -- in raid-browser collapsed mode because BR_RAID_NOTE.x + 27 = 517 exceeds the
+        -- 500px scrollChild width, pushing the button completely off-screen.
         row.inviteBtn:ClearAllPoints()
-        if hideNotes then
-            row.inviteBtn:SetPoint("CENTER", row, "LEFT", BR_NOTE.x + 27, 0)
-        else
-            row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+        row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+    end
+    if isRaidMode then
+        -- Raid mode: hide comp slots, show Tank/Healer/DPS counts in ilvlText
+        for _, slot in pairs(row.compSlots) do slot:Hide() end
+        local rc = result.roleCounts or {}
+        local tanks   = tonumber(rc.TANK)    or 0
+        local healers = tonumber(rc.HEALER)  or 0
+        local dps     = tonumber(rc.DAMAGER) or 0
+        row.ilvlText:SetWordWrap(false)
+        row.ilvlText:SetText(ROLE_ICON.TANK .. tanks .. "  " .. ROLE_ICON.HEALER .. healers .. "  " .. ROLE_ICON.DAMAGER .. dps)
+        row.ilvlText:Show()
+    else
+        -- Non-raid browser mode: show comp slots, hide ilvlText
+        row.ilvlText:Hide()
+        local setupSummary = GetBrowserSetupSummary(result)
+        for idx, slotInfo in ipairs(setupSummary) do
+            row.compSlots[idx]:Show()
+            SetBrowserCompSlot(row.compSlots[idx], slotInfo.role, slotInfo.class, slotInfo.filled)
         end
     end
-    for _, slot in pairs(row.compSlots) do
-        slot:Show()
-    end
 
-    local setupSummary = GetBrowserSetupSummary(result)
-    for idx, slotInfo in ipairs(setupSummary) do
-        SetBrowserCompSlot(row.compSlots[idx], slotInfo.role, slotInfo.class, slotInfo.filled)
-    end
+    if isRaidMode then
+        -- Title column: pure listing title (difficulty is its own column now)
+        local title = (result.displayName ~= "" and result.displayName)
+                   or (result.activityName ~= "" and result.activityName) or "--"
+        row.nameText:SetText(title)
 
-    if GetListingMode() == "raid" or GetListingMode() == "legacy_raid" then
-        row.nameText:SetText(GetRaidBrowserTitle(result))
+        -- Difficulty column (specText): blank for world bosses with no difficulty
+        local diffLabel = result.raidListing and result.raidListing.difficultyLabel or ""
+        row.specText:SetText(diffLabel ~= "" and GetColoredRaidDifficultyLabel(diffLabel) or "")
+
+        -- Kills column: Core already formats progressText as "X/Y" or "N"
+        local rl = result.raidListing
+        local killsText = (rl and rl.progressText and rl.progressText ~= "" and rl.progressText ~= "--")
+                          and rl.progressText or "--"
+        row.ratingText:SetText(killsText)
     else
         row.nameText:SetText(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--"))
+        row.ratingText:SetText(GetBrowserRatingDisplay(result))
     end
-    row.ratingText:SetText(GetBrowserRatingDisplay(result))
 
     if row.ageText then
         if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then

@@ -199,7 +199,10 @@ local function ScheduleSearchRefresh()
             -- Re-render the filter panel AFTER FetchSearchResultData has updated
             -- mode and SearchResults — this is the only safe place to do it so
             -- GetBrowserMode() returns the correct value.
-            if addonTable.UpdateBrowserFilterPanel then
+            -- Guard: skip if a dropdown is currently open (rebuilding the panel
+            -- would call HideAllBrowserDropdowns and dismiss the list mid-click).
+            local dropdownOpen = addonTable.IsBrowserDropdownOpen and addonTable.IsBrowserDropdownOpen()
+            if addonTable.UpdateBrowserFilterPanel and not dropdownOpen then
                 addonTable.UpdateBrowserFilterPanel()
             end
         end
@@ -1031,19 +1034,85 @@ function addonTable.GetAvailableBrowserActivities()
     end
 
     -- ── All other modes (raid, delve, generic): build from search results ─────────
+    local isRaidContext = (mode == "raid" or mode == "legacy_raid")
+
+    -- Helper: strip difficulty prefix from a raid activity label.
+    -- WoW stores raid difficulties as activity shortNames, so activityFilterLabel is
+    -- often "Heroic The Voidspire" or "Normal Amirdrassil". We strip the prefix to get
+    -- the clean instance name used as the filter key.
+    local function StripRaidDifficultyPrefix(rawLabel, diffLabel)
+        if diffLabel and diffLabel ~= "" and rawLabel ~= "" then
+            -- Escape any regex special chars in difficulty label
+            local escaped = diffLabel:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
+            local stripped = rawLabel:match("^" .. escaped .. "%s+(.+)$")
+            if stripped and stripped ~= "" then return stripped end
+        end
+        -- Fallback: strip known English difficulty prefixes
+        for _, prefix in ipairs({"Mythic ", "Heroic ", "Normal ", "LFR ", "Looking for Raid "}) do
+            if rawLabel:sub(1, #prefix) == prefix then return rawLabel:sub(#prefix + 1) end
+        end
+        return rawLabel
+    end
+
     for _, result in ipairs(addonTable.SearchResults or {}) do
-        local label = result.activityFilterLabel or result.activityName or ""
-        local filterKey = result.activityFilterKey or strlower(label)
-        if label ~= "" and filterKey ~= "" and not seen[filterKey] then
-            seen[filterKey] = true
-            local normalizedKey = NormalizeSearchScoreTargetLabel(label)
-            table.insert(activityEntries, {
-                activityID   = result.activityID,
-                label        = label,
-                filterKey    = filterKey,
-                activityInfo = result.activityInfo,
-                scoreTarget  = scoreTargets[normalizedKey] or nil,
-            })
+        -- For raid context: include raid/legacy_raid AND open_world (world bosses),
+        -- but skip everything else (prevents M+ dungeon names from leaking in).
+        local modeOk = not isRaidContext
+            or result.mode == "raid"
+            or result.mode == "legacy_raid"
+            or result.mode == "open_world"
+
+        if modeOk then
+            local rawLabel = result.activityFilterLabel or result.activityName or ""
+            local label
+            if isRaidContext and result.raidListing then
+                -- Strip difficulty prefix so "Heroic The Voidspire" → "The Voidspire"
+                local diff = result.raidListing.difficultyLabel or ""
+                label = StripRaidDifficultyPrefix(rawLabel, diff)
+            else
+                label = rawLabel
+            end
+            local filterKey = strlower(label)
+            if label ~= "" and filterKey ~= "" and not seen[filterKey] then
+                seen[filterKey] = true
+                local normalizedKey = NormalizeSearchScoreTargetLabel(label)
+                table.insert(activityEntries, {
+                    activityID   = result.activityID,
+                    label        = label,
+                    filterKey    = filterKey,
+                    activityInfo = result.activityInfo,
+                    scoreTarget  = scoreTargets[normalizedKey] or nil,
+                })
+            end
+        end
+    end
+
+    -- In raid context, also pre-populate world boss activities even when no groups
+    -- are currently advertised. C_LFGList.GetAvailableActivities returns every
+    -- activity in the selected category, including world bosses with zero listings.
+    if isRaidContext and C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetActivityInfoTable then
+        local categoryID = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryID
+        if categoryID then
+            local avail = C_LFGList.GetAvailableActivities(categoryID) or {}
+            for _, actID in ipairs(avail) do
+                local actInfo = C_LFGList.GetActivityInfoTable(actID)
+                if actInfo then
+                    local actMode = GetListingMode(actInfo)
+                    if actMode == "open_world" then
+                        local rawLabel = CleanActivityLabel(actInfo.fullName or actInfo.shortName or "")
+                        local filterKey = strlower(rawLabel)
+                        if rawLabel ~= "" and filterKey ~= "" and not seen[filterKey] then
+                            seen[filterKey] = true
+                            table.insert(activityEntries, {
+                                activityID   = actID,
+                                label        = rawLabel,
+                                filterKey    = filterKey,
+                                activityInfo = actInfo,
+                            })
+                        end
+                    end
+                end
+            end
         end
     end
 

@@ -164,6 +164,25 @@ local function ResultMatchesSelectedActivities(result, filters)
         return true
     end
 
+    -- For raid/world-boss results the filterKey is the activity label with the difficulty
+    -- prefix stripped (e.g. "Heroic The Voidspire" → "the voidspire").
+    local isRaidResult = (result.mode == "raid" or result.mode == "legacy_raid" or result.mode == "open_world")
+    if isRaidResult and result.raidListing then
+        local rawLabel = result.activityFilterLabel or result.activityName or ""
+        local diff = result.raidListing.difficultyLabel or ""
+        local label = rawLabel
+        if diff ~= "" and rawLabel ~= "" then
+            local escaped = diff:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
+            local stripped = rawLabel:match("^" .. escaped .. "%s+(.+)$")
+            if stripped and stripped ~= "" then label = stripped end
+        else
+            for _, prefix in ipairs({"Mythic ", "Heroic ", "Normal ", "LFR "}) do
+                if rawLabel:sub(1, #prefix) == prefix then label = rawLabel:sub(#prefix + 1); break end
+            end
+        end
+        local filterKey = strlower(label)
+        return filterKey ~= "" and filters.selectedActivities[filterKey] == true
+    end
     return result.activityFilterKey and filters.selectedActivities[result.activityFilterKey] == true
 end
 
@@ -292,22 +311,42 @@ local function BuildSavedRaidLockoutMap()
     return lockouts
 end
 
+-- Parses expressions like "1-2", "<3", ">1", ">=2", "<=5", "4" against a numeric value.
+local function ParseNumericRangeFilter(filterStr, value)
+    if not filterStr or filterStr == "" then return true end
+    filterStr = filterStr:match("^%s*(.-)%s*$")
+    if filterStr == "" then return true end
+    local v = tonumber(value) or 0
+    local lo, hi = filterStr:match("^(%d+)%-(%d+)$")
+    if lo then return v >= tonumber(lo) and v <= tonumber(hi) end
+    local lte = filterStr:match("^<=(%d+)$")
+    if lte then return v <= tonumber(lte) end
+    local lt  = filterStr:match("^<(%d+)$")
+    if lt  then return v < tonumber(lt) end
+    local gte = filterStr:match("^>=(%d+)$")
+    if gte then return v >= tonumber(gte) end
+    local gt  = filterStr:match("^>(%d+)$")
+    if gt  then return v > tonumber(gt) end
+    local exact = tonumber(filterStr)
+    if exact then return v == exact end
+    return true
+end
+
 local function ResultMatchesRaidBossCount(result, filters)
     local listingMode = result.mode or GetBrowserMode()
-    if listingMode ~= "raid" and listingMode ~= "legacy_raid" then
-        return true
-    end
-
-    local requiredBosses = tonumber(filters.raidBossesMin)
-    if not requiredBosses then
-        return true
-    end
-
+    if listingMode ~= "raid" and listingMode ~= "legacy_raid" then return true end
     local bossesKilled = tonumber(result.raidListing and result.raidListing.bossesKilled) or 0
-    if requiredBosses == 0 then
-        return bossesKilled == 0
-    end
-    return bossesKilled >= requiredBosses
+    return ParseNumericRangeFilter(filters.raidBossKills or "", bossesKilled)
+end
+
+local function ResultMatchesRaidRoleCounts(result, filters)
+    local listingMode = result.mode or GetBrowserMode()
+    if listingMode ~= "raid" and listingMode ~= "legacy_raid" then return true end
+    local rc = result.roleCounts or {}
+    if not ParseNumericRangeFilter(filters.raidTanks   or "", tonumber(rc.TANK)    or 0) then return false end
+    if not ParseNumericRangeFilter(filters.raidHealers or "", tonumber(rc.HEALER)  or 0) then return false end
+    if not ParseNumericRangeFilter(filters.raidDps     or "", tonumber(rc.DAMAGER) or 0) then return false end
+    return true
 end
 
 local function ResultMatchesRaidLockout(result, filters)
@@ -325,7 +364,17 @@ local function ResultMatchesRaidLockout(result, filters)
         return false
     end
 
-    local instanceKey = NormalizeInstanceKey(raidListing.raidName or result.dungeonName or result.activityFilterLabel or "")
+    -- raidListing.raidName = activityInfo.shortName which WoW sets to the difficulty tag.
+    -- Strip difficulty prefix from activityFilterLabel to get the actual instance name.
+    local rawLabel = result.activityFilterLabel or result.dungeonName or ""
+    local diff = raidListing.difficultyLabel or ""
+    local strippedLabel = rawLabel
+    if diff ~= "" and rawLabel ~= "" then
+        local escaped = diff:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
+        local s = rawLabel:match("^" .. escaped .. "%s+(.+)$")
+        if s and s ~= "" then strippedLabel = s end
+    end
+    local instanceKey = NormalizeInstanceKey(strippedLabel)
     local difficultyToken = raidListing.difficultyToken
     if instanceKey == "" or not difficultyToken then
         return false
@@ -490,12 +539,9 @@ function addonTable.ResultPassesBrowserFilters(result)
     if filters.needsBrez and result.hasBrez then
         return false
     end
-    if not ResultMatchesRaidBossCount(result, filters) then
-        return false
-    end
-    if not ResultMatchesRaidLockout(result, filters) then
-        return false
-    end
+    if not ResultMatchesRaidBossCount(result, filters) then return false end
+    if not ResultMatchesRaidRoleCounts(result, filters) then return false end
+    if not ResultMatchesRaidLockout(result, filters) then return false end
 
     return true
 end
@@ -560,9 +606,9 @@ local function RefreshFilters()
 end
 
 local function RefreshBrowserFilters()
-    if addonTable.UpdateBrowserFilterPanel then
-        addonTable.UpdateBrowserFilterPanel()
-    end
+    -- Do NOT call UpdateBrowserFilterPanel here — that rebuilds the entire panel
+    -- (including HideAllBrowserDropdowns) and would close any open dropdown mid-selection.
+    -- Panel layout rebuilds are driven by OnShow (mode change) only.
     if addonTable.UpdateDisplay then
         addonTable.UpdateDisplay()
     end
@@ -1151,6 +1197,18 @@ local function HideAllBrowserDropdowns(exceptFrame)
     end
 end
 
+-- Returns true if any browser dropdown list is currently visible.
+-- Used to suppress panel rebuilds (which would close the open dropdown).
+local function IsBrowserDropdownOpen()
+    for _, dropdown in ipairs(activeBrowserDropdowns) do
+        if dropdown.listFrame and dropdown.listFrame:IsShown() then
+            return true
+        end
+    end
+    return false
+end
+addonTable.IsBrowserDropdownOpen = IsBrowserDropdownOpen
+
 function BrowserFilterState()
     OakLFGSorterDB.browserFilters = OakLFGSorterDB.browserFilters or {}
     if OakLFGSorterDB.browserFilters.version ~= BROWSER_FILTER_VERSION then
@@ -1180,6 +1238,10 @@ function BrowserFilterState()
     local f = OakLFGSorterDB.browserFilters
     if f.needsMyClass == nil then f.needsMyClass = false end
     if f.minRating == nil then f.minRating = "" end
+    if f.raidBossKills == nil then f.raidBossKills = "" end
+    if f.raidTanks     == nil then f.raidTanks     = "" end
+    if f.raidHealers   == nil then f.raidHealers   = "" end
+    if f.raidDps       == nil then f.raidDps       = "" end
     local filters = OakLFGSorterDB.browserFilters
     filters.version = BROWSER_FILTER_VERSION
 
@@ -1378,6 +1440,29 @@ local function CreateBrowserNumberBox(parent, filterKey, width)
     return box
 end
 
+local function CreateBrowserRangeBox(parent, filterKey, width)
+    local box = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
+    box:SetSize(width, 20)
+    box:SetAutoFocus(false)
+    box:SetFontObject("OakLFG_FontRegular")
+    box:SetJustifyH("CENTER")
+    box:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+    box:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+    box:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    -- No SetNumeric — allows range expressions like "<3", "1-5", ">2"
+
+    local function Commit()
+        local filters = BrowserFilterState()
+        filters[filterKey] = box:GetText() or ""
+        RefreshBrowserFilters()
+    end
+
+    box:SetScript("OnEnterPressed", function(self) Commit(); self:ClearFocus() end)
+    box:SetScript("OnEditFocusLost", Commit)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    return box
+end
+
 local function GetBrowserDifficultyOptions()
     local mode = GetBrowserMode()
     if mode == "mythic_plus" or mode == "dungeon" then
@@ -1471,6 +1556,45 @@ end, "playstyle", "Any Playstyle")
 
 local difficultyDropdown = CreateBrowserDropdown(browserContent, 188, GetBrowserDifficultyOptions, "difficulty", "Any Difficulty")
 local raidBossesDropdown = CreateBrowserDropdown(browserContent, 188, GetRaidBossOptions, "raidBossesMin", "Any Boss Kills")
+
+-- Raid range filter rows (Boss Kills, Tanks, Healers, DPS)
+local raidRangeRows = {}
+local function CreateRaidRangeRow(filterKey, labelText)
+    local label = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    label:SetText(labelText)
+    label:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+    label:Hide()
+
+    local box = CreateBrowserRangeBox(browserContent, filterKey, 60)
+    box:Hide()
+    box:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(labelText, 1, 1, 1)
+        GameTooltip:AddLine("Enter a number or range expression, then press Enter.", 1, 1, 1, true)
+        GameTooltip:AddLine("Examples:  3  |  1-4  |  <3  |  >=2  |  >0", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    box:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    local resetBtn = addonTable.CreateFlatButton(browserContent, "R", 20)
+    resetBtn.text:SetFontObject("OakLFG_FontSmall")
+    resetBtn:Hide()
+    resetBtn:SetScript("OnClick", function()
+        local filters = BrowserFilterState()
+        filters[filterKey] = ""
+        box:SetText("")
+        RefreshBrowserFilters()
+    end)
+
+    raidRangeRows[filterKey] = { label = label, box = box, resetBtn = resetBtn }
+    return raidRangeRows[filterKey]
+end
+
+CreateRaidRangeRow("raidBossKills", "Boss Kills")
+CreateRaidRangeRow("raidTanks",    "Tanks")
+CreateRaidRangeRow("raidHealers",  "Healers")
+CreateRaidRangeRow("raidDps",      "DPS")
+
 local keyRangeLabel = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 keyRangeLabel:SetText("Key Range")
 keyRangeLabel:SetTextColor(1, 1, 1)
@@ -1723,7 +1847,13 @@ browserResetBtn:SetScript("OnClick", function()
     filters.partyFit = false; filters.needsLust = false
     filters.needsBrez = false; filters.hideDeclined = false
     filters.raidBossesMin = "ANY"; filters.matchMyRaidLockout = false
+    filters.raidBossKills = ""; filters.raidTanks = ""
+    filters.raidHealers = ""; filters.raidDps = ""
     filters.selectedActivities = {}
+    -- Clear raid range input boxes
+    for _, key in ipairs({"raidBossKills", "raidTanks", "raidHealers", "raidDps"}) do
+        if raidRangeRows[key] then raidRangeRows[key].box:SetText("") end
+    end
     -- Wipe ALL Blizzard native advanced filter fields (role, rating, activities)
     if C_LFGList and C_LFGList.SaveAdvancedFilter then
         local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
@@ -1847,6 +1977,9 @@ local function UpdateBrowserActivityButtons(startY)
 
     for _, button in ipairs(browserActivityButtons) do
         button:Hide()
+        -- button.text is a child of browserContent, NOT of button, so we must
+        -- hide it explicitly — hiding the checkbox frame does not cascade to it.
+        if button.text then button.text:Hide() end
         if button.scoreText then button.scoreText:Hide() end
         if button.scoreHitbox then button.scoreHitbox:Hide() end
     end
@@ -1957,10 +2090,8 @@ function addonTable.UpdateBrowserFilterPanel()
     local filters = BrowserFilterState()
     local mode = GetBrowserMode()
     local showDifficulty = BrowserModeUsesDifficulty(mode)
-    local showKeyRange    = BrowserModeUsesKeyRange(mode)
     local showActivityFilters = BrowserModeUsesActivityFilter(mode)
-    local showRaidBosses  = (mode == "raid") or (mode == "legacy_raid")
-    local isRaidMode      = showRaidBosses
+    local isRaidMode = (mode == "raid") or (mode == "legacy_raid")
 
     -- Validate difficulty for current mode
     local validDifficulty = {}
@@ -1972,238 +2103,382 @@ function addonTable.UpdateBrowserFilterPanel()
     end
 
     playstyleDropdown:Hide()
-    HideAllBrowserDropdowns()
+    -- Only close dropdowns during a full panel rebuild if none is currently open.
+    -- Calling HideAllBrowserDropdowns while the user is mid-selection would
+    -- dismiss the list frame and make the difficulty/activity dropdown unusable.
+    if not IsBrowserDropdownOpen() then
+        HideAllBrowserDropdowns()
+    end
+    -- Key range inputs are never shown (Blizzard SearchBox handles queries)
+    keyRangeLabel:Hide(); keyMinBox:Hide(); keyRangeTo:Hide(); keyMaxBox:Hide()
 
     -- Layout constants
-    local COL2_X  = 96   -- right column x offset (relative to browserContent)
+    local COL2_X  = 96   -- right column x offset
     local BTN_W   = 88   -- Refresh / Reset button width
     local BTN_GAP = 6    -- gap between the two buttons
     local ROW_H   = 22   -- standard toggle row height
 
-    -- y tracks the "next available top" (goes negative, WoW UI convention)
-    local y = 0
+    local y = 0  -- tracks next available top (goes negative)
 
-    -- ── 1. Difficulty dropdown ────────────────────────────────────────────────
-    if showDifficulty then
-        difficultyDropdown:ClearAllPoints()
-        difficultyDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-        difficultyDropdown.UpdateText()
-        difficultyDropdown:Show()
-        y = y - 28
-    else
-        difficultyDropdown:Hide()
-    end
+    if isRaidMode then
+        -- ═══════════════════════════════════════════════════════════════════════
+        -- RAID MODE LAYOUT
+        -- Shows: Difficulty, Boss Kills/Tanks/Healers/DPS range inputs, search
+        --        box, Refresh/Reset, Party Fit, Need Lust, Need BRez, Match My
+        --        Lockout, and the Filter Raids activity checklist.
+        -- Hides: all M+-specific controls (role toggles, Min Rating, playstyle).
+        -- ═══════════════════════════════════════════════════════════════════════
 
-    -- ── 2. Raid Boss dropdown (raid mode only) ────────────────────────────────
-    if showRaidBosses then
-        raidBossesDropdown:ClearAllPoints()
-        raidBossesDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-        raidBossesDropdown.UpdateText()
-        raidBossesDropdown:Show()
-        y = y - 28
-    else
+        -- Hide M+-specific widgets that must not appear in raid mode
         raidBossesDropdown:Hide()
-        filters.raidBossesMin = "ANY"
-    end
+        browserToggleRows["needsTank"].box:Hide();   browserToggleRows["needsTank"].text:Hide()
+        browserToggleRows["hasTank"].box:Hide();     browserToggleRows["hasTank"].text:Hide()
+        browserToggleRows["needsHealer"].box:Hide(); browserToggleRows["needsHealer"].text:Hide()
+        browserToggleRows["hasHealer"].box:Hide();   browserToggleRows["hasHealer"].text:Hide()
+        browserToggleRows["needsDPS"].box:Hide();    browserToggleRows["needsDPS"].text:Hide()
+        browserNoClassBox:Hide(); browserNoClassText:Hide()
+        browserMinRatingLabel:Hide(); browserMinRatingBox:Hide()
+        browserToggleRows["hideDeclined"].box:Hide(); browserToggleRows["hideDeclined"].text:Hide()
 
-    -- ── 3. Key Range — removed (Blizzard's native SearchBox handles key range queries) ──
-    keyRangeLabel:Hide()
-    keyMinBox:Hide()
-    keyRangeTo:Hide()
-    keyMaxBox:Hide()
-
-    -- ── 4. "Select Filters then Click Refresh" label + search query hint ─────
-    local hintText = GetSearchQueryLabel(mode)
-    if hintText ~= "" then
-        browserQueryLabel:ClearAllPoints()
-        browserQueryLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-        browserQueryLabel:Show()
-        y = y - 14
-
-        browserQueryHint:ClearAllPoints()
-        browserQueryHint:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-        browserQueryHint:SetText(hintText)
-        browserQueryHint:Show()
-        y = y - 14
-    else
-        browserQueryLabel:Hide()
-        browserQueryHint:Hide()
-    end
-
-    -- ── 5. Search query box (hosts the native Blizzard SearchBox) ────────────
-    browserQueryBoxFrame:ClearAllPoints()
-    browserQueryBoxFrame:SetPoint("TOPLEFT",  browserContent, "TOPLEFT",  0, y)
-    browserQueryBoxFrame:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y)
-    browserQueryBoxFrame:Show()
-    -- Reparent Blizzard's SearchBox into our container (taint-free approach from v2.0.12)
-    AttachBrowserNativeSearchBox()
-
-    y = y - 26
-
-    -- ── 6. Refresh | Reset buttons ────────────────────────────────────────────
-    browserInRefreshBtn:ClearAllPoints()
-    browserInRefreshBtn:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-    browserInRefreshBtn:SetWidth(BTN_W)
-    browserInRefreshBtn:Show()
-
-    browserResetBtn:ClearAllPoints()
-    browserResetBtn:SetPoint("TOPLEFT", browserContent, "TOPLEFT", BTN_W + BTN_GAP, y)
-    browserResetBtn:SetWidth(BTN_W)
-    browserResetBtn:Show()
-
-    y = y - 28
-
-    -- Read the current native Blizzard advanced filter for display of native-backed toggles.
-    -- Using pcall so a nil C_LFGList never causes an error.
-    local advOk, adv = pcall(C_LFGList.GetAdvancedFilter)
-    if not advOk or type(adv) ~= "table" then adv = {} end
-
-    -- ── 7. Toggle rows (2-column layout) ──────────────────────────────────────
-    -- Row 1: Need Tank | Has Tank  (native-backed: state from Blizzard's advanced filter)
-    do
-        local r1 = browserToggleRows["needsTank"]
-        local r2 = browserToggleRows["hasTank"]
-        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-        r1.box:SetState(adv.needsTank == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
-
-        r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-        r2.box:SetState(adv.hasTank == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
-        y = y - ROW_H
-    end
-
-    -- Row 2: Need Healer | Has Healer  (native-backed)
-    do
-        local r1 = browserToggleRows["needsHealer"]
-        local r2 = browserToggleRows["hasHealer"]
-        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-        r1.box:SetState(adv.needsHealer == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
-
-        r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-        r2.box:SetState(adv.hasHealer == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
-        y = y - ROW_H
-    end
-
-    -- Row 3: Need Damage | No [Class] (Dynamic)
-    do
-        local r1 = browserToggleRows["needsDPS"]
-        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-        r1.box:SetState(adv.needsDamage == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
-
-        browserNoClassBox:ClearAllPoints()
-        browserNoClassBox:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-        browserNoClassBox:SetState(adv.needsMyClass == true)
-        browserNoClassText:SetText(GetNeedsMyClassLabel())
-        browserNoClassBox:Show(); browserNoClassText:Show()
-        y = y - ROW_H
-    end
-
-    -- Row 4: Min Rating (label left | input right)  (native-backed)
-    do
-        browserMinRatingLabel:ClearAllPoints()
-        browserMinRatingLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 2)
-        browserMinRatingLabel:Show()
-
-        browserMinRatingBox:ClearAllPoints()
-        browserMinRatingBox:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y - 2)
-        if not browserMinRatingBox:HasFocus() then
-            local minR = tonumber(adv.minimumRating)
-            browserMinRatingBox:SetText(minR and tostring(math.floor(minR)) or "")
-        end
-        browserMinRatingBox:Show()
-        y = y - ROW_H
-    end
-
-    -- Row 5: Party Fit | Hide Declined
-    do
-        local r1 = browserToggleRows["partyFit"]
-        local r2 = browserToggleRows["hideDeclined"]
-        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-        r1.box:SetState(filters.partyFit == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
-
-        r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-        r2.box:SetState(filters.hideDeclined == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
-        y = y - ROW_H
-    end
-
-    -- Row 6: Need BRez | Need Lust
-    do
-        local r1 = browserToggleRows["needsBrez"]
-        local r2 = browserToggleRows["needsLust"]
-        r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-        r1.box:SetState(filters.needsBrez == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
-
-        r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-        r2.box:SetState(filters.needsLust == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
-        y = y - ROW_H
-    end
-
-    -- Row 7: Match My Lockout (Dynamic, Raid Only)
-    do
-        local r = browserToggleRows["matchMyRaidLockout"]
-        if isRaidMode then
-            r.box:ClearAllPoints(); r.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-            r.box:SetState(filters.matchMyRaidLockout == true); r.text:SetText(r.label)
-            r.box:Show(); r.text:Show()
-            y = y - ROW_H
+        -- ── 1. Difficulty dropdown (full width) ──────────────────────────────
+        if showDifficulty then
+            difficultyDropdown:ClearAllPoints()
+            difficultyDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            difficultyDropdown.UpdateText()
+            difficultyDropdown:Show()
+            y = y - 28
         else
-            r.box:Hide(); r.text:Hide()
+            difficultyDropdown:Hide()
         end
-    end
 
-    -- ── 8. Activity section ───────────────────────────────────────────────────
-    if showActivityFilters then
-        -- Divider line
-        activityDivider:ClearAllPoints()
-        activityDivider:SetPoint("TOPLEFT",  browserContent, "TOPLEFT",  0, y - 4)
-        activityDivider:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 4)
-        activityDivider:SetHeight(1)
-        activityDivider:Show()
+        -- ── 2. Range filter rows ─────────────────────────────────────────────
+        --  Layout: Label(left) | 60px box at COL2_X | 20px R button
+        local RANGE_BOX_X = COL2_X
+        local RESET_BTN_X = RANGE_BOX_X + 64
+        for _, key in ipairs({"raidBossKills", "raidTanks", "raidHealers", "raidDps"}) do
+            local row = raidRangeRows[key]
+            row.label:ClearAllPoints()
+            row.label:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 2)
+            row.label:Show()
 
-        -- Activity section header + [A] [N] select buttons + "Gives Score" (inline, right side)
-        activityHeader:ClearAllPoints()
-        activityHeader:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 16)
-        activityHeader:SetText(GetBrowserActivitySectionTitle() or "Filter Activities")
-        activityHeader:Show()
+            row.box:ClearAllPoints()
+            row.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", RANGE_BOX_X, y)
+            if not row.box:HasFocus() then
+                row.box:SetText(filters[key] or "")
+            end
+            row.box:Show()
 
-        activitySelectAllBtn:ClearAllPoints()
-        activitySelectAllBtn:SetPoint("LEFT", activityHeader, "RIGHT", 6, 0)
-        activitySelectAllBtn:Show()
+            row.resetBtn:ClearAllPoints()
+            row.resetBtn:SetPoint("TOPLEFT", browserContent, "TOPLEFT", RESET_BTN_X, y)
+            row.resetBtn:Show()
 
-        activitySelectNoneBtn:ClearAllPoints()
-        activitySelectNoneBtn:SetPoint("LEFT", activitySelectAllBtn, "RIGHT", 3, 0)
-        activitySelectNoneBtn:Show()
+            y = y - ROW_H
+        end
 
-        -- "Gives Score" header: same row as section title, pinned to the right edge.
-        -- Always shown whenever the dungeon activity list is visible, regardless of
-        -- selected difficulty — the column stays anchored even when individual
-        -- score values are blank (e.g. Normal/Heroic/Mythic difficulty groups).
-        givesScoreHeader:ClearAllPoints()
-        givesScoreHeader:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
-        givesScoreHeader:Show()
-        givesScoreHeaderHitbox:ClearAllPoints()
-        givesScoreHeaderHitbox:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
-        givesScoreHeaderHitbox:Show()
+        -- ── 3. Search query hint + box ───────────────────────────────────────
+        local hintText = GetSearchQueryLabel(mode)
+        if hintText ~= "" then
+            browserQueryLabel:ClearAllPoints()
+            browserQueryLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            browserQueryLabel:Show()
+            y = y - 14
 
-        -- Activity buttons start immediately below the header row
-        local endY = UpdateBrowserActivityButtons(y - 34)
-        local contentH = math.max(1, math.abs(endY) + 20)
-        browserContent:SetHeight(contentH)
-        browserFilterPanel:SetHeight(32 + contentH + 8)
+            browserQueryHint:ClearAllPoints()
+            browserQueryHint:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            browserQueryHint:SetText(hintText)
+            browserQueryHint:Show()
+            y = y - 14
+        else
+            browserQueryLabel:Hide()
+            browserQueryHint:Hide()
+        end
+
+        browserQueryBoxFrame:ClearAllPoints()
+        browserQueryBoxFrame:SetPoint("TOPLEFT",  browserContent, "TOPLEFT",  0, y)
+        browserQueryBoxFrame:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y)
+        browserQueryBoxFrame:Show()
+        AttachBrowserNativeSearchBox()
+        y = y - 26
+
+        -- ── 4. Refresh | Reset buttons ───────────────────────────────────────
+        browserInRefreshBtn:ClearAllPoints()
+        browserInRefreshBtn:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        browserInRefreshBtn:SetWidth(BTN_W)
+        browserInRefreshBtn:Show()
+
+        browserResetBtn:ClearAllPoints()
+        browserResetBtn:SetPoint("TOPLEFT", browserContent, "TOPLEFT", BTN_W + BTN_GAP, y)
+        browserResetBtn:SetWidth(BTN_W)
+        browserResetBtn:Show()
+        y = y - 28
+
+        -- ── 5. Party Fit | Need Lust ─────────────────────────────────────────
+        do
+            local r1 = browserToggleRows["partyFit"]
+            local r2 = browserToggleRows["needsLust"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(filters.partyFit == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            r2.box:SetState(filters.needsLust == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            y = y - ROW_H
+        end
+
+        -- ── 6. Need BRez | Match My Lockout ─────────────────────────────────
+        do
+            local r1 = browserToggleRows["needsBrez"]
+            local r2 = browserToggleRows["matchMyRaidLockout"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(filters.needsBrez == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            r2.box:SetState(filters.matchMyRaidLockout == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            y = y - ROW_H
+        end
+
+        -- ── 7. Activity section (Filter Raids) ───────────────────────────────
+        if showActivityFilters then
+            activityDivider:ClearAllPoints()
+            activityDivider:SetPoint("TOPLEFT",  browserContent, "TOPLEFT",  0, y - 4)
+            activityDivider:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 4)
+            activityDivider:SetHeight(1)
+            activityDivider:Show()
+
+            activityHeader:ClearAllPoints()
+            activityHeader:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 16)
+            activityHeader:SetText(GetBrowserActivitySectionTitle() or "Filter Raids")
+            activityHeader:Show()
+
+            activitySelectAllBtn:ClearAllPoints()
+            activitySelectAllBtn:SetPoint("LEFT", activityHeader, "RIGHT", 6, 0)
+            activitySelectAllBtn:Show()
+
+            activitySelectNoneBtn:ClearAllPoints()
+            activitySelectNoneBtn:SetPoint("LEFT", activitySelectAllBtn, "RIGHT", 3, 0)
+            activitySelectNoneBtn:Show()
+
+            -- No "Gives Score" column in raid mode
+            givesScoreHeader:Hide()
+            givesScoreHeaderHitbox:Hide()
+
+            local endY = UpdateBrowserActivityButtons(y - 34)
+            local contentH = math.max(1, math.abs(endY) + 20)
+            browserContent:SetHeight(contentH)
+            browserFilterPanel:SetHeight(32 + contentH + 8)
+        else
+            activityDivider:Hide()
+            activityHeader:Hide()
+            activitySelectAllBtn:Hide()
+            activitySelectNoneBtn:Hide()
+            givesScoreHeader:Hide()
+            givesScoreHeaderHitbox:Hide()
+            for _, button in ipairs(browserActivityButtons) do
+                button:Hide()
+                if button.text then button.text:Hide() end  -- text is child of browserContent, not button
+                if button.scoreText then button.scoreText:Hide() end
+                if button.scoreHitbox then button.scoreHitbox:Hide() end
+            end
+            local contentH = math.max(1, math.abs(y) + 20)
+            browserContent:SetHeight(contentH)
+            browserFilterPanel:SetHeight(32 + contentH + 8)
+        end
+
     else
-        activityDivider:Hide()
-        activityHeader:Hide()
-        activitySelectAllBtn:Hide()
-        activitySelectNoneBtn:Hide()
-        givesScoreHeader:Hide()
-        givesScoreHeaderHitbox:Hide()
-        for _, button in ipairs(browserActivityButtons) do
-            button:Hide()
-            if button.scoreText then button.scoreText:Hide() end
-            if button.scoreHitbox then button.scoreHitbox:Hide() end
+        -- ═══════════════════════════════════════════════════════════════════════
+        -- NON-RAID MODE LAYOUT (M+, Dungeon, Delve, etc.)
+        -- ═══════════════════════════════════════════════════════════════════════
+
+        -- Hide all raid-specific widgets
+        raidBossesDropdown:Hide()
+        for _, key in ipairs({"raidBossKills", "raidTanks", "raidHealers", "raidDps"}) do
+            local row = raidRangeRows[key]
+            row.label:Hide(); row.box:Hide(); row.resetBtn:Hide()
         end
-        local contentH = math.max(1, math.abs(y) + 20)
-        browserContent:SetHeight(contentH)
-        browserFilterPanel:SetHeight(32 + contentH + 8)
+        browserToggleRows["matchMyRaidLockout"].box:Hide()
+        browserToggleRows["matchMyRaidLockout"].text:Hide()
+
+        -- ── 1. Difficulty dropdown ────────────────────────────────────────────
+        if showDifficulty then
+            difficultyDropdown:ClearAllPoints()
+            difficultyDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            difficultyDropdown.UpdateText()
+            difficultyDropdown:Show()
+            y = y - 28
+        else
+            difficultyDropdown:Hide()
+        end
+
+        -- ── 2. "Select Filters then Click Refresh" label + search query hint ─
+        local hintText = GetSearchQueryLabel(mode)
+        if hintText ~= "" then
+            browserQueryLabel:ClearAllPoints()
+            browserQueryLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            browserQueryLabel:Show()
+            y = y - 14
+
+            browserQueryHint:ClearAllPoints()
+            browserQueryHint:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            browserQueryHint:SetText(hintText)
+            browserQueryHint:Show()
+            y = y - 14
+        else
+            browserQueryLabel:Hide()
+            browserQueryHint:Hide()
+        end
+
+        -- ── 3. Search query box ───────────────────────────────────────────────
+        browserQueryBoxFrame:ClearAllPoints()
+        browserQueryBoxFrame:SetPoint("TOPLEFT",  browserContent, "TOPLEFT",  0, y)
+        browserQueryBoxFrame:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y)
+        browserQueryBoxFrame:Show()
+        AttachBrowserNativeSearchBox()
+        y = y - 26
+
+        -- ── 4. Refresh | Reset buttons ────────────────────────────────────────
+        browserInRefreshBtn:ClearAllPoints()
+        browserInRefreshBtn:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+        browserInRefreshBtn:SetWidth(BTN_W)
+        browserInRefreshBtn:Show()
+
+        browserResetBtn:ClearAllPoints()
+        browserResetBtn:SetPoint("TOPLEFT", browserContent, "TOPLEFT", BTN_W + BTN_GAP, y)
+        browserResetBtn:SetWidth(BTN_W)
+        browserResetBtn:Show()
+        y = y - 28
+
+        -- Read the current native Blizzard advanced filter for native-backed toggles.
+        local advOk, adv = pcall(C_LFGList.GetAdvancedFilter)
+        if not advOk or type(adv) ~= "table" then adv = {} end
+
+        -- ── 5. Toggle rows (2-column layout) ──────────────────────────────────
+        -- Row 1: Need Tank | Has Tank
+        do
+            local r1 = browserToggleRows["needsTank"]
+            local r2 = browserToggleRows["hasTank"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(adv.needsTank == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            r2.box:SetState(adv.hasTank == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            y = y - ROW_H
+        end
+
+        -- Row 2: Need Healer | Has Healer
+        do
+            local r1 = browserToggleRows["needsHealer"]
+            local r2 = browserToggleRows["hasHealer"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(adv.needsHealer == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            r2.box:SetState(adv.hasHealer == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            y = y - ROW_H
+        end
+
+        -- Row 3: Need Damage | No [Class]
+        do
+            local r1 = browserToggleRows["needsDPS"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(adv.needsDamage == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+            browserNoClassBox:ClearAllPoints()
+            browserNoClassBox:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            browserNoClassBox:SetState(adv.needsMyClass == true)
+            browserNoClassText:SetText(GetNeedsMyClassLabel())
+            browserNoClassBox:Show(); browserNoClassText:Show()
+            y = y - ROW_H
+        end
+
+        -- Row 4: Min Rating (label left | input right)
+        do
+            browserMinRatingLabel:ClearAllPoints()
+            browserMinRatingLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 2)
+            browserMinRatingLabel:Show()
+
+            browserMinRatingBox:ClearAllPoints()
+            browserMinRatingBox:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y - 2)
+            if not browserMinRatingBox:HasFocus() then
+                local minR = tonumber(adv.minimumRating)
+                browserMinRatingBox:SetText(minR and tostring(math.floor(minR)) or "")
+            end
+            browserMinRatingBox:Show()
+            y = y - ROW_H
+        end
+
+        -- Row 5: Party Fit | Hide Declined
+        do
+            local r1 = browserToggleRows["partyFit"]
+            local r2 = browserToggleRows["hideDeclined"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(filters.partyFit == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            r2.box:SetState(filters.hideDeclined == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            y = y - ROW_H
+        end
+
+        -- Row 6: Need BRez | Need Lust
+        do
+            local r1 = browserToggleRows["needsBrez"]
+            local r2 = browserToggleRows["needsLust"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(filters.needsBrez == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            r2.box:SetState(filters.needsLust == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            y = y - ROW_H
+        end
+
+        -- ── 6. Activity section ───────────────────────────────────────────────
+        if showActivityFilters then
+            activityDivider:ClearAllPoints()
+            activityDivider:SetPoint("TOPLEFT",  browserContent, "TOPLEFT",  0, y - 4)
+            activityDivider:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 4)
+            activityDivider:SetHeight(1)
+            activityDivider:Show()
+
+            activityHeader:ClearAllPoints()
+            activityHeader:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 16)
+            activityHeader:SetText(GetBrowserActivitySectionTitle() or "Filter Activities")
+            activityHeader:Show()
+
+            activitySelectAllBtn:ClearAllPoints()
+            activitySelectAllBtn:SetPoint("LEFT", activityHeader, "RIGHT", 6, 0)
+            activitySelectAllBtn:Show()
+
+            activitySelectNoneBtn:ClearAllPoints()
+            activitySelectNoneBtn:SetPoint("LEFT", activitySelectAllBtn, "RIGHT", 3, 0)
+            activitySelectNoneBtn:Show()
+
+            -- "Gives Score" header: pinned to the right edge (M+ / dungeon only)
+            givesScoreHeader:ClearAllPoints()
+            givesScoreHeader:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
+            givesScoreHeader:Show()
+            givesScoreHeaderHitbox:ClearAllPoints()
+            givesScoreHeaderHitbox:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
+            givesScoreHeaderHitbox:Show()
+
+            local endY = UpdateBrowserActivityButtons(y - 34)
+            local contentH = math.max(1, math.abs(endY) + 20)
+            browserContent:SetHeight(contentH)
+            browserFilterPanel:SetHeight(32 + contentH + 8)
+        else
+            activityDivider:Hide()
+            activityHeader:Hide()
+            activitySelectAllBtn:Hide()
+            activitySelectNoneBtn:Hide()
+            givesScoreHeader:Hide()
+            givesScoreHeaderHitbox:Hide()
+            for _, button in ipairs(browserActivityButtons) do
+                button:Hide()
+                if button.text then button.text:Hide() end  -- text is child of browserContent, not button
+                if button.scoreText then button.scoreText:Hide() end
+                if button.scoreHitbox then button.scoreHitbox:Hide() end
+            end
+            local contentH = math.max(1, math.abs(y) + 20)
+            browserContent:SetHeight(contentH)
+            browserFilterPanel:SetHeight(32 + contentH + 8)
+        end
     end
 end
 
