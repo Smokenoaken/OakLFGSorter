@@ -1,3 +1,11 @@
+## v2.5.0
+
+- Unified Oak into a single browser window that replaces the old split search/browser setup, with mode-aware layouts for Mythic+, raids, PvP, delves, and open-world listings.
+- Completely rebuilt the Find Group side of the addon with a cleaner shared frame, rebuilt result rows and columns, integrated Blizzard search/filter handoff, better quick sign-up flow, and stronger apply/cancel visibility for active applications.
+- Delivered a major optimization pass by removing the retired browser codepath, reducing dead helpers and duplicated UI, tightening refresh behavior, and improving memory usage and overall responsiveness.
+- Expanded browser support with dedicated raid and PvP presentations, richer comp rendering, class/spec-aware icons, better tooltip detail, region context, and stronger Raider.IO integration.
+- Polished the experience across the release cycle with improved notes handling, friend and applied-group prioritization, footer and header cleanup, safer auto-open/load behavior, and broader filter stability fixes.
+
 ## v2.0.12
 
 - Added Specialization Icon Toggles
