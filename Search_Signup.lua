@@ -16,8 +16,9 @@ local OAK_COLOR_BG = {0.106, 0.106, 0.129, 0.85}
 local OAK_COLOR_PANE = {0.137, 0.141, 0.172, 1}
 local OAK_COLOR_BORDER = {0, 0, 0, 1}
 
-local _, playerClass = UnitClass("player")
-local classColor = RAID_CLASS_COLORS[playerClass] or { r = 1, g = 1, b = 1 }
+local function GetAccentColor()
+    return addonTable.ClassColor or addonTable.PlayerClassColor or { r = 1, g = 1, b = 1 }
+end
 
 local quickSignupState = {
     pending = false,
@@ -328,6 +329,7 @@ local function CreateQuickSignupToggle(parent)
     box:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
 
     function box:SetState(isActive)
+        local classColor = GetAccentColor()
         if isActive then
             self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
             self:SetBackdropBorderColor(0, 0, 0, 1)
@@ -356,6 +358,7 @@ local function CreateQuickSignupRoleButton(parent, roleKey, tooltipText)
     end
 
     function btn:SetState(isActive)
+        local classColor = GetAccentColor()
         if isActive then
             self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
             self.icon:SetVertexColor(1, 1, 1, 1)
@@ -379,6 +382,12 @@ local function CreateQuickSignupRoleButton(parent, roleKey, tooltipText)
 
     return btn
 end
+
+addonTable.RegisterThemeRefresh("search_signup_theme", function()
+    if addonTable.UpdateSearchQuickSignupControls then
+        addonTable.UpdateSearchQuickSignupControls()
+    end
+end)
 
 -- Bar sits above OAK_LFG's footer row; shown only in browser mode
 local quickSignupBar = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")

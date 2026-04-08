@@ -24,6 +24,9 @@ local browserRegionToggleBox
 local browserRegionToggleLabel
 local regionFilterButtons = {}
 local regionFilterLabels = {}
+local optionsThemeButton
+local optionsThemeList
+local optionsThemeColorButton
 
 local function GetBrowserMode()
     local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode
@@ -2616,8 +2619,41 @@ optionsSpecBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
+local optionsThemeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsThemeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -96)
+optionsThemeLabel:SetText("Theme")
+local optionsThemeButton
+optionsThemeButton, optionsThemeList = addonTable.CreateThemeDropdown(optionsPanel, 112)
+optionsThemeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -116)
+
+optionsThemeColorButton = addonTable.CreateFlatButton(optionsPanel, "Color", 52)
+optionsThemeColorButton:SetPoint("LEFT", optionsThemeButton, "RIGHT", 6, 0)
+optionsThemeColorButton.swatch = optionsThemeColorButton:CreateTexture(nil, "ARTWORK")
+optionsThemeColorButton.swatch:SetSize(12, 12)
+optionsThemeColorButton.swatch:SetPoint("LEFT", optionsThemeColorButton, "LEFT", 6, 0)
+optionsThemeColorButton.text:ClearAllPoints()
+optionsThemeColorButton.text:SetPoint("LEFT", optionsThemeColorButton.swatch, "RIGHT", 5, 0)
+optionsThemeColorButton.text:SetPoint("RIGHT", optionsThemeColorButton, "RIGHT", -4, 0)
+optionsThemeColorButton.text:SetJustifyH("LEFT")
+optionsThemeColorButton:SetScript("OnClick", function()
+    if addonTable.OpenThemeColorPicker then
+        addonTable.OpenThemeColorPicker()
+    end
+end)
+optionsThemeColorButton:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Custom Theme Color", 1, 1, 1)
+    GameTooltip:AddLine("Open a color picker and switch Oak's accent to a custom color.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsThemeColorButton:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+
 local optionsRegionFilterLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -96)
+optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -152)
 optionsRegionFilterLabel:SetText("Filter Regions")
 
 local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
@@ -2650,27 +2686,27 @@ local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
     regionFilterLabels[regionCode] = label
 end
 
-CreateRegionFilterOption(optionsPanel, "NA", 15, -118)
-CreateRegionFilterOption(optionsPanel, "OCE", 105, -118)
-CreateRegionFilterOption(optionsPanel, "LATAM", 15, -140)
-CreateRegionFilterOption(optionsPanel, "BR", 105, -140)
-CreateRegionFilterOption(optionsPanel, "EU", 15, -162)
-CreateRegionFilterOption(optionsPanel, "OTHER", 105, -162)
+CreateRegionFilterOption(optionsPanel, "NA", 15, -174)
+CreateRegionFilterOption(optionsPanel, "OCE", 105, -174)
+CreateRegionFilterOption(optionsPanel, "LATAM", 15, -196)
+CreateRegionFilterOption(optionsPanel, "BR", 105, -196)
+CreateRegionFilterOption(optionsPanel, "EU", 15, -218)
+CreateRegionFilterOption(optionsPanel, "OTHER", 105, -218)
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -194)
+optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -250)
 optionsFontLabel:SetText(L["Addon Font"])
 local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
-optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -214)
+optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -270)
 
 local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -250)
+optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -306)
 optionsFontSizeLabel:SetText(L["Font Size"])
 local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -250)
+optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -306)
 
 local optionsFontSizeSlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsFontSizeSlider:SetSize(170, 10)
-optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -272)
+optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -328)
 optionsFontSizeSlider:SetMinMaxValues(10, 18)
 optionsFontSizeSlider:SetValueStep(1)
 optionsFontSizeSlider:SetObeyStepOnDrag(true)
@@ -2703,14 +2739,14 @@ end)
 optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
 
 local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -308)
+optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -364)
 optionsOpacityLabel:SetText("Window Opacity")
 local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -308)
+optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -364)
 
 local optionsOpacitySlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsOpacitySlider:SetSize(170, 10)
-optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -330)
+optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -386)
 optionsOpacitySlider:SetMinMaxValues(0.35, 1.0)
 optionsOpacitySlider:SetValueStep(0.05)
 optionsOpacitySlider:SetObeyStepOnDrag(true)
@@ -2744,6 +2780,13 @@ optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWind
 local function RefreshOptionsPanel()
     ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
     ApplySpecToggleVisual(optionsSpecBox, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
+    if optionsThemeButton and optionsThemeButton.RefreshSelection then
+        optionsThemeButton:RefreshSelection()
+    end
+    if optionsThemeColorButton and optionsThemeColorButton.swatch and addonTable.GetThemeAccentColor then
+        local color = addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil)
+        optionsThemeColorButton.swatch:SetColorTexture(color.r, color.g, color.b, 1)
+    end
     for _, regionCode in ipairs(addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder() or {}) do
         ApplySharedRegionToggleVisual(regionFilterButtons[regionCode], regionFilterLabels[regionCode], addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
     end
@@ -2759,6 +2802,26 @@ local function RefreshOptionsPanel()
 end
 
 addonTable.RefreshOptionsPanel = RefreshOptionsPanel
+
+addonTable.RegisterThemeRefresh("ui_filters_theme", function()
+    filterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    browserFilterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    supportersPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    optionsPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    optionsTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+    suppTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+    fontPickerList:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    div1:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.5)
+    div2:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.5)
+    bottomDivider:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
+    optionsFontSizeThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    optionsOpacityThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    if optionsThemeColorButton and optionsThemeColorButton.swatch and addonTable.GetThemeAccentColor then
+        local color = addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil)
+        optionsThemeColorButton.swatch:SetColorTexture(color.r, color.g, color.b, 1)
+    end
+    RefreshOptionsPanel()
+end)
 
 function addonTable.ToggleOptionsPanel()
     if optionsPanel:IsShown() then

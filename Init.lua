@@ -54,6 +54,8 @@ if OakLFGSorterDB.lowLatencyOnly == nil then OakLFGSorterDB.lowLatencyOnly = fal
 if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "OakUI Font" end
 if OakLFGSorterDB.fontSize == nil then OakLFGSorterDB.fontSize = 12 end
 if OakLFGSorterDB.windowOpacity == nil then OakLFGSorterDB.windowOpacity = 0.85 end
+if OakLFGSorterDB.themePreset == nil then OakLFGSorterDB.themePreset = "CLASS" end
+if type(OakLFGSorterDB.themeCustomColor) ~= "table" then OakLFGSorterDB.themeCustomColor = { r = 0.74, g = 0.49, b = 0.93 } end
 if type(OakLFGSorterDB.regionFilters) ~= "table" then OakLFGSorterDB.regionFilters = {} end
 OakLFGSorterDB.browserFilters = OakLFGSorterDB.browserFilters or {}
 
@@ -328,6 +330,7 @@ end
 
 local registeredFontDropdowns = {}
 local fontDropdownCounter = 0
+local registeredThemeRefreshers = {}
 
 function addonTable.RegisterFontDropdown(button)
     if not button then
@@ -336,11 +339,145 @@ function addonTable.RegisterFontDropdown(button)
     table.insert(registeredFontDropdowns, button)
 end
 
+function addonTable.RegisterThemeRefresh(key, callback)
+    if not key or type(callback) ~= "function" then
+        return
+    end
+    registeredThemeRefreshers[key] = callback
+end
+
+function addonTable.UnregisterThemeRefresh(key)
+    if key then
+        registeredThemeRefreshers[key] = nil
+    end
+end
+
 function addonTable.RefreshRegisteredFontDropdowns()
     for _, button in ipairs(registeredFontDropdowns) do
         if button and button.RefreshSelection then
             button:RefreshSelection()
         end
+    end
+end
+
+local _, playerClass = UnitClass("player")
+addonTable.PlayerClass = playerClass
+addonTable.PlayerClassColor = RAID_CLASS_COLORS[playerClass] or { r = 1, g = 1, b = 1 }
+
+addonTable.ThemePresets = {
+    { id = "CLASS", label = "Class Colored" },
+    { id = "SKY", label = "Sky Blue", color = { r = 0.30, g = 0.76, b = 0.98 } },
+    { id = "MINT", label = "Class Mint", color = { r = 0.35, g = 0.90, b = 0.66 } },
+    { id = "HORDE", label = "Horde", color = { r = 0.80, g = 0.16, b = 0.16 } },
+    { id = "ALLIANCE", label = "Alliance", color = { r = 0.24, g = 0.51, b = 0.96 } },
+    { id = "MIDNIGHT", label = "Midnight", color = { r = 0.52, g = 0.45, b = 0.92 } },
+    { id = "AMBER", label = "Amber", color = { r = 0.98, g = 0.65, b = 0.18 } },
+    { id = "ROSE", label = "Rose", color = { r = 0.92, g = 0.43, b = 0.61 } },
+    { id = "EMERALD", label = "Emerald", color = { r = 0.20, g = 0.82, b = 0.58 } },
+    { id = "CUSTOM", label = "Custom" },
+}
+
+local function ClampColorChannel(value)
+    return math.max(0, math.min(1, tonumber(value) or 0))
+end
+
+local function NormalizeThemeColor(color)
+    color = color or {}
+    return {
+        r = ClampColorChannel(color.r),
+        g = ClampColorChannel(color.g),
+        b = ClampColorChannel(color.b),
+    }
+end
+
+local function GetThemePresetByID(themeID)
+    for _, preset in ipairs(addonTable.ThemePresets) do
+        if preset.id == themeID then
+            return preset
+        end
+    end
+    return addonTable.ThemePresets[1]
+end
+
+function addonTable.GetThemePreset()
+    return OakLFGSorterDB and OakLFGSorterDB.themePreset or "CLASS"
+end
+
+function addonTable.GetThemeCustomColor()
+    OakLFGSorterDB.themeCustomColor = NormalizeThemeColor(OakLFGSorterDB.themeCustomColor)
+    return OakLFGSorterDB.themeCustomColor
+end
+
+function addonTable.GetThemeAccentColor(themeID)
+    local preset = GetThemePresetByID(themeID or addonTable.GetThemePreset())
+    if preset.id == "CLASS" then
+        return addonTable.PlayerClassColor
+    end
+    if preset.id == "CUSTOM" then
+        return addonTable.GetThemeCustomColor()
+    end
+    return NormalizeThemeColor(preset.color)
+end
+
+function addonTable.GetThemePresetLabel(themeID)
+    local preset = GetThemePresetByID(themeID or addonTable.GetThemePreset())
+    return preset.label or preset.id or "Class Colored"
+end
+
+local function NotifyThemeRefreshers()
+    for _, callback in pairs(registeredThemeRefreshers) do
+        pcall(callback)
+    end
+end
+
+function addonTable.ApplyTheme()
+    addonTable.ClassColor = addonTable.GetThemeAccentColor()
+    NotifyThemeRefreshers()
+    if addonTable.ApplyWindowOpacity then addonTable.ApplyWindowOpacity() end
+    if addonTable.RefreshRegisteredFontDropdowns then addonTable.RefreshRegisteredFontDropdowns() end
+    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+    if addonTable.UpdateTopBarActions then addonTable.UpdateTopBarActions() end
+    if addonTable.UpdateSearchQuickSignupControls then addonTable.UpdateSearchQuickSignupControls() end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end
+
+function addonTable.SetThemePreset(themeID)
+    OakLFGSorterDB.themePreset = GetThemePresetByID(themeID).id
+    addonTable.ApplyTheme()
+end
+
+function addonTable.SetThemeCustomColor(color)
+    OakLFGSorterDB.themeCustomColor = NormalizeThemeColor(color)
+    OakLFGSorterDB.themePreset = "CUSTOM"
+    addonTable.ApplyTheme()
+end
+
+function addonTable.OpenThemeColorPicker()
+    local previousPreset = addonTable.GetThemePreset()
+    local color = addonTable.GetThemeCustomColor()
+    if ColorPickerFrame and ColorPickerFrame.SetupColorPickerAndShow then
+        local pickerInfo = {
+            r = color.r,
+            g = color.g,
+            b = color.b,
+            hasOpacity = false,
+            swatchFunc = function()
+                local r, g, b = ColorPickerFrame:GetColorRGB()
+                addonTable.SetThemeCustomColor({ r = r, g = g, b = b })
+            end,
+            cancelFunc = function(previous)
+                if previous then
+                    OakLFGSorterDB.themeCustomColor = NormalizeThemeColor({
+                        r = previous.r,
+                        g = previous.g,
+                        b = previous.b,
+                    })
+                    OakLFGSorterDB.themePreset = previousPreset
+                    addonTable.ApplyTheme()
+                end
+            end,
+        }
+        ColorPickerFrame:SetupColorPickerAndShow(pickerInfo)
     end
 end
 
@@ -365,6 +502,7 @@ function addonTable.CreateFontDropdown(parent, width)
     scrollFrame:SetPoint("BOTTOMRIGHT", listFrame, "BOTTOMRIGHT", -24, 1)
 
     local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+    local scrollThumb
     if scrollBar then
         local upBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollUpButton"]
         local downBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollDownButton"]
@@ -376,11 +514,11 @@ function addonTable.CreateFontDropdown(parent, width)
         if topTex then topTex:Hide() end
         if bottomTex then bottomTex:Hide() end
         if midTex then midTex:Hide() end
-        local thumb = scrollBar:GetThumbTexture()
-        if thumb then
-            thumb:SetTexture(addonTable.FLAT_TEX)
-            thumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-            thumb:SetSize(8, 60)
+        scrollThumb = scrollBar:GetThumbTexture()
+        if scrollThumb then
+            scrollThumb:SetTexture(addonTable.FLAT_TEX)
+            scrollThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            scrollThumb:SetSize(8, 60)
         end
         scrollBar:SetWidth(8)
     end
@@ -452,6 +590,16 @@ function addonTable.CreateFontDropdown(parent, width)
     end)
 
     addonTable.RegisterFontDropdown(dropdownButton)
+    addonTable.RegisterThemeRefresh("font_dropdown_" .. tostring(dropdownButton), function()
+        listFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+        listFrame:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        if scrollThumb then
+            scrollThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        end
+        if listFrame:IsShown() then
+            RefreshOptions()
+        end
+    end)
     dropdownButton:RefreshSelection()
 
     return dropdownButton, listFrame
@@ -463,9 +611,12 @@ local fontEventFrame = CreateFrame("Frame")
 fontEventFrame:RegisterEvent("PLAYER_LOGIN")
 fontEventFrame:SetScript("OnEvent", function()
     ReapplySavedFont()
+    addonTable.ApplyTheme()
     if C_Timer and C_Timer.After then
         C_Timer.After(0, ReapplySavedFont)
+        C_Timer.After(0, addonTable.ApplyTheme)
         C_Timer.After(1, ReapplySavedFont)
+        C_Timer.After(1, addonTable.ApplyTheme)
     end
 end)
 
@@ -480,9 +631,7 @@ if LSM and LSM.RegisterCallback then
 end
 
 -- Colors & Styling
-local _, playerClass = UnitClass("player")
-addonTable.ClassColor = RAID_CLASS_COLORS[playerClass] or {r = 1, g = 1, b = 1}
-addonTable.PlayerClass = playerClass
+addonTable.ClassColor = addonTable.GetThemeAccentColor()
 
 addonTable.FLAT_TEX = "Interface\\Buttons\\WHITE8X8"
 addonTable.OAK_COLOR_BG = {0.106, 0.106, 0.129, 0.85} 
@@ -577,6 +726,130 @@ function addonTable.CreateFlatButton(parent, label, width)
     btn:SetScript("OnEnter", function(self) self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1) end)
     btn:SetScript("OnLeave", function(self) self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER)) end)
     return btn
+end
+
+function addonTable.CreateThemeDropdown(parent, width)
+    local dropdownButton = addonTable.CreateFlatButton(parent, addonTable.GetThemePresetLabel(), width)
+    local listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    listFrame:SetSize(width + 18, (#addonTable.ThemePresets * 22) + 2)
+    listFrame:SetBackdrop({
+        bgFile = addonTable.FLAT_TEX,
+        edgeFile = addonTable.FLAT_TEX,
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 }
+    })
+    listFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+    listFrame:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    listFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+    listFrame:Hide()
+
+    fontDropdownCounter = fontDropdownCounter + 1
+    local scrollFrame = CreateFrame("ScrollFrame", "OakLFGThemeDropdownScroll" .. fontDropdownCounter, listFrame, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", listFrame, "TOPLEFT", 1, -1)
+    scrollFrame:SetPoint("BOTTOMRIGHT", listFrame, "BOTTOMRIGHT", -24, 1)
+
+    local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+    local scrollThumb
+    if scrollBar then
+        local upBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollUpButton"]
+        local downBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollDownButton"]
+        if upBtn then upBtn:Hide(); upBtn:SetSize(0.1, 0.1) end
+        if downBtn then downBtn:Hide(); downBtn:SetSize(0.1, 0.1) end
+        local topTex = _G[scrollFrame:GetName() .. "ScrollBarTop"]
+        local bottomTex = _G[scrollFrame:GetName() .. "ScrollBarBottom"]
+        local midTex = _G[scrollFrame:GetName() .. "ScrollBarMiddle"]
+        if topTex then topTex:Hide() end
+        if bottomTex then bottomTex:Hide() end
+        if midTex then midTex:Hide() end
+        scrollThumb = scrollBar:GetThumbTexture()
+        if scrollThumb then
+            scrollThumb:SetTexture(addonTable.FLAT_TEX)
+            scrollThumb:SetSize(8, 60)
+        end
+        scrollBar:SetWidth(8)
+    end
+
+    local child = CreateFrame("Frame")
+    child:SetSize(width, 1)
+    scrollFrame:SetScrollChild(child)
+
+    local optionButtons = {}
+
+    local function RefreshSelection()
+        dropdownButton.text:SetText(addonTable.GetThemePresetLabel())
+    end
+
+    local function RefreshOptions()
+        child:SetHeight(math.max(1, #addonTable.ThemePresets * 22))
+        for _, button in ipairs(optionButtons) do
+            button:Hide()
+        end
+
+        for index, preset in ipairs(addonTable.ThemePresets) do
+            local optionButton = optionButtons[index]
+            if not optionButton then
+                optionButton = CreateFrame("Button", nil, child, "BackdropTemplate")
+                optionButton.bg = optionButton:CreateTexture(nil, "BACKGROUND")
+                optionButton.bg:SetAllPoints()
+                optionButton.swatch = optionButton:CreateTexture(nil, "ARTWORK")
+                optionButton.swatch:SetSize(10, 10)
+                optionButton.swatch:SetPoint("LEFT", optionButton, "LEFT", 8, 0)
+                optionButton.text = optionButton:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+                optionButton.text:SetPoint("LEFT", optionButton.swatch, "RIGHT", 8, 0)
+                optionButton.text:SetPoint("RIGHT", optionButton, "RIGHT", -8, 0)
+                optionButton.text:SetJustifyH("LEFT")
+                optionButtons[index] = optionButton
+            end
+
+            optionButton:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -((index - 1) * 22))
+            optionButton:SetSize(width, 22)
+            optionButton.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
+            local swatchColor = addonTable.GetThemeAccentColor(preset.id)
+            optionButton.swatch:SetColorTexture(swatchColor.r, swatchColor.g, swatchColor.b, 1)
+            optionButton.text:SetText(preset.label)
+            optionButton:SetScript("OnEnter", function(self)
+                self.bg:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.28)
+            end)
+            optionButton:SetScript("OnLeave", function(self)
+                self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
+            end)
+            optionButton:SetScript("OnClick", function()
+                addonTable.SetThemePreset(preset.id)
+                listFrame:Hide()
+            end)
+            optionButton:Show()
+        end
+    end
+
+    function dropdownButton:RefreshSelection()
+        RefreshSelection()
+    end
+
+    dropdownButton:SetScript("OnClick", function(self)
+        RefreshOptions()
+        if listFrame:IsShown() then
+            listFrame:Hide()
+        else
+            listFrame:ClearAllPoints()
+            listFrame:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
+            listFrame:Show()
+        end
+    end)
+
+    addonTable.RegisterThemeRefresh("theme_dropdown_" .. tostring(dropdownButton), function()
+        listFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+        listFrame:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        if scrollThumb then
+            scrollThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        end
+        RefreshSelection()
+        if listFrame:IsShown() then
+            RefreshOptions()
+        end
+    end)
+    dropdownButton:RefreshSelection()
+
+    return dropdownButton, listFrame
 end
 
 function addonTable.CreateCogButton(parent, size)

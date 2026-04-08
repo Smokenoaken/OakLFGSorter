@@ -989,6 +989,15 @@ local function UpdateNotesToggleVisual()
     noteVisibilityBtn.text:SetText((OakLFGSorterDB and OakLFGSorterDB.hideNotes) and "+" or "-")
 end
 
+addonTable.RegisterThemeRefresh("ui_rows_theme", function()
+    _ssLineTex:SetColorTexture(addonTable.ClassColor.r * 0.9, addonTable.ClassColor.g * 0.9, addonTable.ClassColor.b * 0.9, 1.0)
+    _bsepTex:SetColorTexture(addonTable.ClassColor.r * 0.7, addonTable.ClassColor.g * 0.7, addonTable.ClassColor.b * 0.7, 0.9)
+    UpdateNotesToggleVisual()
+    if addonTable.UpdateDisplay then
+        addonTable.UpdateDisplay()
+    end
+end)
+
 notesToggleBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")

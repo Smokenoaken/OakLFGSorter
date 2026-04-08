@@ -351,6 +351,11 @@ VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
 VersionText:SetText("|cff888888v2.5.0|r")
 VersionText:Hide()
 
+addonTable.RegisterThemeRefresh("ui_header_theme", function()
+    OAK_LFG:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    thumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+end)
+
 local resizeGrip = CreateFrame("Button", nil, OAK_LFG, "PanelResizeButtonTemplate")
 addonTable.ResizeGrip = resizeGrip
 resizeGrip:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -2, 2)
