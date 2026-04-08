@@ -736,9 +736,23 @@ local function FetchSearchResultData()
                 local raidListing = nil
                 local regionInfo = addonTable.GetRegionInfoFromLeaderName and addonTable.GetRegionInfoFromLeaderName(resultInfo.leaderName) or nil
 
-                if (listingMode == "rated_pvp" or listingMode == "pvp") and type(resultInfo.leaderPvpRatingInfo) == "table" then
-                    pvpRating = tonumber(resultInfo.leaderPvpRatingInfo.rating) or 0
-                    pvpBracket = GetPvpBracketLabel(resultInfo.leaderPvpRatingInfo)
+                if listingMode == "rated_pvp" or listingMode == "pvp" then
+                    local pvpInfo = resultInfo.leaderPvpRatingInfo
+                    if type(pvpInfo) == "table" then
+                        -- TWW returns leaderPvpRatingInfo as an array; actual data is in [1]
+                        local entry = pvpInfo[1] or pvpInfo
+                        if type(entry) == "table" then
+                            pvpRating = tonumber(entry.rating
+                                or entry.pvpRating
+                                or entry.currentRating
+                                or entry.seasonRating
+                                or entry.weeklyBest
+                                or entry.value) or 0
+                            pvpBracket = GetPvpBracketLabel(entry)
+                        end
+                    elseif type(pvpInfo) == "number" then
+                        pvpRating = pvpInfo
+                    end
                     ratingValue = pvpRating
                 end
 
@@ -1236,6 +1250,10 @@ end
 function GetPvpBracketLabel(pvpRatingInfo)
     if type(pvpRatingInfo) ~= "table" then
         return nil
+    end
+    -- TWW returns leaderPvpRatingInfo as an array; unwrap if needed
+    if pvpRatingInfo[1] and type(pvpRatingInfo[1]) == "table" then
+        pvpRatingInfo = pvpRatingInfo[1]
     end
 
     local activityName = strlower(pvpRatingInfo.activityName or "")
@@ -1737,6 +1755,51 @@ end
 SLASH_OAKLFG1 = "/oaklfg"
 SLASH_OAKLFG2 = "/lfg"
 SlashCmdList["OAKLFG"] = OakLFGCommand
+
+-- Debug: dump raw leaderPvpRatingInfo fields from first PVP result
+SLASH_OAKPVPDEBUG1 = "/oakpvpdebug"
+SlashCmdList["OAKPVPDEBUG"] = function()
+    local results = addonTable.SearchResults
+    if not results or #results == 0 then
+        print("|cffff9900OAK PVP Debug:|r No search results cached.")
+        return
+    end
+    local found = false
+    for _, r in ipairs(results) do
+        if r.mode == "pvp" or r.mode == "rated_pvp" then
+            found = true
+            print("|cffff9900OAK PVP Debug:|r result.id=" .. tostring(r.id) .. " mode=" .. tostring(r.mode))
+            -- Re-fetch fresh info
+            local info = C_LFGList.GetSearchResultInfo and C_LFGList.GetSearchResultInfo(r.id)
+            if not info then
+                print("  GetSearchResultInfo returned nil")
+            else
+                local pvpInfo = info.leaderPvpRatingInfo
+                if pvpInfo == nil then
+                    print("  leaderPvpRatingInfo = nil")
+                else
+                    print("  leaderPvpRatingInfo type = " .. type(pvpInfo))
+                    if type(pvpInfo) == "table" then
+                        for k, v in pairs(pvpInfo) do
+                            print("    [" .. tostring(k) .. "] = " .. tostring(v))
+                            if type(v) == "table" then
+                                for k2, v2 in pairs(v) do
+                                    print("      [" .. tostring(k2) .. "] = " .. tostring(v2))
+                                end
+                            end
+                        end
+                    else
+                        print("  leaderPvpRatingInfo = " .. tostring(pvpInfo))
+                    end
+                end
+            end
+            break
+        end
+    end
+    if not found then
+        print("|cffff9900OAK PVP Debug:|r No PVP results found in cache.")
+    end
+end
 
 
 

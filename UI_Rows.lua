@@ -48,9 +48,11 @@ local function GetHeaderTooltipData(sortKey)
         if isBrowser then
             if IsRaidBrowserMode() then
                 return "Raid", "Sort by raid instance name."
+            elseif listingMode == "pvp" or listingMode == "rated_pvp" then
+                return "Arena", "Sort by arena bracket (2v2 / 3v3)."
             elseif listingMode == "delve" then
                 return "Delve", "Sort by delve name."
-            elseif listingMode == "generic" or listingMode == "pvp" then
+            elseif listingMode == "generic" then
                 local ctxInfo = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.activityInfo
                 local firstResult = addonTable.SearchResults and addonTable.SearchResults[1]
                 local hint = strlower(
@@ -58,7 +60,7 @@ local function GetHeaderTooltipData(sortKey)
                     or (firstResult and (firstResult.activityName or firstResult.dungeonName or ""))
                     or ""
                 )
-                if hint:find("custom", 1, true) or listingMode == "pvp" then
+                if hint:find("custom", 1, true) then
                     return "Activity", "Sort by activity type."
                 end
                 return "Zone", "Sort by zone name."
@@ -124,6 +126,12 @@ IsRaidBrowserMode = function()
     if not IsBrowserMode() then return false end
     local m = (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
     return m == "raid" or m == "legacy_raid"
+end
+
+local function IsPvpBrowserMode()
+    if not IsBrowserMode() then return false end
+    local m = GetListingMode()
+    return m == "pvp" or m == "rated_pvp"
 end
 
 local scrollFrame = CreateFrame("ScrollFrame", "OakLFGScrollFrame", OAK_LFG, "UIPanelScrollFrameTemplate")
@@ -472,6 +480,13 @@ local B_TITLE   = { x = 258, w = 102, align = "LEFT" }     -- [258, 360]  listin
 local B_RATING  = { x = 360, w = 70,  align = "CENTER" }   -- [360, 430]
 local B_AGE     = { x = 430, w = 45,  align = "CENTER" }   -- [430, 475]
 local B_NOTE    = { x = 475, w = 130, align = "LEFT" }     -- [475, 605]
+-- PVP browser column constants (Arena 2v2/3v3): Arena | Comp | Title | PVP Rating | Age | Notes
+local B_PVP_ARENA  = { x = 10,  w = 88,  align = "LEFT"   }  -- [10,  98]  "2v2" / "3v3" + region tag
+local B_PVP_COMP   = { x = 98,  w = 72,  align = "CENTER" }  -- [98,  170] max 3 spec slots
+local B_PVP_TITLE  = { x = 170, w = 120, align = "LEFT"   }  -- [170, 290] listing title
+local B_PVP_RATING = { x = 290, w = 80,  align = "CENTER" }  -- [290, 370]
+local B_PVP_AGE    = { x = 370, w = 45,  align = "CENTER" }  -- [370, 415]
+local B_PVP_NOTE   = { x = 415, w = 190, align = "LEFT"   }  -- [415, 605]
 local ROW_X_OFFSET = 10
 local REGION_TAG_WIDTH = 42
 
@@ -492,6 +507,12 @@ local BR_TITLE   = RowColumn(B_TITLE)
 local BR_RATING  = RowColumn(B_RATING)
 local BR_AGE     = RowColumn(B_AGE)
 local BR_NOTE    = RowColumn(B_NOTE)
+local BR_PVP_ARENA  = RowColumn(B_PVP_ARENA)
+local BR_PVP_COMP   = RowColumn(B_PVP_COMP)
+local BR_PVP_TITLE  = RowColumn(B_PVP_TITLE)
+local BR_PVP_RATING = RowColumn(B_PVP_RATING)
+local BR_PVP_AGE    = RowColumn(B_PVP_AGE)
+local BR_PVP_NOTE   = RowColumn(B_PVP_NOTE)
 
 -- Raid browser column constants: Raid | Difficulty | Comp | Title | Kills | Age | Notes
 local B_RAID_NAME  = { x = 10,  w = 120, align = "LEFT"   }  -- [10,  130]
@@ -514,6 +535,37 @@ local COMP_SLOT_SIZE    = 18
 local COMP_SLOT_ICON    = 13
 local COMP_SLOT_SPACING = 20
 local COMP_TOTAL_SPAN   = (5 - 1) * COMP_SLOT_SPACING + COMP_SLOT_SIZE  -- 98px
+-- PVP comp slots are slightly larger so spec icons are legible (3 slots max)
+local COMP_SLOT_SIZE_PVP    = 22
+local COMP_SLOT_ICON_PVP    = 17
+local COMP_SLOT_SPACING_PVP = 26
+
+-- Spec name → specID lookup built from all known TWW spec IDs.
+-- Used as fallback when GetSearchResultPlayerInfo returns specName but not specID.
+local KNOWN_SPEC_IDS = {
+    62, 63, 64,            -- Mage: Arcane, Fire, Frost
+    65, 66, 70,            -- Paladin: Holy, Protection, Retribution
+    71, 72, 73,            -- Warrior: Arms, Fury, Protection
+    102, 103, 104, 105,    -- Druid: Balance, Feral, Guardian, Restoration
+    250, 251, 252,         -- Death Knight: Blood, Frost, Unholy
+    253, 254, 255,         -- Hunter: Beast Mastery, Marksmanship, Survival
+    256, 257, 258,         -- Priest: Discipline, Holy, Shadow
+    259, 260, 261,         -- Rogue: Assassination, Outlaw, Subtlety
+    262, 263, 264,         -- Shaman: Elemental, Enhancement, Restoration
+    265, 266, 267,         -- Warlock: Affliction, Demonology, Destruction
+    268, 269, 270,         -- Monk: Brewmaster, Windwalker, Mistweaver
+    577, 581,              -- Demon Hunter: Havoc, Vengeance
+    1467, 1468, 1473,      -- Evoker: Devastation, Preservation, Augmentation
+}
+local specNameToID = {}
+if GetSpecializationInfoByID then
+    for _, id in ipairs(KNOWN_SPEC_IDS) do
+        local _, specName = GetSpecializationInfoByID(id)
+        if specName and specName ~= "" then
+            specNameToID[strlower(specName)] = id
+        end
+    end
+end
 
 local headers = {}
 local keyHeader
@@ -522,6 +574,7 @@ function addonTable.UpdateHeaderVisuals()
     local showSecondaryMetric = UsesSecondaryMetricColumn()
     local isBrowser = IsBrowserMode()
     local isRaidBrowser = IsRaidBrowserMode()
+    local isPvpBrowser = IsPvpBrowserMode()
 
     local browserColumns = {
         role   = B_DUNGEON,
@@ -530,6 +583,14 @@ function addonTable.UpdateHeaderVisuals()
         ilvl   = B_COMP,    -- "Comp" in browser
         rating = B_RATING,
         key    = B_AGE,     -- "Age" in browser
+    }
+    local pvpBrowserColumns = {
+        role   = B_PVP_ARENA,
+        class  = B_PVP_TITLE,
+        spec   = nil,
+        ilvl   = B_PVP_COMP,
+        rating = B_PVP_RATING,
+        key    = B_PVP_AGE,
     }
     local raidBrowserColumns = {
         role   = B_RAID_NAME,
@@ -552,6 +613,8 @@ function addonTable.UpdateHeaderVisuals()
         local column
         if isRaidBrowser then
             column = raidBrowserColumns[header.sortKey]
+        elseif isPvpBrowser then
+            column = pvpBrowserColumns[header.sortKey]
         elseif isBrowser then
             column = browserColumns[header.sortKey]
         else
@@ -603,10 +666,12 @@ function addonTable.UpdateHeaderVisuals()
         elseif isBrowser and header.sortKey == "role" then
             if isRaidBrowser then
                 header.text:SetText("Raid")
+            elseif isPvpBrowser then
+                header.text:SetText("Arena")
             elseif GetListingMode() == "delve" then
                 header.text:SetText("Delve")
-            elseif GetListingMode() == "generic" or GetListingMode() == "pvp" then
-                -- Generic/pvp covers Custom Groups (shows Custom PvE/PvP activity types)
+            elseif GetListingMode() == "generic" then
+                -- Generic covers Custom Groups (shows Custom PvE/PvP activity types)
                 -- and Questing (shows zone names). Distinguish by examining the first result.
                 local ctxInfo = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.activityInfo
                 local firstResult = addonTable.SearchResults and addonTable.SearchResults[1]
@@ -615,7 +680,7 @@ function addonTable.UpdateHeaderVisuals()
                     or (firstResult and (firstResult.activityName or firstResult.dungeonName or ""))
                     or ""
                 )
-                if hint:find("custom", 1, true) or GetListingMode() == "pvp" then
+                if hint:find("custom", 1, true) then
                     header.text:SetText("Activity")
                 else
                     header.text:SetText("Zone")
@@ -700,7 +765,9 @@ end
 
 local function GetCurrentNoteColumn()
     if IsBrowserMode() then
-        return IsRaidBrowserMode() and B_RAID_NOTE or B_NOTE
+        if IsRaidBrowserMode() then return B_RAID_NOTE end
+        if IsPvpBrowserMode() then return B_PVP_NOTE end
+        return B_NOTE
     end
 
     if UsesSecondaryMetricColumn() then
@@ -1081,11 +1148,24 @@ local function GetBrowserSecondaryDisplay(result)
     return (result.keyLevel and result.keyLevel > 0) and ("+" .. result.keyLevel) or "--"
 end
 
-local function RepositionCompSlots(row, col)
-    local slotOffset = math.floor((col.w - COMP_TOTAL_SPAN) / 2)
+-- isPvp=true uses larger slot sizes and spacing for spec icons
+local function RepositionCompSlots(row, col, numSlots, isPvp)
+    numSlots = numSlots or 5
+    local slotSize    = isPvp and COMP_SLOT_SIZE_PVP    or COMP_SLOT_SIZE
+    local slotSpacing = isPvp and COMP_SLOT_SPACING_PVP or COMP_SLOT_SPACING
+    local iconSize    = isPvp and COMP_SLOT_ICON_PVP    or COMP_SLOT_ICON
+    local totalSpan   = (numSlots - 1) * slotSpacing + slotSize
+    local slotOffset  = math.floor((col.w - totalSpan) / 2)
     for index, slot in ipairs(row.compSlots) do
         slot:ClearAllPoints()
-        slot:SetPoint("LEFT", row, "LEFT", col.x + slotOffset + ((index - 1) * COMP_SLOT_SPACING), 0)
+        slot:SetPoint("LEFT", row, "LEFT", col.x + slotOffset + ((index - 1) * slotSpacing), 0)
+        if isPvp then
+            slot:SetSize(slotSize, slotSize)
+            slot.icon:SetSize(iconSize, iconSize)
+        else
+            slot:SetSize(COMP_SLOT_SIZE, COMP_SLOT_SIZE)
+            slot.icon:SetSize(COMP_SLOT_ICON, COMP_SLOT_ICON)
+        end
     end
 end
 
@@ -1097,6 +1177,17 @@ local function ConfigureBrowserRowLayout(row)
     ConfigureTextColumn(row.ratingText, row, BR_RATING)
     if row.ageText then ConfigureTextColumn(row.ageText, row, BR_AGE) end
     ConfigureTextColumn(row.noteText, row, BR_NOTE, 5)
+end
+
+-- PVP/Arena layout: narrow "Arena" column + 3-slot spec comp (larger icons) + wider title
+local function ConfigurePvpBrowserRowLayout(row)
+    local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_PVP_ARENA, 5, regionMarkup)
+    RepositionCompSlots(row, BR_PVP_COMP, 3, true)  -- true = PVP large-slot mode
+    ConfigureTextColumn(row.nameText, row, BR_PVP_TITLE, 5)
+    ConfigureTextColumn(row.ratingText, row, BR_PVP_RATING)
+    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_PVP_AGE) end
+    ConfigureTextColumn(row.noteText, row, BR_PVP_NOTE, 5)
 end
 
 local function ConfigureRaidBrowserRowLayout(row)
@@ -1146,6 +1237,54 @@ local function SetBrowserCompSlot(slotFrame, role, className, filled)
     end
 end
 
+-- PVP/Arena comp slot: shows spec icon; falls back to class icon atlas if specID unavailable.
+local function SetBrowserCompSlotSpec(slotFrame, specID, className, filled)
+    if filled then
+        local iconSet = false
+        -- Try spec icon first
+        if specID and specID > 0 then
+            local iconID = select(4, GetSpecializationInfoByID(specID))
+            if iconID then
+                slotFrame.icon:SetTexture(iconID)
+                slotFrame.icon:SetTexCoord(0.075, 0.925, 0.075, 0.925)
+                iconSet = true
+            end
+        end
+        -- Fall back to class icon atlas (e.g. "classicon-hunter", "classicon-deathknight")
+        if not iconSet and className and className ~= "" then
+            local atlasName = "classicon-" .. strlower(className)
+            slotFrame.icon:SetAtlas(atlasName, false)
+            slotFrame.icon:SetTexCoord(0, 1, 0, 1)
+            iconSet = true
+        end
+        -- Ultimate fallback: DAMAGER role icon
+        if not iconSet then
+            local coords = addonTable.RoleTexCoords["DAMAGER"]
+            if coords then
+                slotFrame.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
+                slotFrame.icon:SetTexCoord(unpack(coords))
+            end
+        end
+        local classKey = string.upper(className or "")
+        local classColor = (classKey ~= "" and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classKey]) or addonTable.ClassColor
+        slotFrame:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1.0)
+        slotFrame:SetBackdropBorderColor(classColor.r * 0.55, classColor.g * 0.55, classColor.b * 0.55, 1)
+        slotFrame.icon:SetDesaturated(false)
+        slotFrame.icon:SetAlpha(1.0)
+    else
+        slotFrame.icon:SetAtlas(nil)
+        local coords = addonTable.RoleTexCoords["DAMAGER"]
+        if coords then
+            slotFrame.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
+            slotFrame.icon:SetTexCoord(unpack(coords))
+        end
+        slotFrame:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        slotFrame:SetBackdropBorderColor(0, 0, 0, 1)
+        slotFrame.icon:SetDesaturated(true)
+        slotFrame.icon:SetAlpha(0.35)
+    end
+end
+
 -- Role icon texture markup (LFG portrait-roles spritesheet)
 local ROLE_ICON = {
     TANK    = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:13:13:0:0:64:64:0:19:22:41|t ",
@@ -1185,6 +1324,24 @@ local function BuildBrowserGroupTooltip(result)
     end
     local listingMode = result.mode or "generic"
 
+    -- ── PVP: re-fetch rating fresh (may have been nil when result was first processed) ─
+    if (listingMode == "rated_pvp" or listingMode == "pvp") and result.id and C_LFGList.GetSearchResultInfo then
+        local fresh = C_LFGList.GetSearchResultInfo(result.id)
+        if fresh and type(fresh.leaderPvpRatingInfo) == "table" then
+            local entry = fresh.leaderPvpRatingInfo[1] or fresh.leaderPvpRatingInfo
+            if type(entry) == "table" then
+                local freshRating = tonumber(entry.rating or entry.pvpRating or entry.currentRating or entry.value) or 0
+                if freshRating > 0 then
+                    result.pvpRating = freshRating
+                    result.rating    = freshRating
+                end
+                if not result.pvpBracket and GetPvpBracketLabel then
+                    result.pvpBracket = GetPvpBracketLabel(entry)
+                end
+            end
+        end
+    end
+
     -- ── Title: "+13 Competitive" ──────────────────────────────────────────────
     local titleParts = {}
     if result.keyLevel and result.keyLevel > 0 then
@@ -1210,15 +1367,21 @@ local function BuildBrowserGroupTooltip(result)
 
     GameTooltip:AddLine(" ")
 
-    -- ── Leader: name + M+ score ───────────────────────────────────────────────
+    -- ── Leader: name + score (M+ rating or PVP rating) ───────────────────────
     local leaderName = result.leaderName or ""
     if leaderName ~= "" then
-        local score = math.floor(result.ratingValue or result.rating or 0)
-        if score > 0 then
-            local cR, cG, cB = GetPreferredScoreColor(score, 1, 1, 1)
-            GameTooltip:AddDoubleLine("Leader:  " .. leaderName, tostring(score), 1, 1, 1, cR, cG, cB)
+        if listingMode == "rated_pvp" or listingMode == "pvp" then
+            local pvpRating = math.floor(result.pvpRating or result.rating or 0)
+            local ratingStr = pvpRating > 0 and tostring(pvpRating) or "--"
+            GameTooltip:AddDoubleLine("Leader:  " .. leaderName, ratingStr, 1, 1, 1, 1, 1, 1)
         else
-            GameTooltip:AddDoubleLine("Leader:", leaderName, 1, 1, 1, 1, 1, 1)
+            local score = math.floor(result.ratingValue or result.rating or 0)
+            if score > 0 then
+                local cR, cG, cB = GetPreferredScoreColor(score, 1, 1, 1)
+                GameTooltip:AddDoubleLine("Leader:  " .. leaderName, tostring(score), 1, 1, 1, cR, cG, cB)
+            else
+                GameTooltip:AddDoubleLine("Leader:", leaderName, 1, 1, 1, 1, 1, 1)
+            end
         end
     end
 
@@ -1379,13 +1542,7 @@ local function BuildBrowserGroupTooltip(result)
     end
 
     -- ── Non-M+ modes: fallback stats ─────────────────────────────────────────
-    if listingMode == "rated_pvp" or listingMode == "pvp" then
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddDoubleLine("PVP Rating:", (result.pvpRating and result.pvpRating > 0) and result.pvpRating or "--", 1, 1, 1, 1, 1, 1)
-        if result.pvpBracket then
-            GameTooltip:AddDoubleLine("Bracket:", result.pvpBracket, 1, 1, 1, 1, 1, 1)
-        end
-    elseif (listingMode == "raid" or listingMode == "legacy_raid") and (not result.raidProgress) then
+    if (listingMode == "raid" or listingMode == "legacy_raid") and (not result.raidProgress) then
         GameTooltip:AddLine(" ")
         GameTooltip:AddDoubleLine("Progress:", "--", 1, 1, 1, 1, 1, 1)
     end
@@ -1772,6 +1929,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
     end
 
     local isRaidBrowser = IsRaidBrowserMode()
+    local isPvpBrowser = IsPvpBrowserMode()
     for _, row in ipairs(rows) do
         if row.keyText then
             if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
@@ -1780,6 +1938,8 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
             if isBrowser then
                 if isRaidBrowser then
                     ConfigureRaidBrowserRowLayout(row)
+                elseif isPvpBrowser then
+                    ConfigurePvpBrowserRowLayout(row)
                 else
                     ConfigureBrowserRowLayout(row)
                 end
@@ -1927,10 +2087,13 @@ local function PopulateBrowserRow(row, result, isAltColor)
     local searchCtxMode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode or "generic"
     local isRaidMode = (result.mode == "raid" or result.mode == "legacy_raid")
                     or (IsBrowserMode() and (searchCtxMode == "raid" or searchCtxMode == "legacy_raid"))
+    local isPvpMode = (result.mode == "pvp" or result.mode == "rated_pvp")
     local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
 
     if isRaidMode then
         ConfigureRaidBrowserRowLayout(row)
+    elseif isPvpMode then
+        ConfigurePvpBrowserRowLayout(row)
     else
         ConfigureBrowserRowLayout(row)
     end
@@ -1965,8 +2128,27 @@ local function PopulateBrowserRow(row, result, isAltColor)
         row.ilvlText:SetWordWrap(false)
         row.ilvlText:SetText(ROLE_ICON.TANK .. tanks .. "  " .. ROLE_ICON.HEALER .. healers .. "  " .. ROLE_ICON.DAMAGER .. dps)
         row.ilvlText:Show()
+    elseif isPvpMode then
+        -- PVP/Arena mode: show spec/class icons for each member (max 3 slots), hide slots 4-5
+        row.ilvlText:Hide()
+        local players = result.players or {}
+        for idx = 1, 5 do
+            local slot = row.compSlots[idx]
+            if idx > 3 then
+                slot:Hide()
+            else
+                local player = players[idx]
+                local specID = player and player.specID
+                -- If specID missing, resolve from specName via lookup table
+                if (not specID or specID == 0) and player and player.specName and player.specName ~= "" then
+                    specID = specNameToID[strlower(player.specName)]
+                end
+                slot:Show()
+                SetBrowserCompSlotSpec(slot, specID, player and player.class, player ~= nil)
+            end
+        end
     else
-        -- Non-raid browser mode: show comp slots, hide ilvlText
+        -- Non-raid browser mode: show comp slots (role icons), hide ilvlText
         row.ilvlText:Hide()
         local setupSummary = GetBrowserSetupSummary(result)
         for idx, slotInfo in ipairs(setupSummary) do
@@ -1992,6 +2174,24 @@ local function PopulateBrowserRow(row, result, isAltColor)
         row.ratingText:SetText(killsText)
     else
         row.nameText:SetText(result.displayName ~= "" and result.displayName or (result.activityName ~= "" and result.activityName or "--"))
+        -- For PVP mode: re-fetch pvp rating fresh from the API (may have been nil at initial processing time)
+        if isPvpMode and result.id and C_LFGList.GetSearchResultInfo then
+            local fresh = C_LFGList.GetSearchResultInfo(result.id)
+            if fresh and type(fresh.leaderPvpRatingInfo) == "table" then
+                -- TWW wraps pvp info in an array; unwrap to get the actual entry
+                local entry = fresh.leaderPvpRatingInfo[1] or fresh.leaderPvpRatingInfo
+                if type(entry) == "table" then
+                    local freshRating = tonumber(entry.rating or entry.pvpRating or entry.currentRating or entry.value) or 0
+                    if freshRating > 0 then
+                        result.pvpRating = freshRating
+                        result.rating    = freshRating
+                    end
+                    if not result.pvpBracket and GetPvpBracketLabel then
+                        result.pvpBracket = GetPvpBracketLabel(entry)
+                    end
+                end
+            end
+        end
         row.ratingText:SetText(GetBrowserRatingDisplay(result))
     end
 
@@ -2012,7 +2212,16 @@ local function PopulateBrowserRow(row, result, isAltColor)
     end
 
     row.noteText:SetText(result.comment or "")
-    row.dungeonText:SetText(result.dungeonName ~= "" and result.dungeonName or "--")
+    if isPvpMode then
+        -- Show arena bracket size ("2v2" / "3v3") derived from pvpBracket or maxPlayers
+        local bracketText = result.pvpBracket
+            or (result.maxPlayers == 2 and "2v2")
+            or (result.maxPlayers == 3 and "3v3")
+            or (result.dungeonName ~= "" and result.dungeonName or "--")
+        row.dungeonText:SetText(bracketText)
+    else
+        row.dungeonText:SetText(result.dungeonName ~= "" and result.dungeonName or "--")
+    end
 
     row.statusText:Hide()
     row.declineBtn:Hide()
