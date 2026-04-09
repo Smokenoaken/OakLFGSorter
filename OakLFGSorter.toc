@@ -22,5 +22,6 @@ UI_Header.lua
 UI_Filters.lua
 UI_Rows.lua
 Core.lua
+MinimapButton.lua
 Search_Signup.lua
 Search_Integration.lua

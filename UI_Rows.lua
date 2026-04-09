@@ -31,7 +31,14 @@ local MODE_CONFIGS = {
 
 local function GetListingMode()
     if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
-        return (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
+        local ctx = addonTable.CurrentSearchContext
+        local selectedCategoryKey = ctx and ctx.selectedCategoryKey
+        if selectedCategoryKey == "RAIDS_LEGACY" then
+            return "legacy_raid"
+        elseif selectedCategoryKey == "RAIDS_MIDNIGHT" then
+            return "raid"
+        end
+        return (ctx and ctx.mode) or "generic"
     end
 
     return (addonTable.CurrentListingContext and addonTable.CurrentListingContext.mode) or "generic"
@@ -172,6 +179,15 @@ local function IsBrowserMode()
     return addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
 end
 
+local function IsCustomCategoryBrowserMode()
+    if not IsBrowserMode() then
+        return false
+    end
+
+    local ctx = addonTable.CurrentSearchContext
+    return ctx and ctx.selectedCategoryKey == "CUSTOM"
+end
+
 IsRaidBrowserMode = function()
     if not IsBrowserMode() then return false end
     local m = (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
@@ -180,6 +196,7 @@ end
 
 IsPvpBrowserMode = function()
     if not IsBrowserMode() then return false end
+    if IsCustomCategoryBrowserMode() then return false end
     local m = GetListingMode()
     return m == "pvp" or m == "rated_pvp"
 end
@@ -215,10 +232,18 @@ local scrollChild = CreateFrame("Frame")
 scrollChild:SetSize(scrollFrame:GetWidth(), 1)
 scrollFrame:SetScrollChild(scrollChild)
 
+local emptyStateText = scrollChild:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+emptyStateText:SetPoint("TOP", scrollChild, "TOP", 0, -80)
+emptyStateText:SetWidth(420)
+emptyStateText:SetJustifyH("CENTER")
+emptyStateText:SetJustifyV("TOP")
+emptyStateText:SetTextColor(0.78, 0.78, 0.78)
+emptyStateText:Hide()
+
 -- Browser mode: sticky panel that floats above the scroll area, holding applied (pending) groups
 local stickyPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 stickyPanel:SetBackdrop({ bgFile = addonTable.FLAT_TEX })
-stickyPanel:SetBackdropColor(0.05, 0.10, 0.05, 0.95)
+stickyPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_STICKY or {0.05, 0.10, 0.05, 0.95}))
 stickyPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() + 5)
 stickyPanel:Hide()
 local stickyRows = {}
@@ -228,7 +253,7 @@ stickySeparatorLine:SetHeight(2)
 stickySeparatorLine:SetFrameLevel(OAK_LFG:GetFrameLevel() + 6)
 local _ssLineTex = stickySeparatorLine:CreateTexture(nil, "OVERLAY")
 _ssLineTex:SetAllPoints(stickySeparatorLine)
-_ssLineTex:SetColorTexture(addonTable.ClassColor.r * 0.9, addonTable.ClassColor.g * 0.9, addonTable.ClassColor.b * 0.9, 1.0)
+_ssLineTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[1] or 0.9), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[2] or 0.9), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[3] or 0.9), addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[4] or 1.0)
 stickySeparatorLine:Hide()
 local stickyPanelHeight = 0
 
@@ -238,7 +263,7 @@ browserAppliedSeparator:SetHeight(3)
 browserAppliedSeparator:SetFrameLevel(scrollChild:GetFrameLevel() + 20)
 local _bsepTex = browserAppliedSeparator:CreateTexture(nil, "OVERLAY")
 _bsepTex:SetAllPoints(browserAppliedSeparator)
-_bsepTex:SetColorTexture(addonTable.ClassColor.r * 0.7, addonTable.ClassColor.g * 0.7, addonTable.ClassColor.b * 0.7, 0.9)
+_bsepTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[1] or 0.7), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[2] or 0.7), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[3] or 0.7), addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[4] or 0.9)
 browserAppliedSeparator:Hide()
 
 local applicantContextBar = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
@@ -246,7 +271,7 @@ applicantContextBar:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 1, -31)
 applicantContextBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -1, -31)
 applicantContextBar:SetHeight(APPLICANT_CONTEXT_BAR_HEIGHT)
 applicantContextBar:SetBackdrop({ bgFile = addonTable.FLAT_TEX })
-applicantContextBar:SetBackdropColor(0.08, 0.08, 0.1, 0.75)
+applicantContextBar:SetBackdropColor(unpack(addonTable.OAK_COLOR_CONTEXT or {0.08, 0.08, 0.10, 0.75}))
 applicantContextBar:Hide()
 
 local applicantListingTitle = applicantContextBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
@@ -267,25 +292,38 @@ applicantListingActivity:SetWordWrap(false)
 local SCROLL_BOTTOM_APPLICANT = 35
 local SCROLL_BOTTOM_BROWSER   = 60  -- extra room for the quick signup bar above the footer
 
+local function GetThemeLayoutPad()
+    return addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
+end
+
+local function ApplyApplicantContextInsets()
+    local pad = GetThemeLayoutPad()
+    applicantContextBar:ClearAllPoints()
+    applicantContextBar:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 1 + pad, -31 - pad)
+    applicantContextBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -1 - pad, -31 - pad)
+end
+ApplyApplicantContextInsets()
+
 local function UpdateApplicantContextLayout()
     local contextVisible = applicantContextBar:IsShown()
-    HEADER_TOP_OFFSET = contextVisible and (BASE_HEADER_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_HEADER_TOP_OFFSET
-    SCROLL_TOP_OFFSET = contextVisible and (BASE_SCROLL_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_SCROLL_TOP_OFFSET
+    local pad = GetThemeLayoutPad()
+    HEADER_TOP_OFFSET = (contextVisible and (BASE_HEADER_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_HEADER_TOP_OFFSET) - pad
+    SCROLL_TOP_OFFSET = (contextVisible and (BASE_SCROLL_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_SCROLL_TOP_OFFSET) - pad
 
     local isBrowser = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
-    local bottomOffset = isBrowser and SCROLL_BOTTOM_BROWSER or SCROLL_BOTTOM_APPLICANT
+    local bottomOffset = (isBrowser and SCROLL_BOTTOM_BROWSER or SCROLL_BOTTOM_APPLICANT) + pad
 
     -- Sticky panel: shown above scroll area when there are applied groups in browser mode
     local hasStickyRows = isBrowser and stickyPanelHeight > 0
     if hasStickyRows then
         stickyPanel:ClearAllPoints()
-        stickyPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET)
-        stickyPanel:SetPoint("RIGHT", OAK_LFG, "RIGHT", -25, 0)
+        stickyPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10 + pad, SCROLL_TOP_OFFSET)
+        stickyPanel:SetPoint("RIGHT", OAK_LFG, "RIGHT", -25 - pad, 0)
         stickyPanel:SetHeight(stickyPanelHeight)
         stickyPanel:Show()
         stickySeparatorLine:ClearAllPoints()
-        stickySeparatorLine:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET - stickyPanelHeight)
-        stickySeparatorLine:SetPoint("RIGHT", OAK_LFG, "RIGHT", -25, 0)
+        stickySeparatorLine:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10 + pad, SCROLL_TOP_OFFSET - stickyPanelHeight)
+        stickySeparatorLine:SetPoint("RIGHT", OAK_LFG, "RIGHT", -25 - pad, 0)
         stickySeparatorLine:Show()
     else
         stickyPanel:Hide()
@@ -295,8 +333,8 @@ local function UpdateApplicantContextLayout()
     -- Push scroll area down past the sticky panel (+ 2px for the separator line)
     local stickyOffset = hasStickyRows and (stickyPanelHeight + 2) or 0
     scrollFrame:ClearAllPoints()
-    scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET - stickyOffset)
-    scrollFrame:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -25, bottomOffset)
+    scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10 + pad, SCROLL_TOP_OFFSET - stickyOffset)
+    scrollFrame:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -25 - pad, bottomOffset)
 end
 
 local function UpdateApplicantContextBar()
@@ -340,10 +378,26 @@ OAK_LFG:SetScript("OnSizeChanged", function(self, width, height)
 end)
 
 local footer = CreateFrame("Frame", nil, OAK_LFG)
-footer:SetPoint("BOTTOMLEFT", OAK_LFG, "BOTTOMLEFT", 10, 10)
-footer:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -10, 10)
 footer:SetHeight(20)
 addonTable.Footer = footer
+local function ApplyFooterInsets()
+    local pad = GetThemeLayoutPad()
+    footer:ClearAllPoints()
+    local bottomPad = 10
+    if pad > 0 then
+        bottomPad = 6
+    end
+    footer:SetPoint("BOTTOMLEFT", OAK_LFG, "BOTTOMLEFT", 10 + pad, bottomPad)
+    footer:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -10 - pad, bottomPad)
+end
+ApplyFooterInsets()
+
+local function GetFooterButtonYOffset()
+    if GetThemeLayoutPad() > 0 then
+        return 2
+    end
+    return 0
+end
 
 local lustText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 lustText:SetPoint("LEFT", footer, "LEFT", 10, 0)
@@ -358,7 +412,7 @@ groupCountText:Hide()
 addonTable.groupCountText = groupCountText
 
 local suppBtn = addonTable.CreateFlatButton(footer, "Supporters & Links", 150)
-suppBtn:SetPoint("LEFT", brezText, "RIGHT", 20, 0)
+suppBtn:SetPoint("LEFT", brezText, "RIGHT", 20, GetFooterButtonYOffset())
 suppBtn:SetScript("OnClick", function()
     if addonTable.SupportersPanel:IsShown() then
         addonTable.SupportersPanel:Hide()
@@ -584,6 +638,10 @@ local B_RAID_TITLE = { x = 298, w = 107, align = "LEFT"   }  -- [298, 405]
 local B_RAID_KILLS = { x = 405, w = 50,  align = "CENTER" }  -- [405, 455]
 local B_RAID_AGE   = { x = 455, w = 45,  align = "CENTER" }  -- [455, 500]
 local B_RAID_NOTE  = { x = 500, w = 105, align = "LEFT"   }  -- [500, 605]
+local B_RAID_TITLE_COLLAPSED = { x = 298, w = 95, align = "LEFT"   }  -- [298, 393]
+local B_RAID_KILLS_COLLAPSED = { x = 393, w = 42, align = "CENTER" }  -- [393, 435]
+local B_RAID_AGE_COLLAPSED   = { x = 435, w = 34, align = "CENTER" }  -- [435, 469]
+local B_RAID_NOTE_COLLAPSED  = { x = 469, w = 31, align = "LEFT"   }  -- [469, 500]
 local BR_RAID_NAME  = RowColumn(B_RAID_NAME)
 local BR_RAID_DIFF  = RowColumn(B_RAID_DIFF)
 local BR_RAID_COMP  = RowColumn(B_RAID_COMP)
@@ -591,6 +649,10 @@ local BR_RAID_TITLE = RowColumn(B_RAID_TITLE)
 local BR_RAID_KILLS = RowColumn(B_RAID_KILLS)
 local BR_RAID_AGE   = RowColumn(B_RAID_AGE)
 local BR_RAID_NOTE  = RowColumn(B_RAID_NOTE)
+local BR_RAID_TITLE_COLLAPSED = RowColumn(B_RAID_TITLE_COLLAPSED)
+local BR_RAID_KILLS_COLLAPSED = RowColumn(B_RAID_KILLS_COLLAPSED)
+local BR_RAID_AGE_COLLAPSED   = RowColumn(B_RAID_AGE_COLLAPSED)
+local BR_RAID_NOTE_COLLAPSED  = RowColumn(B_RAID_NOTE_COLLAPSED)
 
 -- File-scope comp slot sizing (also used in CreateRow and RepositionCompSlots)
 local COMP_SLOT_SIZE    = 18
@@ -665,11 +727,11 @@ function addonTable.UpdateHeaderVisuals()
     }
     local raidBrowserColumns = {
         role   = B_RAID_NAME,
-        class  = B_RAID_TITLE,
+        class  = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and B_RAID_TITLE_COLLAPSED or B_RAID_TITLE,
         spec   = B_RAID_DIFF,   -- "Difficulty" in raid browser
         ilvl   = B_RAID_COMP,
-        rating = B_RAID_KILLS,
-        key    = B_RAID_AGE,
+        rating = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and B_RAID_KILLS_COLLAPSED or B_RAID_KILLS,
+        key    = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and B_RAID_AGE_COLLAPSED or B_RAID_AGE,
     }
     local defaultColumns = {
         role = C_ROLE,
@@ -838,7 +900,12 @@ end
 
 local function GetCurrentNoteColumn()
     if IsBrowserMode() then
-        if IsRaidBrowserMode() then return B_RAID_NOTE end
+        if IsRaidBrowserMode() then
+            if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+                return B_RAID_NOTE_COLLAPSED
+            end
+            return B_RAID_NOTE
+        end
         if IsPvpBrowserMode() then return B_PVP_NOTE end
         return B_NOTE
     end
@@ -852,6 +919,30 @@ end
 
 local function GetCurrentRowNoteColumn()
     return RowColumn(GetCurrentNoteColumn())
+end
+
+local function GetCurrentRaidBrowserColumns()
+    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        return {
+            name = BR_RAID_NAME,
+            diff = BR_RAID_DIFF,
+            comp = BR_RAID_COMP,
+            title = BR_RAID_TITLE_COLLAPSED,
+            kills = BR_RAID_KILLS_COLLAPSED,
+            age = BR_RAID_AGE_COLLAPSED,
+            note = BR_RAID_NOTE_COLLAPSED,
+        }
+    end
+
+    return {
+        name = BR_RAID_NAME,
+        diff = BR_RAID_DIFF,
+        comp = BR_RAID_COMP,
+        title = BR_RAID_TITLE,
+        kills = BR_RAID_KILLS,
+        age = BR_RAID_AGE,
+        note = BR_RAID_NOTE,
+    }
 end
 
 GetBrowserApplicationPriority = function(result)
@@ -990,8 +1081,16 @@ local function UpdateNotesToggleVisual()
 end
 
 addonTable.RegisterThemeRefresh("ui_rows_theme", function()
-    _ssLineTex:SetColorTexture(addonTable.ClassColor.r * 0.9, addonTable.ClassColor.g * 0.9, addonTable.ClassColor.b * 0.9, 1.0)
-    _bsepTex:SetColorTexture(addonTable.ClassColor.r * 0.7, addonTable.ClassColor.g * 0.7, addonTable.ClassColor.b * 0.7, 0.9)
+    ApplyApplicantContextInsets()
+    ApplyFooterInsets()
+    suppBtn:ClearAllPoints()
+    suppBtn:SetPoint("LEFT", brezText, "RIGHT", 20, GetFooterButtonYOffset())
+    optionsBtn:ClearAllPoints()
+    optionsBtn:SetPoint("LEFT", suppBtn, "RIGHT", 6, 0)
+    stickyPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_STICKY or {0.05, 0.10, 0.05, 0.95}))
+    applicantContextBar:SetBackdropColor(unpack(addonTable.OAK_COLOR_CONTEXT or {0.08, 0.08, 0.10, 0.75}))
+    _ssLineTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[1] or 0.9), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[2] or 0.9), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[3] or 0.9), addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[4] or 1.0)
+    _bsepTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[1] or 0.7), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[2] or 0.7), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[3] or 0.7), addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[4] or 0.9)
     UpdateNotesToggleVisual()
     if addonTable.UpdateDisplay then
         addonTable.UpdateDisplay()
@@ -1246,6 +1345,16 @@ local function ConfigureBrowserRowLayout(row)
     ConfigureTextColumn(row.noteText, row, BR_NOTE, 5)
 end
 
+local function ConfigureCustomBrowserRowLayout(row)
+    local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_DUNGEON, 5, regionMarkup)
+    ConfigureTextColumn(row.ilvlText, row, BR_COMP)
+    ConfigureTextColumn(row.nameText, row, BR_TITLE, 5)
+    ConfigureTextColumn(row.ratingText, row, BR_RATING)
+    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_AGE) end
+    ConfigureTextColumn(row.noteText, row, BR_NOTE, 5)
+end
+
 -- PVP/Arena layout: narrow "Arena" column + 3-slot spec comp (larger icons) + wider title
 local function ConfigurePvpBrowserRowLayout(row)
     local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
@@ -1268,16 +1377,17 @@ local function ConfigureRbgBrowserRowLayout(row)
 end
 
 local function ConfigureRaidBrowserRowLayout(row)
+    local cols = GetCurrentRaidBrowserColumns()
     local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
     -- Raid | Difficulty | Comp | Title | Kills | Age | Notes
-    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_RAID_NAME, 5, regionMarkup)
-    ConfigureTextColumn(row.specText, row, BR_RAID_DIFF)
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, cols.name, 5, regionMarkup)
+    ConfigureTextColumn(row.specText, row, cols.diff)
     -- ilvlText repurposed as raid comp (Tank/Healer/DPS counts); comp slots hidden in raid mode
-    ConfigureTextColumn(row.ilvlText, row, BR_RAID_COMP)
-    ConfigureTextColumn(row.nameText, row, BR_RAID_TITLE, 5)
-    ConfigureTextColumn(row.ratingText, row, BR_RAID_KILLS)
-    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_RAID_AGE) end
-    ConfigureTextColumn(row.noteText, row, BR_RAID_NOTE, 5)
+    ConfigureTextColumn(row.ilvlText, row, cols.comp)
+    ConfigureTextColumn(row.nameText, row, cols.title, 5)
+    ConfigureTextColumn(row.ratingText, row, cols.kills)
+    if row.ageText then ConfigureTextColumn(row.ageText, row, cols.age) end
+    ConfigureTextColumn(row.noteText, row, cols.note, 5)
 end
 
 local function ConfigureApplicantRowLayout(row)
@@ -2007,6 +2117,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
 
     local isRaidBrowser = IsRaidBrowserMode()
     local isPvpBrowser = IsPvpBrowserMode()
+    local isCustomBrowser = IsCustomCategoryBrowserMode()
     for _, row in ipairs(rows) do
         if row.keyText then
             if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
@@ -2015,6 +2126,8 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
             if isBrowser then
                 if isRaidBrowser then
                     ConfigureRaidBrowserRowLayout(row)
+                elseif isCustomBrowser then
+                    ConfigureCustomBrowserRowLayout(row)
                 elseif isPvpBrowser and row.searchResult and IsRatedBattlegroundResult(row.searchResult) then
                     ConfigureRbgBrowserRowLayout(row)
                 elseif isPvpBrowser then
@@ -2037,7 +2150,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         end
         if row.ilvlText then
             if isBrowser then
-                if isRaidBrowser or (row.searchResult and IsRatedBattlegroundResult(row.searchResult)) then row.ilvlText:Show() else row.ilvlText:Hide() end
+                if isRaidBrowser or isCustomBrowser or (row.searchResult and IsRatedBattlegroundResult(row.searchResult)) then row.ilvlText:Show() else row.ilvlText:Hide() end
             else
                 row.ilvlText:Show()
             end
@@ -2066,7 +2179,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         if row.compSlots then
             for _, slot in pairs(row.compSlots) do
                 -- Raid browser: comp slots hidden (ilvlText shows role counts instead)
-                if isBrowser and isRaidBrowser then
+                if isBrowser and (isRaidBrowser or isCustomBrowser) then
                     slot:Hide()
                 elseif isBrowser then
                     slot:Show()
@@ -2092,6 +2205,8 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         if row.noteText then
             if isRaidBrowser then
                 ConfigureRaidBrowserRowLayout(row)
+            elseif isCustomBrowser then
+                ConfigureCustomBrowserRowLayout(row)
             else
                 ConfigureBrowserRowLayout(row)
             end
@@ -2163,15 +2278,18 @@ local function PopulateBrowserRow(row, result, isAltColor)
 
     -- Use the search context mode to determine layout: world bosses have result.mode="open_world"
     -- but should still render with the raid column layout when searched in a raid context.
-    local searchCtxMode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode or "generic"
+    local searchCtxMode = GetListingMode()
     local isRaidMode = (result.mode == "raid" or result.mode == "legacy_raid")
                     or (IsBrowserMode() and (searchCtxMode == "raid" or searchCtxMode == "legacy_raid"))
-    local isPvpMode = (result.mode == "pvp" or result.mode == "rated_pvp")
+    local isCustomCategory = IsCustomCategoryBrowserMode()
+    local isPvpMode = not isCustomCategory and (result.mode == "pvp" or result.mode == "rated_pvp")
     local isRbgMode = isPvpMode and IsRatedBattlegroundResult(result)
     local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
 
     if isRaidMode then
         ConfigureRaidBrowserRowLayout(row)
+    elseif isCustomCategory then
+        ConfigureCustomBrowserRowLayout(row)
     elseif isRbgMode then
         ConfigureRbgBrowserRowLayout(row)
     elseif isPvpMode then
@@ -2181,7 +2299,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
     end
     row.dungeonText:Show()
     row.roleIcon:Hide()
-    if not isRaidMode and not isRbgMode then row.ilvlText:Hide() end
+    if not isRaidMode and not isRbgMode and not isCustomCategory then row.ilvlText:Hide() end
     row.keyText:Hide()
     if row.ageText then row.ageText:Show() end
 
@@ -2240,11 +2358,22 @@ local function PopulateBrowserRow(row, result, isAltColor)
         end
     else
         -- Non-raid browser mode: show comp slots (role icons), hide ilvlText
-        row.ilvlText:Hide()
         local setupSummary = GetBrowserSetupSummary(result)
-        for idx, slotInfo in ipairs(setupSummary) do
-            row.compSlots[idx]:Show()
-            SetBrowserCompSlot(row.compSlots[idx], slotInfo.role, slotInfo.class, slotInfo.filled)
+        if isCustomCategory then
+            for _, slot in pairs(row.compSlots) do slot:Hide() end
+            local rc = result.roleCounts or {}
+            local tanks   = tonumber(rc.TANK)    or 0
+            local healers = tonumber(rc.HEALER)  or 0
+            local dps     = tonumber(rc.DAMAGER) or 0
+            row.ilvlText:SetWordWrap(false)
+            row.ilvlText:SetText(ROLE_ICON.TANK .. tanks .. "  " .. ROLE_ICON.HEALER .. healers .. "  " .. ROLE_ICON.DAMAGER .. dps)
+            row.ilvlText:Show()
+        else
+            row.ilvlText:Hide()
+            for idx, slotInfo in ipairs(setupSummary) do
+                row.compSlots[idx]:Show()
+                SetBrowserCompSlot(row.compSlots[idx], slotInfo.role, slotInfo.class, slotInfo.filled)
+            end
         end
     end
 
@@ -2358,8 +2487,16 @@ function addonTable.UpdateDisplay()
         row.regionInfo      = nil
     end
     browserAppliedSeparator:Hide()
+    emptyStateText:Hide()
 
     local isBrowser = IsBrowserMode()
+    if addonTable.quickSignupBar then
+        if isBrowser then
+            addonTable.quickSignupBar:Show()
+        else
+            addonTable.quickSignupBar:Hide()
+        end
+    end
     -- Reset sticky state when in applicant mode so it doesn't bleed over
     if not isBrowser and stickyPanelHeight ~= 0 then
         stickyPanelHeight = 0
@@ -2432,6 +2569,12 @@ function addonTable.UpdateDisplay()
             row:Show()
             displayIndex = displayIndex + 1
             isAltColor = not isAltColor
+        end
+
+        local categoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
+        if #activeResults == 0 and categoryKey == "RAIDS_LEGACY" then
+            emptyStateText:SetText("Legacy raid results must be loaded from Blizzard's Premade Groups panel first.\n\nOpen Blizzard's Group Finder, select Legacy Raids there, then Oak will display those results here.")
+            emptyStateText:Show()
         end
     else
         local activeGroups = {}

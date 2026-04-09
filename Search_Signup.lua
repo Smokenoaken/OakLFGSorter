@@ -12,12 +12,41 @@ if OakLFGSorterDB.searchQuickSignup == nil then OakLFGSorterDB.searchQuickSignup
 if OakLFGSorterDB.searchPersistSignupNote == nil then OakLFGSorterDB.searchPersistSignupNote = false end
 
 local FLAT_TEX = "Interface\\Buttons\\WHITE8X8"
-local OAK_COLOR_BG = {0.106, 0.106, 0.129, 0.85}
-local OAK_COLOR_PANE = {0.137, 0.141, 0.172, 1}
 local OAK_COLOR_BORDER = {0, 0, 0, 1}
 
 local function GetAccentColor()
     return addonTable.ClassColor or addonTable.PlayerClassColor or { r = 1, g = 1, b = 1 }
+end
+
+local function GetPaneColor()
+    return addonTable.OAK_COLOR_PANE or {0.137, 0.141, 0.172, 1}
+end
+
+local function GetQuickSignupBarColor()
+    return addonTable.OAK_COLOR_QUICKSIGNUP or {0.08, 0.08, 0.10, 0.75}
+end
+
+local function GetToggleOffColor()
+    return addonTable.OAK_COLOR_TOGGLE_OFF or {0.08, 0.08, 0.10, 0.95}
+end
+
+local quickSignupBar
+
+local function GetThemeLayoutPad()
+    if addonTable.GetThemeFramePadding then
+        return addonTable.GetThemeFramePadding() or 0
+    end
+    return 0
+end
+
+local function ApplyQuickSignupBarInsets()
+    if not quickSignupBar then
+        return
+    end
+    local pad = GetThemeLayoutPad()
+    quickSignupBar:ClearAllPoints()
+    quickSignupBar:SetPoint("BOTTOMLEFT", OAK_LFG, "BOTTOMLEFT", 1 + pad, 31)
+    quickSignupBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -1 - pad, 31)
 end
 
 local quickSignupState = {
@@ -334,7 +363,7 @@ local function CreateQuickSignupToggle(parent)
             self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
             self:SetBackdropBorderColor(0, 0, 0, 1)
         else
-            self:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+            self:SetBackdropColor(unpack(GetToggleOffColor()))
             self:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
         end
     end
@@ -364,7 +393,7 @@ local function CreateQuickSignupRoleButton(parent, roleKey, tooltipText)
             self.icon:SetVertexColor(1, 1, 1, 1)
             self.icon:SetAlpha(1)
         else
-            self:SetBackdropColor(unpack(OAK_COLOR_PANE))
+            self:SetBackdropColor(unpack(GetPaneColor()))
             self.icon:SetVertexColor(1, 1, 1, 1)
             self.icon:SetAlpha(0.95)
         end
@@ -384,20 +413,28 @@ local function CreateQuickSignupRoleButton(parent, roleKey, tooltipText)
 end
 
 addonTable.RegisterThemeRefresh("search_signup_theme", function()
+    quickSignupBar:SetBackdropColor(unpack(GetQuickSignupBarColor()))
+    quickSignupBar:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+    ApplyQuickSignupBarInsets()
     if addonTable.UpdateSearchQuickSignupControls then
         addonTable.UpdateSearchQuickSignupControls()
     end
 end)
 
 -- Bar sits above OAK_LFG's footer row; shown only in browser mode
-local quickSignupBar = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
-quickSignupBar:SetPoint("BOTTOMLEFT",  OAK_LFG, "BOTTOMLEFT",  1, 31)
-quickSignupBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -1, 31)
+quickSignupBar = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 quickSignupBar:SetHeight(24)
-quickSignupBar:SetBackdrop({ bgFile = FLAT_TEX })
-quickSignupBar:SetBackdropColor(0.08, 0.08, 0.1, 0.75)
+quickSignupBar:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
+quickSignupBar:SetBackdropColor(unpack(GetQuickSignupBarColor()))
+quickSignupBar:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+ApplyQuickSignupBarInsets()
+quickSignupBar:SetFrameStrata("DIALOG")
+quickSignupBar:SetFrameLevel(OAK_LFG:GetFrameLevel() + 20)
 quickSignupBar:Hide()  -- shown by SetCurrentViewMode("browser")
 addonTable.quickSignupBar = quickSignupBar
+if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
+    quickSignupBar:Show()
+end
 
 local quickSignupToggleBox = CreateQuickSignupToggle(quickSignupBar)
 quickSignupToggleBox:SetPoint("LEFT", quickSignupBar, "LEFT", 10, 0)
@@ -467,6 +504,10 @@ persistNoteToggleBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
 persistNoteTooltipRegion:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 function addonTable.UpdateSearchQuickSignupControls()
+    if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
+        quickSignupBar:Show()
+    end
+
     local roleSettings = GetSavedQuickSignupRoles()
     local availableRoles = GetPlayerQuickSignupCapabilities()
 

@@ -24,9 +24,13 @@ local browserRegionToggleBox
 local browserRegionToggleLabel
 local regionFilterButtons = {}
 local regionFilterLabels = {}
+local optionsStyleButton
+local optionsStyleList
 local optionsThemeButton
 local optionsThemeList
 local optionsThemeColorButton
+local categoryDropdownButton
+local categoryDropdownList
 
 local function GetBrowserMode()
     local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode
@@ -734,7 +738,7 @@ local function ApplySharedRegionToggleVisual(box, label, isActive)
         box:SetBackdropBorderColor(0, 0, 0, 1)
         if label then label:SetTextColor(1, 1, 1) end
     else
-        box:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        box:SetBackdropColor(unpack(addonTable.OAK_COLOR_TOGGLE_OFF or addonTable.OAK_COLOR_PANE))
         box:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
         if label then label:SetTextColor(0.84, 0.84, 0.84) end
     end
@@ -817,23 +821,143 @@ refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
 local delistBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Delist"], 60)
 delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
 
+local function ResetNativeBrowserAdvancedFilters()
+    if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then
+        return
+    end
+
+    local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+    if not ok or type(adv) ~= "table" then
+        adv = {}
+    end
+
+    adv.needsTank = nil
+    adv.needsHealer = nil
+    adv.needsDamage = nil
+    adv.needsMyClass = nil
+    adv.hasTank = nil
+    adv.hasHealer = nil
+    adv.minimumRating = nil
+    adv.maximumRating = nil
+    adv.activities = {}
+    adv.difficultyNormal = nil
+    adv.difficultyHeroic = nil
+    adv.difficultyMythic = nil
+    adv.difficultyMythicPlus = nil
+
+    pcall(C_LFGList.SaveAdvancedFilter, adv)
+end
+
+local function ResetOakBrowserCategoryFilters()
+    local filters = BrowserFilterState()
+    if not filters then
+        return
+    end
+
+    filters.difficulty = "ANY"
+    filters.playstyle = "ANY"
+    filters.keyMin = ""
+    filters.keyMax = ""
+    filters.partyFit = false
+    filters.needsLust = false
+    filters.needsBrez = false
+    filters.hideDeclined = false
+    filters.selectedActivities = {}
+    filters.raidBossesMin = "ANY"
+    filters.matchMyRaidLockout = false
+    filters.raidBossKills = ""
+    filters.raidTanks = ""
+    filters.raidHealers = ""
+    filters.raidDps = ""
+
+    if browserMinRatingBox then
+        browserMinRatingBox:SetText("")
+    end
+    for _, key in ipairs({"raidBossKills", "raidTanks", "raidHealers", "raidDps"}) do
+        if raidRangeRows and raidRangeRows[key] and raidRangeRows[key].box then
+            raidRangeRows[key].box:SetText("")
+        end
+    end
+end
+
+categoryDropdownButton, categoryDropdownList = addonTable.CreateSimpleDropdown(
+    addonTable.TitleHeader,
+    120,
+    function()
+        return addonTable.GetBrowserCategoryLabel and addonTable.GetBrowserCategoryLabel() or "Dungeons"
+    end,
+    function()
+        return addonTable.BrowserCategoryOptions or {}
+    end,
+    function(id, option)
+        if option and not option.separator and addonTable.SetBrowserCategory then
+            ResetOakBrowserCategoryFilters()
+            ResetNativeBrowserAdvancedFilters()
+            addonTable.SetBrowserCategory(id)
+            if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
+                if addonTable.RefreshSearchOptionsPanel then
+                    addonTable.RefreshSearchOptionsPanel()
+                end
+                if addonTable.UpdateBrowserFilterPanel then
+                    addonTable.UpdateBrowserFilterPanel()
+                end
+                if addonTable.RunBrowserSearch and id ~= "RAIDS_LEGACY" then
+                    addonTable.RunBrowserSearch()
+                elseif id == "RAIDS_LEGACY" and addonTable.SearchResults then
+                    wipe(addonTable.SearchResults)
+                    if addonTable.UpdateDisplay then
+                        addonTable.UpdateDisplay()
+                    end
+                end
+                if id ~= "RAIDS_LEGACY" and addonTable.FetchSearchResultData then
+                    C_Timer.After(0.2, function()
+                        addonTable.FetchSearchResultData()
+                        if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+                        if addonTable.UpdateBrowserFilterPanel then addonTable.UpdateBrowserFilterPanel() end
+                    end)
+                end
+            end
+            if categoryDropdownButton and categoryDropdownButton.RefreshSelection then
+                categoryDropdownButton:RefreshSelection()
+            end
+        end
+    end
+)
+categoryDropdownButton:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Search Category", 1, 1, 1)
+    GameTooltip:AddLine("Choose which Group Finder category Oak searches without opening Blizzard's premade-group panel.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+categoryDropdownButton:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+
 function addonTable.UpdateTopBarActions()
     if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
         delistBtn:Hide()
+        if categoryDropdownButton then
+            categoryDropdownButton:Show()
+        end
 
         refreshBtn.text:SetText(L["Refresh"])
         refreshBtn:SetScript("OnClick", function()
-            -- Trigger an actual new search via Blizzard's panel, then re-fetch after results arrive
-            if LFGListFrame and LFGListFrame.SearchPanel and LFGListSearchPanel_DoSearch then
-                LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
-            elseif addonTable.FetchSearchResultData then
-                -- Fallback: just re-read cached results
+            local ok = false
+            if addonTable.RunBrowserSearch then
+                ok = select(1, addonTable.RunBrowserSearch()) == true
+            end
+            if not ok and addonTable.FetchSearchResultData then
                 addonTable.FetchSearchResultData()
                 if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
             end
         end)
     else
         delistBtn:Show()
+        if categoryDropdownButton then
+            categoryDropdownButton:Hide()
+        end
 
         delistBtn.text:SetText(L["Delist"])
         delistBtn:SetScript("OnClick", function()
@@ -867,6 +991,9 @@ function addonTable.UpdateTopBarLayout()
     toggleFiltersBtn:ClearAllPoints()
     refreshBtn:ClearAllPoints()
     delistBtn:ClearAllPoints()
+    if categoryDropdownButton then
+        categoryDropdownButton:ClearAllPoints()
+    end
     scaleSlider:ClearAllPoints()
     scaleEdit:ClearAllPoints()
     scaleReset:ClearAllPoints()
@@ -886,11 +1013,19 @@ function addonTable.UpdateTopBarLayout()
         toggleFiltersBtn:SetWidth(54)
         refreshBtn:SetWidth(58)
         delistBtn:SetWidth(54)
+        if categoryDropdownButton then
+            categoryDropdownButton:SetWidth(92)
+        end
 
         toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -6, 0)
         refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -4, 0)
+        if categoryDropdownButton then
+            categoryDropdownButton:SetPoint("RIGHT", refreshBtn, "LEFT", -4, 0)
+        end
         if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() ~= "browser" then
             delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -4, 0)
+        elseif categoryDropdownButton then
+            categoryDropdownButton:Show()
         end
     else
         title:SetText(addonTable.FullTitleText or ("OAK " .. L["LFG Sorter"]))
@@ -908,12 +1043,24 @@ function addonTable.UpdateTopBarLayout()
         toggleFiltersBtn:SetWidth(60)
         refreshBtn:SetWidth(60)
         delistBtn:SetWidth(60)
+        if categoryDropdownButton then
+            categoryDropdownButton:SetWidth(120)
+        end
 
         toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -10, 0)
         refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
+        if categoryDropdownButton then
+            categoryDropdownButton:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+        end
         if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() ~= "browser" then
             delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+        elseif categoryDropdownButton then
+            categoryDropdownButton:Show()
         end
+    end
+
+    if categoryDropdownButton and categoryDropdownButton.RefreshSelection then
+        categoryDropdownButton:RefreshSelection()
     end
 
     if addonTable.UpdateTopBarActions then
@@ -931,6 +1078,9 @@ filterPanel:SetBackdrop({
     bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, tile = false, edgeSize = 1, 
     insets = { left = 1, right = 1, top = 1, bottom = 1 }
 })
+if addonTable.ApplyBackdropStyle then
+    addonTable.ApplyBackdropStyle(filterPanel, "panel")
+end
 filterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 filterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 filterPanel:HookScript("OnShow", function()
@@ -1154,7 +1304,10 @@ browserFilterPanel:SetBackdrop({
     edgeSize = 1,
     insets = { left = 1, right = 1, top = 1, bottom = 1 },
 })
-    browserFilterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+if addonTable.ApplyBackdropStyle then
+    addonTable.ApplyBackdropStyle(browserFilterPanel, "panel")
+end
+browserFilterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 browserFilterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 browserFilterPanel:HookScript("OnShow", function()
     -- Populate/refresh the panel contents every time it becomes visible.
@@ -1753,8 +1906,8 @@ local function AttachBrowserNativeSearchBox()
         browserQueryBoxFrame.AutoCompleteFrame = LFGListFrame.SearchPanel.AutoCompleteFrame
     end
     searchBox:SetScript("OnEnterPressed", function(self)
-        if LFGListFrame and LFGListFrame.SearchPanel and LFGListSearchPanel_DoSearch then
-            LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
+        if addonTable.RunBrowserSearch then
+            addonTable.RunBrowserSearch()
         end
         if addonTable.FetchSearchResultData then
             C_Timer.After(0.15, function()
@@ -1821,8 +1974,8 @@ end
 browserFilterPanel:HookScript("OnHide", function() RestoreBrowserNativeSearchBox() end)
 
 local function ApplyBrowserQueryAndRefresh()
-    if LFGListFrame and LFGListFrame.SearchPanel and LFGListSearchPanel_DoSearch then
-        LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
+    if addonTable.RunBrowserSearch then
+        addonTable.RunBrowserSearch()
     end
     if addonTable.FetchSearchResultData then
         C_Timer.After(0.15, function()
@@ -1869,8 +2022,8 @@ browserResetBtn:SetScript("OnClick", function()
     -- The native SearchBox is owned by Blizzard; calling SetText on it causes taint.
     -- The user can clear it themselves, or it will be reset on the next search context change.
     RefreshBrowserFilters()
-    if LFGListFrame and LFGListFrame.SearchPanel and LFGListSearchPanel_DoSearch then
-        LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
+    if addonTable.RunBrowserSearch then
+        addonTable.RunBrowserSearch()
     end
 end)
 
@@ -2514,6 +2667,9 @@ supportersPanel:SetBackdrop({
     bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, tile = false, edgeSize = 1, 
     insets = { left = 1, right = 1, top = 1, bottom = 1 }
 })
+if addonTable.ApplyBackdropStyle then
+    addonTable.ApplyBackdropStyle(supportersPanel, "panel")
+end
 supportersPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 supportersPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 supportersPanel:HookScript("OnShow", function()
@@ -2533,7 +2689,7 @@ end)
 
 local optionsPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.OptionsPanel = optionsPanel
-optionsPanel:SetSize(205, 442)
+optionsPanel:SetSize(205, 500)
 optionsPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
 optionsPanel:Hide()
 optionsPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1)
@@ -2541,6 +2697,9 @@ optionsPanel:SetBackdrop({
     bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, tile = false, edgeSize = 1,
     insets = { left = 1, right = 1, top = 1, bottom = 1 }
 })
+if addonTable.ApplyBackdropStyle then
+    addonTable.ApplyBackdropStyle(optionsPanel, "panel")
+end
 optionsPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 optionsPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 optionsPanel:HookScript("OnShow", function()
@@ -2588,13 +2747,33 @@ local optionsSpecLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_F
 optionsSpecLabel:SetPoint("LEFT", optionsSpecBox, "RIGHT", 8, 0)
 optionsSpecLabel:SetText(L["Show Spec Icons"])
 
+local optionsMinimapBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
+optionsMinimapBox:SetSize(16, 16)
+optionsMinimapBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+optionsMinimapBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -86)
+local optionsMinimapLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsMinimapLabel:SetPoint("LEFT", optionsMinimapBox, "RIGHT", 8, 0)
+optionsMinimapLabel:SetText(L["Show Minimap Button"])
+
 local function ApplySpecToggleVisual(button, label, isActive)
     if isActive then
         button:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
         button:SetBackdropBorderColor(0, 0, 0, 1)
         label:SetTextColor(1, 1, 1)
     else
-        button:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        button:SetBackdropColor(unpack(addonTable.OAK_COLOR_TOGGLE_OFF or addonTable.OAK_COLOR_PANE))
+        button:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
+        label:SetTextColor(0.84, 0.84, 0.84)
+    end
+end
+
+local function ApplyMinimapToggleVisual(button, label, isActive)
+    if isActive then
+        button:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        button:SetBackdropBorderColor(0, 0, 0, 1)
+        label:SetTextColor(1, 1, 1)
+    else
+        button:SetBackdropColor(unpack(addonTable.OAK_COLOR_TOGGLE_OFF or addonTable.OAK_COLOR_PANE))
         button:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
         label:SetTextColor(0.84, 0.84, 0.84)
     end
@@ -2619,12 +2798,36 @@ optionsSpecBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
+optionsMinimapBox:SetScript("OnClick", function()
+    OakLFGSorterDB.hideMinimapButton = not OakLFGSorterDB.hideMinimapButton
+    if addonTable.UpdateMinimapButtonVisibility then
+        addonTable.UpdateMinimapButtonVisibility()
+    end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end)
+optionsMinimapBox:SetScript("OnEnter", function(self)
+    ApplyMinimapToggleVisual(self, optionsMinimapLabel, not (OakLFGSorterDB and OakLFGSorterDB.hideMinimapButton == true))
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText(L["Show Minimap Button"], 1, 1, 1)
+    GameTooltip:AddLine("Show Oak's minimap button for quick access to the browser and options.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsMinimapBox:SetScript("OnLeave", function()
+    ApplyMinimapToggleVisual(optionsMinimapBox, optionsMinimapLabel, not (OakLFGSorterDB and OakLFGSorterDB.hideMinimapButton == true))
+    GameTooltip:Hide()
+end)
+
+local optionsStyleLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsStyleLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -118)
+optionsStyleLabel:SetText("Style")
+optionsStyleButton, optionsStyleList = addonTable.CreateThemeStyleDropdown(optionsPanel, 170)
+optionsStyleButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -138)
+
 local optionsThemeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsThemeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -96)
-optionsThemeLabel:SetText("Theme")
-local optionsThemeButton
+optionsThemeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -174)
+optionsThemeLabel:SetText("Accent")
 optionsThemeButton, optionsThemeList = addonTable.CreateThemeDropdown(optionsPanel, 112)
-optionsThemeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -116)
+optionsThemeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -194)
 
 optionsThemeColorButton = addonTable.CreateFlatButton(optionsPanel, "Color", 52)
 optionsThemeColorButton:SetPoint("LEFT", optionsThemeButton, "RIGHT", 6, 0)
@@ -2653,7 +2856,7 @@ optionsThemeColorButton:SetScript("OnLeave", function(self)
 end)
 
 local optionsRegionFilterLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -152)
+optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -230)
 optionsRegionFilterLabel:SetText("Filter Regions")
 
 local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
@@ -2686,33 +2889,36 @@ local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
     regionFilterLabels[regionCode] = label
 end
 
-CreateRegionFilterOption(optionsPanel, "NA", 15, -174)
-CreateRegionFilterOption(optionsPanel, "OCE", 105, -174)
-CreateRegionFilterOption(optionsPanel, "LATAM", 15, -196)
-CreateRegionFilterOption(optionsPanel, "BR", 105, -196)
-CreateRegionFilterOption(optionsPanel, "EU", 15, -218)
-CreateRegionFilterOption(optionsPanel, "OTHER", 105, -218)
+CreateRegionFilterOption(optionsPanel, "NA", 15, -252)
+CreateRegionFilterOption(optionsPanel, "OCE", 105, -252)
+CreateRegionFilterOption(optionsPanel, "LATAM", 15, -274)
+CreateRegionFilterOption(optionsPanel, "BR", 105, -274)
+CreateRegionFilterOption(optionsPanel, "EU", 15, -296)
+CreateRegionFilterOption(optionsPanel, "OTHER", 105, -296)
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -250)
+optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -328)
 optionsFontLabel:SetText(L["Addon Font"])
 local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
-optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -270)
+optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -348)
 
 local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -306)
+optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -384)
 optionsFontSizeLabel:SetText(L["Font Size"])
 local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -306)
+optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -384)
 
 local optionsFontSizeSlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsFontSizeSlider:SetSize(170, 10)
-optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -328)
+optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -406)
 optionsFontSizeSlider:SetMinMaxValues(10, 18)
 optionsFontSizeSlider:SetValueStep(1)
 optionsFontSizeSlider:SetObeyStepOnDrag(true)
 optionsFontSizeSlider:SetOrientation("HORIZONTAL")
 optionsFontSizeSlider:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-optionsFontSizeSlider:SetBackdropColor(0.05, 0.05, 0.05, 1)
+if addonTable.ApplyBackdropStyle then
+    addonTable.ApplyBackdropStyle(optionsFontSizeSlider, "inset")
+end
+optionsFontSizeSlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
 optionsFontSizeSlider:SetBackdropBorderColor(0, 0, 0, 1)
 local optionsFontSizeThumb = optionsFontSizeSlider:CreateTexture(nil, "ARTWORK")
 optionsFontSizeThumb:SetTexture(addonTable.FLAT_TEX)
@@ -2739,20 +2945,23 @@ end)
 optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
 
 local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -364)
+optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -442)
 optionsOpacityLabel:SetText("Window Opacity")
 local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -364)
+optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -442)
 
 local optionsOpacitySlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsOpacitySlider:SetSize(170, 10)
-optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -386)
+optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -464)
 optionsOpacitySlider:SetMinMaxValues(0.35, 1.0)
 optionsOpacitySlider:SetValueStep(0.05)
 optionsOpacitySlider:SetObeyStepOnDrag(true)
 optionsOpacitySlider:SetOrientation("HORIZONTAL")
 optionsOpacitySlider:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-optionsOpacitySlider:SetBackdropColor(0.05, 0.05, 0.05, 1)
+if addonTable.ApplyBackdropStyle then
+    addonTable.ApplyBackdropStyle(optionsOpacitySlider, "inset")
+end
+optionsOpacitySlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
 optionsOpacitySlider:SetBackdropBorderColor(0, 0, 0, 1)
 local optionsOpacityThumb = optionsOpacitySlider:CreateTexture(nil, "ARTWORK")
 optionsOpacityThumb:SetTexture(addonTable.FLAT_TEX)
@@ -2780,6 +2989,10 @@ optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWind
 local function RefreshOptionsPanel()
     ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
     ApplySpecToggleVisual(optionsSpecBox, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
+    ApplyMinimapToggleVisual(optionsMinimapBox, optionsMinimapLabel, not (OakLFGSorterDB and OakLFGSorterDB.hideMinimapButton == true))
+    if optionsStyleButton and optionsStyleButton.RefreshSelection then
+        optionsStyleButton:RefreshSelection()
+    end
     if optionsThemeButton and optionsThemeButton.RefreshSelection then
         optionsThemeButton:RefreshSelection()
     end
@@ -2804,6 +3017,13 @@ end
 addonTable.RefreshOptionsPanel = RefreshOptionsPanel
 
 addonTable.RegisterThemeRefresh("ui_filters_theme", function()
+    if addonTable.ApplyBackdropStyle then
+        addonTable.ApplyBackdropStyle(filterPanel, "panel")
+        addonTable.ApplyBackdropStyle(browserFilterPanel, "panel")
+        addonTable.ApplyBackdropStyle(supportersPanel, "panel")
+        addonTable.ApplyBackdropStyle(optionsPanel, "panel")
+        addonTable.ApplyBackdropStyle(fontPickerList, "panel")
+    end
     filterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     browserFilterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     supportersPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
@@ -2816,6 +3036,12 @@ addonTable.RegisterThemeRefresh("ui_filters_theme", function()
     bottomDivider:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
     optionsFontSizeThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     optionsOpacityThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    if addonTable.ApplyBackdropStyle then
+        addonTable.ApplyBackdropStyle(optionsFontSizeSlider, "inset")
+        addonTable.ApplyBackdropStyle(optionsOpacitySlider, "inset")
+    end
+    optionsFontSizeSlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
+    optionsOpacitySlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
     if optionsThemeColorButton and optionsThemeColorButton.swatch and addonTable.GetThemeAccentColor then
         local color = addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil)
         optionsThemeColorButton.swatch:SetColorTexture(color.r, color.g, color.b, 1)

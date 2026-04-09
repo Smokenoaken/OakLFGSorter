@@ -30,17 +30,25 @@ OAK_LFG:SetBackdrop({
     tile = false, edgeSize = 1, 
     insets = { left = 1, right = 1, top = 1, bottom = 1 }
 })
+if addonTable.ApplyBackdropStyle then
+    addonTable.ApplyBackdropStyle(OAK_LFG, "panel")
+end
 OAK_LFG:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 OAK_LFG:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 
 local titleHeader = CreateFrame("Frame", nil, OAK_LFG)
 addonTable.TitleHeader = titleHeader
-titleHeader:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 1, -1) 
-titleHeader:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -1, -1) 
+local function ApplyHeaderInsets()
+    local pad = addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
+    titleHeader:ClearAllPoints()
+    titleHeader:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 1 + pad, -1 - pad)
+    titleHeader:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -1 - pad, -1 - pad)
+end
+ApplyHeaderInsets()
 titleHeader:SetHeight(30)
 local thBg = titleHeader:CreateTexture(nil, "BACKGROUND")
 thBg:SetAllPoints()
-thBg:SetColorTexture(unpack(addonTable.OAK_COLOR_PANE))
+thBg:SetColorTexture(unpack(addonTable.OAK_COLOR_TITLEBAR or addonTable.OAK_COLOR_PANE))
 
 OAK_LFG.title = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 OAK_LFG.title:SetPoint("LEFT", titleHeader, "LEFT", 15, 0)
@@ -57,7 +65,10 @@ scaleSlider:SetValueStep(0.05)
 scaleSlider:SetObeyStepOnDrag(true)
 scaleSlider:SetOrientation("HORIZONTAL")
 scaleSlider:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-scaleSlider:SetBackdropColor(0.05, 0.05, 0.05, 1)
+if addonTable.ApplyBackdropStyle then
+    addonTable.ApplyBackdropStyle(scaleSlider, "inset")
+end
+scaleSlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
 scaleSlider:SetBackdropBorderColor(0, 0, 0, 1)
 
 local thumb = scaleSlider:CreateTexture(nil, "ARTWORK")
@@ -77,6 +88,9 @@ scaleEdit:SetAutoFocus(false)
 scaleEdit:SetFontObject("OakLFG_FontRegular")
 scaleEdit:SetJustifyH("CENTER")
 scaleEdit:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+if addonTable.ApplyBackdropStyle then
+    addonTable.ApplyBackdropStyle(scaleEdit, "inset")
+end
 scaleEdit:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 scaleEdit:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
 
@@ -352,7 +366,18 @@ VersionText:SetText("|cff888888v2.5.1|r")
 VersionText:Hide()
 
 addonTable.RegisterThemeRefresh("ui_header_theme", function()
+    if addonTable.ApplyBackdropStyle then
+        addonTable.ApplyBackdropStyle(OAK_LFG, "panel")
+        addonTable.ApplyBackdropStyle(scaleSlider, "inset")
+        addonTable.ApplyBackdropStyle(scaleEdit, "inset")
+    end
+    ApplyHeaderInsets()
+    OAK_LFG:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
     OAK_LFG:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    thBg:SetColorTexture(unpack(addonTable.OAK_COLOR_TITLEBAR or addonTable.OAK_COLOR_PANE))
+    scaleSlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
+    scaleEdit:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+    OAK_LFG.title:SetTextColor(unpack(addonTable.OAK_COLOR_TITLE_TINT or {1, 1, 1, 1}))
     thumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 end)
 
