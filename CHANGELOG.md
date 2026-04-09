@@ -1,3 +1,9 @@
+## v2.5.2
+
+- You can now search group categories directly from Oak without opening Blizzard's Premade Groups browser first.
+- Added Oak theme styling options and shared UI theming polish across the browser and applicant views.
+- Restored the minimap button with left-click browser access, right-click options access, tooltip support, and an options toggle to hide it.
+
 ## v2.5.1
 
 - Added a new theme selector in Oak's options panel with preset accent colors.
