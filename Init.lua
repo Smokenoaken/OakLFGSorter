@@ -471,7 +471,7 @@ addonTable.ThemeStyles = {
     },
     {
         id = "BLIZZARD",
-        label = "Blizzard",
+        label = "Blizzard Brown",
         colors = {
             bg = { 0.18, 0.15, 0.11, 0.96 },
             pane = { 0.28, 0.22, 0.14, 1.0 },
@@ -491,12 +491,35 @@ addonTable.ThemeStyles = {
             titleTint = { 1.0, 0.94, 0.76, 1.0 },
         },
     },
+    {
+        id = "BLIZZARD_GRAY",
+        label = "Blizzard Gray",
+        colors = {
+            bg = { 0.155, 0.145, 0.135, 0.965 },
+            pane = { 0.215, 0.205, 0.192, 1.0 },
+            border = { 0.08, 0.065, 0.04, 1.0 },
+            rowA = { 0.255, 0.245, 0.232, 0.46 },
+            rowB = { 0.175, 0.165, 0.154, 0.24 },
+            stickyPanel = { 0.205, 0.198, 0.186, 0.95 },
+            contextBar = { 0.20, 0.193, 0.182, 0.89 },
+            quickSignupBar = { 0.20, 0.193, 0.182, 0.89 },
+            sliderTrack = { 0.115, 0.108, 0.098, 1.0 },
+            buttonInactive = { 0.235, 0.225, 0.212, 1.0 },
+            toggleOffFill = { 0.165, 0.157, 0.147, 0.97 },
+            titleBar = { 0.255, 0.243, 0.224, 1.0 },
+            dropdownHover = { 1.0, 0.93, 0.68, 0.10 },
+            stickyAccent = { 0.96, 0.93, 0.86, 1.0 },
+            stickyAccentSoft = { 0.84, 0.81, 0.75, 0.92 },
+            titleTint = { 0.96, 0.93, 0.84, 1.0 },
+        },
+    },
 }
 
 addonTable.ThemePresets = {
     { id = "CLASS", label = "Class Colored" },
     { id = "SKY", label = "Sky Blue", color = { r = 0.30, g = 0.76, b = 0.98 } },
-    { id = "MINT", label = "Class Mint", color = { r = 0.35, g = 0.90, b = 0.66 } },
+    { id = "MINT", label = "Mint", color = { r = 0.35, g = 0.90, b = 0.66 } },
+    { id = "LIGHT_GRAY", label = "Light Gray", color = { r = 0.741, g = 0.725, b = 0.706 } },
     { id = "HORDE", label = "Horde", color = { r = 0.80, g = 0.16, b = 0.16 } },
     { id = "ALLIANCE", label = "Alliance", color = { r = 0.24, g = 0.51, b = 0.96 } },
     { id = "MIDNIGHT", label = "Midnight", color = { r = 0.52, g = 0.45, b = 0.92 } },
@@ -837,7 +860,7 @@ addonTable.ROW_COLOR_B = {0, 0, 0, 0}
 
 function addonTable.GetBackdropStyle(kind)
     local style = addonTable.GetThemeStyle and addonTable.GetThemeStyle() or "OAK"
-    if style == "BLIZZARD" then
+    if style == "BLIZZARD" or style == "BLIZZARD_GRAY" then
         if kind == "button" then
             return {
                 bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
@@ -877,7 +900,7 @@ end
 
 function addonTable.GetThemeFramePadding()
     local style = addonTable.GetThemeStyle and addonTable.GetThemeStyle() or "OAK"
-    if style == "BLIZZARD" then
+    if style == "BLIZZARD" or style == "BLIZZARD_GRAY" then
         return 8
     end
     return 0

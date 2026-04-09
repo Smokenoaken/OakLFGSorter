@@ -17,23 +17,95 @@ addonTable.SearchConfig.LocalizedSeasonDungeons = addonTable.SearchConfig.Locali
 }
 
 addonTable.SearchConfig.DefaultSeasonDelves = {
+    "Parhelion Plaza",
+    "The Shadow Enclave",
     "Atal'Aman",
     "Collegiate Calamity",
-    "Parhelion Plaza",
+    "The Darkway",
+    "Twilight Crypts",
+    "The Gulf of Memory",
+    "The Grudge Pit",
     "Shadowguard Point",
     "Sunkiller Sanctum",
-    "The Darkway",
-    "The Grudge Pit",
-    "The Gulf of Memory",
-    "The Shadow Enclave",
     "Torment's Rise",
-    "Twilight Crypts",
+}
+
+addonTable.SearchConfig.DelveZoneMapIDs = {
+    2393,
+    2395,
+    2405,
+    2413,
+    2437,
+    2443,
+    2424,
 }
 
 addonTable.SearchConfig.DelveLabelLookup = addonTable.SearchConfig.DelveLabelLookup or {}
 wipe(addonTable.SearchConfig.DelveLabelLookup)
 for _, delveName in ipairs(addonTable.SearchConfig.DefaultSeasonDelves) do
     addonTable.SearchConfig.DelveLabelLookup[strlower(delveName)] = true
+end
+
+local function NormalizeDelveLabel(label)
+    local keyBuilder = addonTable.GetPendingNativeActivityKey
+    if keyBuilder then
+        return keyBuilder(label)
+    end
+
+    local text = strlower(tostring(label or ""))
+    text = text:gsub("%s*%b()", "")
+    text = text:gsub("[^%w%s']", " ")
+    text = text:gsub("%s+", " ")
+    return text:gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+function addonTable.GetCurrentBountifulDelveLookup()
+    local lookup = addonTable.SearchConfig.CurrentBountifulDelveLookup
+    if type(lookup) ~= "table" then
+        lookup = {}
+        addonTable.SearchConfig.CurrentBountifulDelveLookup = lookup
+    end
+    return lookup
+end
+
+function addonTable.RefreshCurrentBountifulDelves()
+    local lookup = addonTable.GetCurrentBountifulDelveLookup()
+    wipe(lookup)
+
+    if not (C_AreaPoiInfo and C_AreaPoiInfo.GetDelvesForMap and C_AreaPoiInfo.GetAreaPOIInfo) then
+        return lookup
+    end
+
+    for _, mapID in ipairs(addonTable.SearchConfig.DelveZoneMapIDs or {}) do
+        local delvePoiIDs = C_AreaPoiInfo.GetDelvesForMap(mapID)
+        if type(delvePoiIDs) == "table" then
+            for _, poiID in ipairs(delvePoiIDs) do
+                local poiInfo = C_AreaPoiInfo.GetAreaPOIInfo(mapID, poiID)
+                if poiInfo and poiInfo.atlasName == "delves-bountiful" and poiInfo.name then
+                    local normalized = NormalizeDelveLabel(poiInfo.name)
+                    if normalized ~= "" then
+                        lookup[normalized] = true
+                    end
+                end
+            end
+        end
+    end
+
+    return lookup
+end
+
+function addonTable.IsCurrentBountifulDelve(label)
+    local normalized = NormalizeDelveLabel(label)
+    if normalized == "" then
+        return false
+    end
+
+    local lookup = addonTable.GetCurrentBountifulDelveLookup()
+    if next(lookup) == nil then
+        lookup = addonTable.RefreshCurrentBountifulDelves()
+    end
+
+    return lookup[normalized] == true
 end
 
 addonTable.SearchConfig.FiveManDifficultyOptions = {
@@ -54,4 +126,3 @@ addonTable.SearchConfig.DifficultyOptionsByMode = {
         { value = "MYTHIC", label = "Mythic" },
     },
 }
-

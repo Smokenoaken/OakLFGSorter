@@ -10,8 +10,9 @@ local quickFilterButtons = {}
 local browserFilterButtons = {}
 local browserActivityButtons = {}
 local BrowserFilterState
+local SyncVisibleBrowserActivityButtonStates
 local browserMinRatingBox
-local BROWSER_FILTER_VERSION = 6
+local BROWSER_FILTER_VERSION = 7
 local GetPartyRoleSupply
 local ROLE_REMAINING_KEYS = {
     TANK = "TANK_REMAINING",
@@ -521,6 +522,15 @@ function addonTable.ResultPassesBrowserFilters(result)
 
     if not ResultMatchesSelectedActivities(result, filters) then
         return false
+    end
+    if filters.bountifulOnly and result.mode == "delve" then
+        local lookup = addonTable.GetCurrentBountifulDelveLookup and addonTable.GetCurrentBountifulDelveLookup() or nil
+        if type(lookup) == "table" and next(lookup) ~= nil then
+            local delveLabel = result.activityFilterLabel or result.dungeonName or result.activityName
+            if not (addonTable.IsCurrentBountifulDelve and addonTable.IsCurrentBountifulDelve(delveLabel)) then
+                return false
+            end
+        end
     end
     if not ResultMatchesDifficulty(result, filters.difficulty) then
         return false
@@ -1384,6 +1394,7 @@ function BrowserFilterState()
             hideDeclined = false,
             raidBossesMin = "ANY",
             matchMyRaidLockout = false,
+            bountifulOnly = false,
             selectedActivities = {},
         }
     end
@@ -1395,6 +1406,7 @@ function BrowserFilterState()
     if f.raidTanks     == nil then f.raidTanks     = "" end
     if f.raidHealers   == nil then f.raidHealers   = "" end
     if f.raidDps       == nil then f.raidDps       = "" end
+    if f.bountifulOnly == nil then f.bountifulOnly = false end
     local filters = OakLFGSorterDB.browserFilters
     filters.version = BROWSER_FILTER_VERSION
 
@@ -1798,6 +1810,17 @@ browserToggleRows["hasTank"].box:SetScript("OnClick",     MakeNativeAdvToggle("h
 browserToggleRows["needsHealer"].box:SetScript("OnClick", MakeNativeAdvToggle("needsHealer"))
 browserToggleRows["hasHealer"].box:SetScript("OnClick",   MakeNativeAdvToggle("hasHealer"))
 browserToggleRows["needsDPS"].box:SetScript("OnClick",    MakeNativeAdvToggle("needsDamage"))  -- Blizzard uses "needsDamage"
+browserToggleRows["matchMyRaidLockout"].box:SetScript("OnClick", function(self)
+    local filters = BrowserFilterState()
+    if GetBrowserMode() == "delve" then
+        filters.bountifulOnly = not filters.bountifulOnly
+        self:SetState(filters.bountifulOnly == true)
+    else
+        filters.matchMyRaidLockout = not filters.matchMyRaidLockout
+        self:SetState(filters.matchMyRaidLockout == true)
+    end
+    RefreshBrowserFilters()
+end)
 
 -- "No [player class]" toggle — column 2 of the Need Damage row
 local browserNoClassBox = CreateBrowserToggleBox(browserContent, "needsMyClass")
@@ -1999,7 +2022,7 @@ browserResetBtn:SetScript("OnClick", function()
     filters.keyMin = ""; filters.keyMax = ""
     filters.partyFit = false; filters.needsLust = false
     filters.needsBrez = false; filters.hideDeclined = false
-    filters.raidBossesMin = "ANY"; filters.matchMyRaidLockout = false
+    filters.raidBossesMin = "ANY"; filters.matchMyRaidLockout = false; filters.bountifulOnly = false
     filters.raidBossKills = ""; filters.raidTanks = ""
     filters.raidHealers = ""; filters.raidDps = ""
     filters.selectedActivities = {}
@@ -2047,6 +2070,7 @@ activitySelectAllBtn:SetScript("OnClick", function()
     for _, entry in ipairs(activities) do
         filters.selectedActivities[entry.filterKey] = true
     end
+    SyncVisibleBrowserActivityButtonStates()
     SyncBrowserNativeActivities()
     RefreshBrowserFilters()
 end)
@@ -2069,6 +2093,36 @@ activitySelectNoneBtn:SetScript("OnClick", function()
     for k in pairs(filters.selectedActivities) do
         filters.selectedActivities[k] = nil
     end
+    SyncVisibleBrowserActivityButtonStates()
+    SyncBrowserNativeActivities()
+    RefreshBrowserFilters()
+end)
+
+local activitySelectBountifulBtn = addonTable.CreateFlatButton(browserContent, "B", 18)
+activitySelectBountifulBtn.text:SetFontObject("OakLFG_FontSmall")
+activitySelectBountifulBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Select Bountiful", 1, 1, 1)
+    GameTooltip:AddLine("Select only the delves that are currently bountiful.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+activitySelectBountifulBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+activitySelectBountifulBtn:SetScript("OnClick", function()
+    local filters = BrowserFilterState()
+    local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
+    for k in pairs(filters.selectedActivities) do
+        filters.selectedActivities[k] = nil
+    end
+    for _, entry in ipairs(activities) do
+        if addonTable.IsCurrentBountifulDelve and addonTable.IsCurrentBountifulDelve(entry.label) then
+            filters.selectedActivities[entry.filterKey] = true
+        end
+    end
+    SyncVisibleBrowserActivityButtonStates()
     SyncBrowserNativeActivities()
     RefreshBrowserFilters()
 end)
@@ -2170,6 +2224,11 @@ local function UpdateBrowserActivityButtons(startY)
         button.activityID = entry.activityID
         button.filterKey = entry.filterKey
         button.text:SetText(entry.label)
+        if mode == "delve" and addonTable.IsCurrentBountifulDelve and addonTable.IsCurrentBountifulDelve(entry.label) then
+            button.text:SetTextColor(1.0, 0.82, 0.20)
+        else
+            button.text:SetTextColor(1, 1, 1)
+        end
         button:SetState(filters.selectedActivities[entry.filterKey] == true)
         button:SetScript("OnClick", function(self)
             filters.selectedActivities[self.filterKey] = not filters.selectedActivities[self.filterKey]
@@ -2239,12 +2298,22 @@ local function UpdateBrowserActivityButtons(startY)
     return y
 end
 
+SyncVisibleBrowserActivityButtonStates = function()
+    local filters = BrowserFilterState()
+    for _, button in ipairs(browserActivityButtons) do
+        if button and button.filterKey then
+            button:SetState(filters.selectedActivities[button.filterKey] == true)
+        end
+    end
+end
+
 function addonTable.UpdateBrowserFilterPanel()
     local filters = BrowserFilterState()
     local mode = GetBrowserMode()
     local showDifficulty = BrowserModeUsesDifficulty(mode)
     local showActivityFilters = BrowserModeUsesActivityFilter(mode)
     local isRaidMode = (mode == "raid") or (mode == "legacy_raid")
+    local isDelveMode = (mode == "delve")
 
     -- Validate difficulty for current mode
     local validDifficulty = {}
@@ -2409,6 +2478,7 @@ function addonTable.UpdateBrowserFilterPanel()
             activitySelectNoneBtn:ClearAllPoints()
             activitySelectNoneBtn:SetPoint("LEFT", activitySelectAllBtn, "RIGHT", 3, 0)
             activitySelectNoneBtn:Show()
+            activitySelectBountifulBtn:Hide()
 
             -- No "Gives Score" column in raid mode
             givesScoreHeader:Hide()
@@ -2423,6 +2493,7 @@ function addonTable.UpdateBrowserFilterPanel()
             activityHeader:Hide()
             activitySelectAllBtn:Hide()
             activitySelectNoneBtn:Hide()
+            activitySelectBountifulBtn:Hide()
             givesScoreHeader:Hide()
             givesScoreHeaderHitbox:Hide()
             for _, button in ipairs(browserActivityButtons) do
@@ -2565,8 +2636,13 @@ function addonTable.UpdateBrowserFilterPanel()
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
             r1.box:SetState(filters.partyFit == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
 
-            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-            r2.box:SetState(filters.hideDeclined == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            if isDelveMode then
+                r2.box:Hide()
+                r2.text:Hide()
+            else
+                r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+                r2.box:SetState(filters.hideDeclined == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            end
             y = y - ROW_H
         end
 
@@ -2580,6 +2656,20 @@ function addonTable.UpdateBrowserFilterPanel()
             r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
             r2.box:SetState(filters.needsLust == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
             y = y - ROW_H
+        end
+
+        if isDelveMode then
+            local r1 = browserToggleRows["hideDeclined"]
+            local r2 = browserToggleRows["matchMyRaidLockout"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(filters.hideDeclined == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            r2.box:SetState(filters.bountifulOnly == true); r2.text:SetText("Bountiful Only"); r2.box:Show(); r2.text:Show()
+            y = y - ROW_H
+        else
+            browserToggleRows["matchMyRaidLockout"].box:Hide()
+            browserToggleRows["matchMyRaidLockout"].text:Hide()
         end
 
         -- ── 6. Activity section ───────────────────────────────────────────────
@@ -2603,13 +2693,26 @@ function addonTable.UpdateBrowserFilterPanel()
             activitySelectNoneBtn:SetPoint("LEFT", activitySelectAllBtn, "RIGHT", 3, 0)
             activitySelectNoneBtn:Show()
 
+            if isDelveMode then
+                activitySelectBountifulBtn:ClearAllPoints()
+                activitySelectBountifulBtn:SetPoint("LEFT", activitySelectNoneBtn, "RIGHT", 3, 0)
+                activitySelectBountifulBtn:Show()
+            else
+                activitySelectBountifulBtn:Hide()
+            end
+
             -- "Gives Score" header: pinned to the right edge (M+ / dungeon only)
-            givesScoreHeader:ClearAllPoints()
-            givesScoreHeader:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
-            givesScoreHeader:Show()
-            givesScoreHeaderHitbox:ClearAllPoints()
-            givesScoreHeaderHitbox:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
-            givesScoreHeaderHitbox:Show()
+            if mode == "mythic_plus" or mode == "dungeon" then
+                givesScoreHeader:ClearAllPoints()
+                givesScoreHeader:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
+                givesScoreHeader:Show()
+                givesScoreHeaderHitbox:ClearAllPoints()
+                givesScoreHeaderHitbox:SetPoint("TOPRIGHT", browserContent, "TOPRIGHT", 0, y - 16)
+                givesScoreHeaderHitbox:Show()
+            else
+                givesScoreHeader:Hide()
+                givesScoreHeaderHitbox:Hide()
+            end
 
             local endY = UpdateBrowserActivityButtons(y - 34)
             local contentH = math.max(1, math.abs(endY) + 20)
@@ -2620,6 +2723,7 @@ function addonTable.UpdateBrowserFilterPanel()
             activityHeader:Hide()
             activitySelectAllBtn:Hide()
             activitySelectNoneBtn:Hide()
+            activitySelectBountifulBtn:Hide()
             givesScoreHeader:Hide()
             givesScoreHeaderHitbox:Hide()
             for _, button in ipairs(browserActivityButtons) do
@@ -2634,6 +2738,20 @@ function addonTable.UpdateBrowserFilterPanel()
         end
     end
 end
+
+local bountifulWatcher = CreateFrame("Frame")
+bountifulWatcher:RegisterEvent("AREA_POIS_UPDATED")
+bountifulWatcher:SetScript("OnEvent", function()
+    if addonTable.RefreshCurrentBountifulDelves then
+        addonTable.RefreshCurrentBountifulDelves()
+    end
+    if addonTable.UpdateBrowserFilterPanel and browserFilterPanel and browserFilterPanel:IsShown() and GetBrowserMode() == "delve" then
+        addonTable.UpdateBrowserFilterPanel()
+    end
+    if addonTable.UpdateDisplay and addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() and addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" and GetBrowserMode() == "delve" then
+        addonTable.UpdateDisplay()
+    end
+end)
 
 function addonTable.UpdateFilterPaneMode()
     local isBrowser = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"

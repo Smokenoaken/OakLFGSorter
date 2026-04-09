@@ -1208,7 +1208,44 @@ function addonTable.GetAvailableBrowserActivities()
         return activityEntries
     end
 
-    -- ── All other modes (raid, delve, generic): build from search results ─────────
+    if mode == "delve" then
+        local configuredDelves = addonTable.SearchConfig and addonTable.SearchConfig.DefaultSeasonDelves or {}
+        local resultInfoByLabel = {}
+
+        for _, result in ipairs(addonTable.SearchResults or {}) do
+            if result.mode == "delve" then
+                local rawLabel = result.activityFilterLabel or result.activityName or ""
+                local normalizedKey = NormalizeSearchScoreTargetLabel(rawLabel)
+                if normalizedKey ~= "" and not resultInfoByLabel[normalizedKey] then
+                    resultInfoByLabel[normalizedKey] = {
+                        activityID = result.activityID,
+                        activityInfo = result.activityInfo,
+                    }
+                end
+            end
+        end
+
+        for _, label in ipairs(configuredDelves) do
+            local filterKeyBuilder = addonTable.GetPendingNativeActivityKey
+            local filterKey = filterKeyBuilder and filterKeyBuilder(label) or strlower(label)
+            if filterKey ~= "" and not seen[filterKey] then
+                seen[filterKey] = true
+                local normalizedKey = NormalizeSearchScoreTargetLabel(label)
+                local resultMatch = resultInfoByLabel[normalizedKey] or {}
+                table.insert(activityEntries, {
+                    activityID = resultMatch.activityID,
+                    label = label,
+                    filterKey = filterKey,
+                    activityInfo = resultMatch.activityInfo,
+                    scoreTarget = scoreTargets[normalizedKey] or nil,
+                })
+            end
+        end
+
+        return activityEntries
+    end
+
+    -- ── All other modes (raid, generic): build from search results ─────────
     local isRaidContext = (mode == "raid" or mode == "legacy_raid")
 
     -- Helper: strip difficulty prefix from a raid activity label.
@@ -1736,10 +1773,6 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
                 end
             end
         end
-        -- Defer UpdateDisplay by one frame — calling it synchronously here
-        -- redraws all rows+comp slots in the same frame as the sign-up click,
-        -- causing a visible frame skip.  C_Timer.After(0) yields to the engine
-        -- and spreads the work across frames.
         if OAK_LFG:IsShown() then
             C_Timer.After(0, function()
                 if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end

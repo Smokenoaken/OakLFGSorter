@@ -2446,6 +2446,11 @@ local function PopulateBrowserRow(row, result, isAltColor)
     else
         row.dungeonText:SetText(result.dungeonName ~= "" and result.dungeonName or "--")
     end
+    if result.mode == "delve" and addonTable.IsCurrentBountifulDelve and addonTable.IsCurrentBountifulDelve(result.activityFilterLabel or result.dungeonName or result.activityName) then
+        row.dungeonText:SetTextColor(1.0, 0.82, 0.20)
+    else
+        row.dungeonText:SetTextColor(1, 1, 1)
+    end
 
     row.statusText:Hide()
     row.declineBtn:Hide()
