@@ -152,7 +152,7 @@ GetPartyRoleSupply = function()
     return counts, total
 end
 
-local function ResultMatchesSelectedActivities(result, filters)
+local function ResultMatchesSelectedActivities(result, filters, runtime)
     if not BrowserModeUsesActivityFilter(result.mode or GetBrowserMode()) then
         return true
     end
@@ -161,11 +161,14 @@ local function ResultMatchesSelectedActivities(result, filters)
         return true
     end
 
-    local hasAnySelection = false
-    for _, isSelected in pairs(filters.selectedActivities) do
-        if isSelected then
-            hasAnySelection = true
-            break
+    local hasAnySelection = runtime and runtime.hasAnySelectedActivities
+    if hasAnySelection == nil then
+        hasAnySelection = false
+        for _, isSelected in pairs(filters.selectedActivities) do
+            if isSelected then
+                hasAnySelection = true
+                break
+            end
         end
     end
 
@@ -441,8 +444,12 @@ local function GetResultRemainingRoleCount(result, role)
     return nil
 end
 
-local function ResultMatchesPartyFit(result)
-    local partyRoles, partySize = GetPartyRoleSupply()
+local function ResultMatchesPartyFit(result, runtime)
+    local partyRoles = runtime and runtime.partyRoles
+    local partySize = runtime and runtime.partySize
+    if not partyRoles or not partySize then
+        partyRoles, partySize = GetPartyRoleSupply()
+    end
     local maxPlayers = tonumber(result.maxPlayers)
     if not maxPlayers or maxPlayers <= 0 then
         maxPlayers = result.activityInfo and tonumber(result.activityInfo.maxNumPlayers or result.activityInfo.maxPlayers) or 0
@@ -482,11 +489,17 @@ local function ResultMatchesPartyFit(result)
 end
 
 local function ResultMatchesMinimumRating(result)
-    local minRating = browserMinRatingBox and tonumber(browserMinRatingBox:GetText() or "")
-    if not minRating or minRating <= 0 then
-        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
-        if ok and type(adv) == "table" then
-            minRating = tonumber(adv.minimumRating)
+    local minRating = nil
+    if addonTable._browserRuntimeFilters then
+        minRating = addonTable._browserRuntimeFilters.minRating
+    end
+    if minRating == nil then
+        minRating = browserMinRatingBox and tonumber(browserMinRatingBox:GetText() or "")
+        if not minRating or minRating <= 0 then
+            local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+            if ok and type(adv) == "table" then
+                minRating = tonumber(adv.minimumRating)
+            end
         end
     end
 
@@ -512,7 +525,8 @@ function addonTable.ResultPassesBrowserFilters(result)
         return false
     end
 
-    local filters = BrowserFilterState()
+    local runtime = addonTable._browserRuntimeFilters
+    local filters = (runtime and runtime.filters) or BrowserFilterState()
     if filters.hideDeclined and string.find(result.applicationStatus or "", "declined", 1, true) then
         return false
     end
@@ -520,7 +534,7 @@ function addonTable.ResultPassesBrowserFilters(result)
         return false
     end
 
-    if not ResultMatchesSelectedActivities(result, filters) then
+    if not ResultMatchesSelectedActivities(result, filters, runtime) then
         return false
     end
     if filters.bountifulOnly and result.mode == "delve" then
@@ -544,7 +558,7 @@ function addonTable.ResultPassesBrowserFilters(result)
     if not ResultMatchesMinimumRating(result) then
         return false
     end
-    if filters.partyFit and not ResultMatchesPartyFit(result) then
+    if filters.partyFit and not ResultMatchesPartyFit(result, runtime) then
         return false
     end
     if filters.needsLust and result.hasLust then
@@ -558,6 +572,40 @@ function addonTable.ResultPassesBrowserFilters(result)
     if not ResultMatchesRaidLockout(result, filters) then return false end
 
     return true
+end
+
+function addonTable.BuildBrowserRuntimeFilters()
+    local filters = BrowserFilterState()
+    local runtime = {
+        filters = filters,
+        hasAnySelectedActivities = false,
+        minRating = nil,
+        partyRoles = nil,
+        partySize = nil,
+    }
+
+    if type(filters.selectedActivities) == "table" then
+        for _, isSelected in pairs(filters.selectedActivities) do
+            if isSelected then
+                runtime.hasAnySelectedActivities = true
+                break
+            end
+        end
+    end
+
+    runtime.minRating = browserMinRatingBox and tonumber(browserMinRatingBox:GetText() or "")
+    if not runtime.minRating or runtime.minRating <= 0 then
+        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+        if ok and type(adv) == "table" then
+            runtime.minRating = tonumber(adv.minimumRating)
+        end
+    end
+
+    if filters.partyFit then
+        runtime.partyRoles, runtime.partySize = GetPartyRoleSupply()
+    end
+
+    return runtime
 end
 
 local function MatchesExactClassFilter(filterMap)
@@ -2741,16 +2789,42 @@ end
 
 local bountifulWatcher = CreateFrame("Frame")
 bountifulWatcher:RegisterEvent("AREA_POIS_UPDATED")
+local bountifulRefreshPending = false
 bountifulWatcher:SetScript("OnEvent", function()
-    if addonTable.RefreshCurrentBountifulDelves then
-        addonTable.RefreshCurrentBountifulDelves()
+    local filterPanelNeedsDelve = browserFilterPanel and browserFilterPanel:IsShown() and GetBrowserMode() == "delve"
+    local browserNeedsDelve = addonTable.OAK_LFG
+        and addonTable.OAK_LFG:IsShown()
+        and addonTable.GetCurrentViewMode
+        and addonTable.GetCurrentViewMode() == "browser"
+        and GetBrowserMode() == "delve"
+
+    if not filterPanelNeedsDelve and not browserNeedsDelve then
+        return
     end
-    if addonTable.UpdateBrowserFilterPanel and browserFilterPanel and browserFilterPanel:IsShown() and GetBrowserMode() == "delve" then
-        addonTable.UpdateBrowserFilterPanel()
+
+    if bountifulRefreshPending then
+        return
     end
-    if addonTable.UpdateDisplay and addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() and addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" and GetBrowserMode() == "delve" then
-        addonTable.UpdateDisplay()
-    end
+    bountifulRefreshPending = true
+
+    C_Timer.After(0.2, function()
+        bountifulRefreshPending = false
+
+        local changed = false
+        if addonTable.RefreshCurrentBountifulDelves then
+            changed = addonTable.RefreshCurrentBountifulDelves()
+        end
+        if not changed then
+            return
+        end
+
+        if addonTable.UpdateBrowserFilterPanel and browserFilterPanel and browserFilterPanel:IsShown() and GetBrowserMode() == "delve" then
+            addonTable.UpdateBrowserFilterPanel()
+        end
+        if addonTable.UpdateDisplay and addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() and addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" and GetBrowserMode() == "delve" then
+            addonTable.UpdateDisplay()
+        end
+    end)
 end)
 
 function addonTable.UpdateFilterPaneMode()

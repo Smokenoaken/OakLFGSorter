@@ -141,6 +141,7 @@ end
 addonTable.SearchResults = addonTable.SearchResults or {}
 addonTable.CurrentSearchContext = addonTable.CurrentSearchContext or { mode = "generic" }
 addonTable.SearchApplications = addonTable.SearchApplications or {}
+addonTable._lastSearchResultsSignature = addonTable._lastSearchResultsSignature or nil
 
 local CATEGORY_ID = {
     QUESTING = 1,
@@ -292,31 +293,68 @@ function addonTable.SetCurrentViewMode(mode)
     end
 end
 
--- Debounce for search result events: LFG_LIST_SEARCH_RESULT_UPDATED fires once per
--- result, so with 100 results it would call FetchSearchResultData 100× per frame.
+-- Debounce and throttle search result events: LFG_LIST_SEARCH_RESULT_UPDATED can
+-- arrive in bursts, and repainting a 100-row browser repeatedly is expensive.
 local searchRefreshPending = false
-local function ScheduleSearchRefresh()
-    if searchRefreshPending then return end
-    searchRefreshPending = true
-    C_Timer.After(0.3, function()
-        searchRefreshPending = false
-        if currentViewMode == "browser" and OAK_LFG:IsShown() then
-            -- addonTable.FetchSearchResultData is the exposed reference to the
-            -- local function defined later in this file — use that to avoid a
-            -- forward-reference nil error.
-            if addonTable.FetchSearchResultData then addonTable.FetchSearchResultData() end
-            addonTable.UpdateDisplay()
-            -- Re-render the filter panel AFTER FetchSearchResultData has updated
-            -- mode and SearchResults — this is the only safe place to do it so
-            -- GetBrowserMode() returns the correct value.
-            -- Guard: skip if a dropdown is currently open (rebuilding the panel
-            -- would call HideAllBrowserDropdowns and dismiss the list mid-click).
-            local dropdownOpen = addonTable.IsBrowserDropdownOpen and addonTable.IsBrowserDropdownOpen()
-            if addonTable.UpdateBrowserFilterPanel and not dropdownOpen then
-                addonTable.UpdateBrowserFilterPanel()
-            end
+local searchRefreshQueued = false
+local searchLastRefreshAt = 0
+local SEARCH_REFRESH_MIN_DELAY = 0.30
+local SEARCH_REFRESH_MIN_INTERVAL = 0.90
+
+local function RunScheduledSearchRefresh()
+    searchRefreshPending = false
+
+    if currentViewMode ~= "browser" or not OAK_LFG:IsShown() then
+        searchRefreshQueued = false
+        return
+    end
+
+    local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
+    local elapsed = now - (searchLastRefreshAt or 0)
+    if elapsed < SEARCH_REFRESH_MIN_INTERVAL then
+        searchRefreshPending = true
+        C_Timer.After(SEARCH_REFRESH_MIN_INTERVAL - elapsed, RunScheduledSearchRefresh)
+        return
+    end
+
+    searchLastRefreshAt = now
+    local changed = true
+
+    -- addonTable.FetchSearchResultData is the exposed reference to the local
+    -- function defined later in this file — use that to avoid a forward-reference nil error.
+    if addonTable.FetchSearchResultData then
+        changed = addonTable.FetchSearchResultData()
+        if changed == nil then
+            changed = true
         end
-    end)
+    end
+
+    if changed then
+        addonTable.UpdateDisplay()
+        -- Re-render the filter panel AFTER FetchSearchResultData has updated mode and
+        -- SearchResults. Skip work if the pane is hidden or a dropdown is currently open.
+        local dropdownOpen = addonTable.IsBrowserDropdownOpen and addonTable.IsBrowserDropdownOpen()
+        local filterPanelShown = addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown()
+        if addonTable.UpdateBrowserFilterPanel and filterPanelShown and not dropdownOpen then
+            addonTable.UpdateBrowserFilterPanel()
+        end
+    end
+
+    if searchRefreshQueued then
+        searchRefreshQueued = false
+        searchRefreshPending = true
+        C_Timer.After(SEARCH_REFRESH_MIN_DELAY, RunScheduledSearchRefresh)
+    end
+end
+
+local function ScheduleSearchRefresh()
+    searchRefreshQueued = true
+    if searchRefreshPending then
+        return
+    end
+
+    searchRefreshPending = true
+    C_Timer.After(SEARCH_REFRESH_MIN_DELAY, RunScheduledSearchRefresh)
 end
 
 local function NormalizeApplicationStatus(status)
@@ -828,8 +866,12 @@ local function FetchSearchResultData()
     addonTable.UpdateSearchContext()
     wipe(addonTable.SearchResults)
     BuildSearchApplicationState()
+    local signatureParts = {}
 
     local currentContext = addonTable.CurrentSearchContext or {}
+    signatureParts[#signatureParts + 1] = tostring(currentContext.selectedCategoryKey or "")
+    signatureParts[#signatureParts + 1] = tostring(currentContext.selectedCategoryID or "")
+    signatureParts[#signatureParts + 1] = tostring(currentContext.mode or "")
     local panel = LFGListFrame and LFGListFrame.SearchPanel
     local categoryLabel = panel and panel.CategoryName and panel.CategoryName.GetText and panel.CategoryName:GetText() or ""
     local loweredCategoryLabel = strlower(tostring(categoryLabel or ""))
@@ -847,11 +889,17 @@ local function FetchSearchResultData()
         currentContext.mode = "legacy_raid"
         currentContext.categoryID = currentContext.selectedCategoryID
         addonTable.CurrentSearchContext = currentContext
-        return
+        local nextSignature = table.concat(signatureParts, "|")
+        local changed = addonTable._lastSearchResultsSignature ~= nextSignature
+        addonTable._lastSearchResultsSignature = nextSignature
+        return changed
     end
 
     if not (C_LFGList and C_LFGList.GetSearchResults) then
-        return
+        local nextSignature = table.concat(signatureParts, "|")
+        local changed = addonTable._lastSearchResultsSignature ~= nextSignature
+        addonTable._lastSearchResultsSignature = nextSignature
+        return changed
     end
 
     local firstReturn, secondReturn = C_LFGList.GetSearchResults()
@@ -863,7 +911,10 @@ local function FetchSearchResultData()
     end
     if type(resultIDs) ~= "table" then
         addonTable.CurrentSearchContext = addonTable.CurrentSearchContext or { mode = "generic" }
-        return
+        local nextSignature = table.concat(signatureParts, "|")
+        local changed = addonTable._lastSearchResultsSignature ~= nextSignature
+        addonTable._lastSearchResultsSignature = nextSignature
+        return changed
     end
 
     local firstContextResult = nil
@@ -988,6 +1039,32 @@ local function FetchSearchResultData()
                 }
 
                 table.insert(addonTable.SearchResults, entry)
+                signatureParts[#signatureParts + 1] = table.concat({
+                    tostring(searchResultID or ""),
+                    tostring(activityID or ""),
+                    tostring(listingMode or ""),
+                    tostring(activityFilterKey or ""),
+                    tostring(displayName or ""),
+                    tostring(resultInfo.name or ""),
+                    tostring(resultInfo.comment or ""),
+                    tostring(resultInfo.leaderName or ""),
+                    tostring(keyLevel or 0),
+                    tostring(ratingValue or 0),
+                    tostring(pvpBracket or ""),
+                    tostring(applicationStatus or ""),
+                    tostring(tonumber(resultInfo.numMembers) or #players),
+                    tostring(tonumber(resultInfo.requiredItemLevel) or 0),
+                    tostring(tonumber(resultInfo.requiredDungeonScore) or 0),
+                    tostring(tonumber(resultInfo.numBNetFriends) or 0),
+                    tostring(tonumber(resultInfo.numCharFriends) or 0),
+                    tostring(tonumber(resultInfo.numGuildMates) or 0),
+                    tostring(hasLust and 1 or 0),
+                    tostring(hasBrez and 1 or 0),
+                    tostring(highestItemLevel or 0),
+                    tostring(roleCounts and roleCounts.TANK or 0),
+                    tostring(roleCounts and roleCounts.HEALER or 0),
+                    tostring(roleCounts and roleCounts.DAMAGER or 0),
+                }, "~")
                 if not firstContextResult then
                     firstContextResult = entry
                 end
@@ -1029,6 +1106,10 @@ local function FetchSearchResultData()
     end
 
     addonTable.CurrentSearchContext = searchContext
+    local nextSignature = table.concat(signatureParts, "|")
+    local changed = addonTable._lastSearchResultsSignature ~= nextSignature
+    addonTable._lastSearchResultsSignature = nextSignature
+    return changed
 end
 addonTable.FetchSearchResultData = FetchSearchResultData
 
@@ -1759,6 +1840,8 @@ OAK_LFG:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED")
 OAK_LFG:RegisterEvent("LFG_LIST_APPLICATION_STATUS_UPDATED")
 
 OAK_LFG:SetScript("OnEvent", function(self, event, ...) 
+    local isShown = OAK_LFG:IsShown()
+
     -- Auto-Close the window when the group is filled or manually delisted
     if event == "LFG_LIST_APPLICATION_STATUS_UPDATED" then
         local searchResultID, newStatus = ...
@@ -1773,7 +1856,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
                 end
             end
         end
-        if OAK_LFG:IsShown() then
+        if isShown then
             C_Timer.After(0, function()
                 if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end
             end)
@@ -1791,7 +1874,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         end
         -- LFG_LIST_SEARCH_RESULT_UPDATED fires once per result row, so debounce to
         -- avoid running FetchSearchResultData + UpdateDisplay hundreds of times per frame.
-        if currentViewMode == "browser" and OAK_LFG:IsShown() then
+        if currentViewMode == "browser" and isShown then
             ScheduleSearchRefresh()
         end
         return
@@ -1802,12 +1885,16 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         else
             -- Player delisted — switch to browser mode and stay open
             addonTable.SetCurrentViewMode("browser")
-            if OAK_LFG:IsShown() then
+            if isShown then
                 FetchSearchResultData()
                 addonTable.UpdateDisplay()
             end
             return
         end
+    end
+
+    if not isShown then
+        return
     end
 
     if C_LFGList.HasActiveEntryInfo() then
@@ -1816,7 +1903,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         FetchSearchResultData()
     end
 
-    if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end
+    addonTable.UpdateDisplay()
 end)
 
 OAK_LFG:SetScript("OnShow", function(self)
@@ -1924,13 +2011,6 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             end
         end
     end
-end)
-
--- Periodic GC nudge: WoW's incremental collector can lag behind addon-heavy sessions.
--- Running a full cycle every 60 s keeps unreachable tables (old closures, stale result
--- objects) from accumulating between natural GC steps.
-C_Timer.NewTicker(60, function()
-    collectgarbage("collect")
 end)
 
 OAK_LFG:SetScript("OnDragStop", function(self)

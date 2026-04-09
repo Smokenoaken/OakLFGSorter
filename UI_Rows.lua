@@ -963,6 +963,10 @@ GetBrowserApplicationPriority = function(result)
 end
 
 local function GetBrowserSetupSummary(result)
+    if result._oakSetupSummary then
+        return result._oakSetupSummary
+    end
+
     local expectedRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
     local sortedPlayers = {}
     local roleOrder = { TANK = 1, HEALER = 2, DAMAGER = 3 }
@@ -997,6 +1001,7 @@ local function GetBrowserSetupSummary(result)
         }
     end
 
+    result._oakSetupSummary = setup
     return setup
 end
 
@@ -2512,6 +2517,7 @@ function addonTable.UpdateDisplay()
     local showSecondaryMetric = UsesSecondaryMetricColumn()
 
     if isBrowser then
+        addonTable._browserRuntimeFilters = addonTable.BuildBrowserRuntimeFilters and addonTable.BuildBrowserRuntimeFilters() or nil
         local activeResults = {}
         for _, result in ipairs(addonTable.SearchResults or {}) do
             result.isRoleFilled = addonTable.IsAppliedRoleFilled and addonTable.IsAppliedRoleFilled(result) or false
@@ -2581,6 +2587,7 @@ function addonTable.UpdateDisplay()
             emptyStateText:SetText("Legacy raid results must be loaded from Blizzard's Premade Groups panel first.\n\nOpen Blizzard's Group Finder, select Legacy Raids there, then Oak will display those results here.")
             emptyStateText:Show()
         end
+        addonTable._browserRuntimeFilters = nil
     else
         local activeGroups = {}
         for _, group in ipairs(addonTable.ApplicantGroups) do
@@ -2688,5 +2695,6 @@ function addonTable.UpdateDisplay()
         end
     end
 
+    addonTable._browserRuntimeFilters = nil
     scrollChild:SetHeight(math.max(1, (displayIndex - 1) * ROW_HEIGHT))
 end

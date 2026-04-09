@@ -3,6 +3,7 @@
 - Added live bountiful delve detection with yellow-highlighted delve labels in both the browser list and delve filter panel.
 - Added delve-only bountiful filtering plus faster bulk delve filter toggles, including persistent season delve entries even when no groups are listed.
 - Expanded the theme options with a Light Gray accent, renamed Mint and Blizzard Brown labels, and added a new Blizzard Gray style.
+- Reduced Oak browser CPU usage by stopping hidden-window background refreshes, throttling live search-result rebuilds, and skipping browser repaints when search data has not materially changed.
 
 ## v2.5.2
 

@@ -70,10 +70,10 @@ end
 
 function addonTable.RefreshCurrentBountifulDelves()
     local lookup = addonTable.GetCurrentBountifulDelveLookup()
-    wipe(lookup)
+    local nextLookup = {}
 
     if not (C_AreaPoiInfo and C_AreaPoiInfo.GetDelvesForMap and C_AreaPoiInfo.GetAreaPOIInfo) then
-        return lookup
+        return false, lookup
     end
 
     for _, mapID in ipairs(addonTable.SearchConfig.DelveZoneMapIDs or {}) do
@@ -84,14 +84,37 @@ function addonTable.RefreshCurrentBountifulDelves()
                 if poiInfo and poiInfo.atlasName == "delves-bountiful" and poiInfo.name then
                     local normalized = NormalizeDelveLabel(poiInfo.name)
                     if normalized ~= "" then
-                        lookup[normalized] = true
+                        nextLookup[normalized] = true
                     end
                 end
             end
         end
     end
 
-    return lookup
+    local changed = false
+    for key in pairs(lookup) do
+        if not nextLookup[key] then
+            changed = true
+            break
+        end
+    end
+    if not changed then
+        for key in pairs(nextLookup) do
+            if not lookup[key] then
+                changed = true
+                break
+            end
+        end
+    end
+
+    if changed then
+        wipe(lookup)
+        for key in pairs(nextLookup) do
+            lookup[key] = true
+        end
+    end
+
+    return changed, lookup
 end
 
 function addonTable.IsCurrentBountifulDelve(label)
@@ -102,7 +125,8 @@ function addonTable.IsCurrentBountifulDelve(label)
 
     local lookup = addonTable.GetCurrentBountifulDelveLookup()
     if next(lookup) == nil then
-        lookup = addonTable.RefreshCurrentBountifulDelves()
+        local _, refreshedLookup = addonTable.RefreshCurrentBountifulDelves()
+        lookup = refreshedLookup or lookup
     end
 
     return lookup[normalized] == true
