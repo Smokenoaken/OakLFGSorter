@@ -1204,6 +1204,10 @@ local function FormatAge(seconds)
     return math.floor(seconds / 60) .. "m"
 end
 
+local function CanApplyToSearchResult()
+    return not (C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo())
+end
+
 local function GetPreferredScoreColor(score, defaultR, defaultG, defaultB)
     if RaiderIO and RaiderIO.GetScoreColor then
         local r, g, b = RaiderIO.GetScoreColor(score)
@@ -2065,6 +2069,9 @@ local function CreateRow(index, parentOverride, prevRowOverride)
             if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
                 C_LFGList.CancelApplication(result.id)
             else
+                if not CanApplyToSearchResult() then
+                    return
+                end
                 if addonTable.ApplyToSearchResult then
                     addonTable.ApplyToSearchResult(result.id)
                 end
@@ -2092,7 +2099,12 @@ local function CreateRow(index, parentOverride, prevRowOverride)
                     GameTooltip:SetText("Cancel", 1, 0.2, 0.2)
                 end
             else
-                GameTooltip:SetText("Apply", 0.2, 1, 0.2)
+                if CanApplyToSearchResult() then
+                    GameTooltip:SetText("Apply", 0.2, 1, 0.2)
+                else
+                    GameTooltip:SetText(L["Cannot Apply While Listing"], 1.0, 0.82, 0.30)
+                    GameTooltip:AddLine(L["You cannot sign up for another group while your own group is listed."], 1, 1, 1, true)
+                end
             end
         else
             GameTooltip:SetText("Invite", 0.2, 1, 0.2)
@@ -2466,6 +2478,12 @@ local function PopulateBrowserRow(row, result, isAltColor)
         row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
     else
         row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
+    end
+    local inviteTexture = row.inviteBtn:GetNormalTexture()
+    if inviteTexture then
+        local canApply = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) or CanApplyToSearchResult()
+        inviteTexture:SetDesaturated(not canApply)
+        inviteTexture:SetAlpha(canApply and 1 or 0.55)
     end
 end
 
