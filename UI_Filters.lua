@@ -872,12 +872,15 @@ end
 
 local toggleFiltersBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Filters"], 60)
 toggleFiltersBtn:SetPoint("RIGHT", addonTable.CloseButton, "LEFT", -10, 0)
+toggleFiltersBtn:SetAutoWidth(60, 130, 22)
 
 local refreshBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Refresh"], 60)
 refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
+refreshBtn:SetAutoWidth(60, 130, 22)
 
 local delistBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Delist"], 60)
 delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+delistBtn:SetAutoWidth(60, 130, 22)
 
 local function ResetNativeBrowserAdvancedFilters()
     if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then
@@ -981,11 +984,14 @@ categoryDropdownButton, categoryDropdownList = addonTable.CreateSimpleDropdown(
         end
     end
 )
+if categoryDropdownButton and categoryDropdownButton.SetAutoWidth then
+    categoryDropdownButton:SetAutoWidth(120, 180, 24)
+end
 categoryDropdownButton:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Search Category", 1, 1, 1)
-    GameTooltip:AddLine("Choose which Group Finder category Oak searches without opening Blizzard's premade-group panel.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Search Category"], 1, 1, 1)
+    GameTooltip:AddLine(L["Choose which Group Finder category Oak searches without opening Blizzard's premade-group panel."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 categoryDropdownButton:SetScript("OnLeave", function(self)
@@ -1000,7 +1006,7 @@ function addonTable.UpdateTopBarActions()
             categoryDropdownButton:Show()
         end
 
-        refreshBtn.text:SetText(L["Refresh"])
+        refreshBtn:SetLabel(L["Refresh"])
         refreshBtn:SetScript("OnClick", function()
             local ok = false
             if addonTable.RunBrowserSearch then
@@ -1017,12 +1023,12 @@ function addonTable.UpdateTopBarActions()
             categoryDropdownButton:Hide()
         end
 
-        delistBtn.text:SetText(L["Delist"])
+        delistBtn:SetLabel(L["Delist"])
         delistBtn:SetScript("OnClick", function()
             C_LFGList.RemoveListing()
         end)
 
-        refreshBtn.text:SetText(L["Refresh"])
+        refreshBtn:SetLabel(L["Refresh"])
         refreshBtn:SetScript("OnClick", function()
             C_LFGList.RefreshApplicants()
         end)
@@ -1064,8 +1070,8 @@ function addonTable.UpdateTopBarLayout()
 
         scaleSlider:SetWidth(60)
         scaleSlider:SetPoint("LEFT", title, "RIGHT", 12, 0)
+        scaleReset:SetLabel("R")
         scaleReset:SetWidth(20)
-        scaleReset.text:SetText("R")
         scaleReset:SetPoint("LEFT", scaleSlider, "RIGHT", 3, 0)
 
         toggleFiltersBtn:SetWidth(54)
@@ -1094,15 +1100,18 @@ function addonTable.UpdateTopBarLayout()
         scaleSlider:SetWidth(80)
         scaleSlider:SetPoint("LEFT", title, "RIGHT", 45, 0)
         scaleEdit:SetPoint("LEFT", scaleSlider, "RIGHT", 10, 0)
-        scaleReset:SetWidth(45)
-        scaleReset.text:SetText(L["Reset"])
+        scaleReset:SetLabel(L["Reset"])
         scaleReset:SetPoint("LEFT", scaleEdit, "RIGHT", 5, 0)
 
-        toggleFiltersBtn:SetWidth(60)
-        refreshBtn:SetWidth(60)
-        delistBtn:SetWidth(60)
+        if toggleFiltersBtn.RefreshAutoWidth then toggleFiltersBtn:RefreshAutoWidth() else toggleFiltersBtn:SetWidth(60) end
+        if refreshBtn.RefreshAutoWidth then refreshBtn:RefreshAutoWidth() else refreshBtn:SetWidth(60) end
+        if delistBtn.RefreshAutoWidth then delistBtn:RefreshAutoWidth() else delistBtn:SetWidth(60) end
         if categoryDropdownButton then
-            categoryDropdownButton:SetWidth(120)
+            if categoryDropdownButton.RefreshAutoWidth then
+                categoryDropdownButton:RefreshAutoWidth()
+            else
+                categoryDropdownButton:SetWidth(120)
+            end
         end
 
         toggleFiltersBtn:SetPoint("RIGHT", closeBtn, "LEFT", -10, 0)
@@ -1390,7 +1399,7 @@ end)
 
 local browserTitle = browserFilterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 browserTitle:SetPoint("TOP", browserFilterPanel, "TOP", 0, -10)
-browserTitle:SetText("Search Filters")
+browserTitle:SetText(L["Search Filters"])
 browserTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
 
 local browserContent = CreateFrame("Frame", nil, browserFilterPanel)
@@ -1680,23 +1689,23 @@ local function GetBrowserDifficultyOptions()
     local mode = GetBrowserMode()
     if mode == "mythic_plus" or mode == "dungeon" then
         return {
-            { value = "ANY", label = "Any Difficulty" },
-            { value = "NORMAL", label = "Normal" },
-            { value = "HEROIC", label = "Heroic" },
-            { value = "MYTHIC", label = "Mythic" },
-            { value = "MYTHIC_PLUS", label = "Mythic+" },
+            { value = "ANY", label = L["Any Difficulty"] },
+            { value = "NORMAL", label = L["Normal"] },
+            { value = "HEROIC", label = L["Heroic"] },
+            { value = "MYTHIC", label = L["Mythic"] },
+            { value = "MYTHIC_PLUS", label = L["Mythic+"] },
         }
     elseif mode == "raid" then
         return {
-            { value = "ANY", label = "Any Difficulty" },
-            { value = "NORMAL", label = "Normal" },
-            { value = "HEROIC", label = "Heroic" },
-            { value = "MYTHIC", label = "Mythic" },
+            { value = "ANY", label = L["Any Difficulty"] },
+            { value = "NORMAL", label = L["Normal"] },
+            { value = "HEROIC", label = L["Heroic"] },
+            { value = "MYTHIC", label = L["Mythic"] },
         }
     end
 
     return {
-        { value = "ANY", label = "Any Difficulty" },
+        { value = "ANY", label = L["Any Difficulty"] },
     }
 end
 
@@ -1767,7 +1776,7 @@ local playstyleDropdown = CreateBrowserDropdown(browserContent, 188, function()
     }
 end, "playstyle", "Any Playstyle")
 
-local difficultyDropdown = CreateBrowserDropdown(browserContent, 188, GetBrowserDifficultyOptions, "difficulty", "Any Difficulty")
+local difficultyDropdown = CreateBrowserDropdown(browserContent, 188, GetBrowserDifficultyOptions, "difficulty", L["Any Difficulty"])
 local raidBossesDropdown = CreateBrowserDropdown(browserContent, 188, GetRaidBossOptions, "raidBossesMin", "Any Boss Kills")
 
 -- Raid range filter rows (Boss Kills, Tanks, Healers, DPS)
@@ -1809,7 +1818,7 @@ CreateRaidRangeRow("raidHealers",  "Healers")
 CreateRaidRangeRow("raidDps",      "DPS")
 
 local keyRangeLabel = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-keyRangeLabel:SetText("Key Range")
+keyRangeLabel:SetText(L["Key Range"])
 keyRangeLabel:SetTextColor(1, 1, 1)
 local keyMinBox = CreateBrowserNumberBox(browserContent, "keyMin", 48)
 local keyRangeTo = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
@@ -1878,7 +1887,7 @@ browserNoClassBox:SetScript("OnClick", MakeNativeAdvToggle("needsMyClass"))
 
 -- Min Rating input
 local browserMinRatingLabel = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-browserMinRatingLabel:SetText("Min Rating")
+browserMinRatingLabel:SetText(L["Min Rating"])
 browserMinRatingLabel:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
 
 browserMinRatingBox = CreateFrame("EditBox", nil, browserContent, "BackdropTemplate")
@@ -1906,7 +1915,7 @@ browserMinRatingBox:SetScript("OnEscapePressed", function(self) self:ClearFocus(
 -- "Select Filters then Click Refresh" instruction label (shown above the hint)
 local browserQueryLabel = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 browserQueryLabel:SetTextColor(0.70, 0.70, 0.70)
-browserQueryLabel:SetText("Select Filters then Click Refresh")
+browserQueryLabel:SetText(L["Select Filters then Click Refresh"])
 browserQueryLabel:Hide()
 
 -- Search query hint text
@@ -2058,10 +2067,12 @@ end
 
 -- Refresh and Reset buttons (2-column layout inside filter panel)
 local BFP_BTN_W = 88
-local browserInRefreshBtn = addonTable.CreateFlatButton(browserContent, "Refresh", BFP_BTN_W)
+local browserInRefreshBtn = addonTable.CreateFlatButton(browserContent, L["Refresh"], BFP_BTN_W)
+browserInRefreshBtn:SetAutoWidth(BFP_BTN_W, 130, 22)
 browserInRefreshBtn:SetScript("OnClick", ApplyBrowserQueryAndRefresh)
 
-local browserResetBtn = addonTable.CreateFlatButton(browserContent, "Reset", BFP_BTN_W)
+local browserResetBtn = addonTable.CreateFlatButton(browserContent, L["Reset"], BFP_BTN_W)
+browserResetBtn:SetAutoWidth(BFP_BTN_W, 130, 22)
 browserResetBtn:SetScript("OnClick", function()
     -- Reset client-side only filter state
     local filters = BrowserFilterState()
@@ -2104,8 +2115,8 @@ activitySelectAllBtn.text:SetFontObject("OakLFG_FontSmall")
 activitySelectAllBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Select All", 1, 1, 1)
-    GameTooltip:AddLine("Select every dungeon in this list.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Select All"], 1, 1, 1)
+    GameTooltip:AddLine(L["Select every activity in this list."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 activitySelectAllBtn:SetScript("OnLeave", function(self)
@@ -2128,8 +2139,8 @@ activitySelectNoneBtn.text:SetFontObject("OakLFG_FontSmall")
 activitySelectNoneBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Select None", 1, 1, 1)
-    GameTooltip:AddLine("Clear every dungeon in this list.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Select None"], 1, 1, 1)
+    GameTooltip:AddLine(L["Clear every activity in this list."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 activitySelectNoneBtn:SetScript("OnLeave", function(self)
@@ -2151,8 +2162,8 @@ activitySelectBountifulBtn.text:SetFontObject("OakLFG_FontSmall")
 activitySelectBountifulBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Select Bountiful", 1, 1, 1)
-    GameTooltip:AddLine("Select only the delves that are currently bountiful.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Select Bountiful"], 1, 1, 1)
+    GameTooltip:AddLine(L["Select only the delves that are currently bountiful."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 activitySelectBountifulBtn:SetScript("OnLeave", function(self)
@@ -2180,12 +2191,17 @@ activityDivider:SetTexture(addonTable.FLAT_TEX)
 activityDivider:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.7)
 
 local activityHeader = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-activityHeader:SetText("Filter Activities")
+activityHeader:SetText(L["Filter Activities"])
 activityHeader:SetTextColor(1, 1, 1)
+
+local playerMythicRatingText = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+playerMythicRatingText:SetTextColor(0.75, 0.82, 0.98)
+playerMythicRatingText:SetJustifyH("LEFT")
+playerMythicRatingText:Hide()
 
 -- "Gives Score" column header (shown right of dungeon names for M+ mode)
 local givesScoreHeader = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-givesScoreHeader:SetText("Gives Score")
+givesScoreHeader:SetText(L["Gives Score"])
 givesScoreHeader:SetTextColor(0.40, 1.00, 0.55)
 givesScoreHeader:SetJustifyH("RIGHT")
 givesScoreHeader:Hide()
@@ -2194,8 +2210,8 @@ local givesScoreHeaderHitbox = CreateFrame("Button", nil, browserContent)
 givesScoreHeaderHitbox:SetSize(72, 16)
 givesScoreHeaderHitbox:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Gives Score", 1, 1, 1)
-    GameTooltip:AddLine("Shows the lowest timed key level that should increase your score for that dungeon, plus the estimated score gain.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Gives Score"], 1, 1, 1)
+    GameTooltip:AddLine(L["Shows the lowest timed key level that should increase your score for that dungeon, plus the estimated score gain."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 givesScoreHeaderHitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -2204,14 +2220,79 @@ givesScoreHeaderHitbox:Hide()
 local function GetBrowserActivitySectionTitle()
     local mode = GetBrowserMode()
     if mode == "raid" then
-        return "Filter Raids"
+        return L["Filter Raids"]
     elseif mode == "delve" then
-        return "Filter Delves"
+        return L["Filter Delves"]
     elseif mode == "mythic_plus" or mode == "dungeon" then
-        return "Filter Dungeons"
+        return L["Filter Dungeons"]
     end
 
     return nil
+end
+
+local function GetPlayerMythicPlusRatingValue()
+    if C_PlayerInfo and C_PlayerInfo.GetPlayerMythicPlusRatingSummary then
+        local ok, summary = pcall(C_PlayerInfo.GetPlayerMythicPlusRatingSummary, "player")
+        if ok and type(summary) == "table" then
+            local score = tonumber(summary.currentSeasonScore)
+            if score and score > 0 then
+                return math.floor(score + 0.5)
+            end
+        end
+    end
+
+    if RaiderIO and RaiderIO.GetProfile then
+        local playerName = UnitName and UnitName("player")
+        local playerRealm = GetNormalizedRealmName and GetNormalizedRealmName()
+        if playerName and playerRealm then
+            local ok, profile = pcall(RaiderIO.GetProfile, playerName, playerRealm)
+            local score = ok and profile and profile.mythicKeystoneProfile and profile.mythicKeystoneProfile.currentScore
+            score = tonumber(score)
+            if score and score > 0 then
+                return math.floor(score + 0.5)
+            end
+        end
+    end
+
+    return nil
+end
+
+local function GetPreferredPlayerScoreColor(score, defaultR, defaultG, defaultB)
+    if RaiderIO and RaiderIO.GetScoreColor then
+        local r, g, b = RaiderIO.GetScoreColor(score)
+        if r and g and b then
+            return r, g, b
+        end
+    end
+
+    if C_ChallengeMode and C_ChallengeMode.GetDungeonScoreRarityColor then
+        local color = C_ChallengeMode.GetDungeonScoreRarityColor(score)
+        if color then
+            return color.r, color.g, color.b
+        end
+    end
+
+    return defaultR, defaultG, defaultB
+end
+
+local function UpdatePlayerMythicPlusRatingText(mode, anchorY)
+    if mode ~= "mythic_plus" and mode ~= "dungeon" then
+        playerMythicRatingText:Hide()
+        return anchorY
+    end
+
+    local score = GetPlayerMythicPlusRatingValue()
+    playerMythicRatingText:ClearAllPoints()
+    playerMythicRatingText:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, anchorY)
+    if score and score > 0 then
+        local r, g, b = GetPreferredPlayerScoreColor(score, 0.75, 0.82, 0.98)
+        local coloredScore = string.format("|cFF%02x%02x%02x%d|r", r * 255, g * 255, b * 255, score)
+        playerMythicRatingText:SetText(string.format("%s %s", L["Your M+ Rating:"], coloredScore))
+    else
+        playerMythicRatingText:SetText(L["Your M+ Rating: --"])
+    end
+    playerMythicRatingText:Show()
+    return anchorY - 18
 end
 
 local function UpdateBrowserActivityButtons(startY)
@@ -2516,7 +2597,7 @@ function addonTable.UpdateBrowserFilterPanel()
 
             activityHeader:ClearAllPoints()
             activityHeader:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 16)
-            activityHeader:SetText(GetBrowserActivitySectionTitle() or "Filter Raids")
+            activityHeader:SetText(GetBrowserActivitySectionTitle() or L["Filter Raids"])
             activityHeader:Show()
 
             activitySelectAllBtn:ClearAllPoints()
@@ -2533,12 +2614,14 @@ function addonTable.UpdateBrowserFilterPanel()
             givesScoreHeaderHitbox:Hide()
 
             local endY = UpdateBrowserActivityButtons(y - 34)
+            endY = UpdatePlayerMythicPlusRatingText(mode, endY - 2)
             local contentH = math.max(1, math.abs(endY) + 20)
             browserContent:SetHeight(contentH)
             browserFilterPanel:SetHeight(32 + contentH + 8)
         else
             activityDivider:Hide()
             activityHeader:Hide()
+            playerMythicRatingText:Hide()
             activitySelectAllBtn:Hide()
             activitySelectNoneBtn:Hide()
             activitySelectBountifulBtn:Hide()
@@ -2713,7 +2796,7 @@ function addonTable.UpdateBrowserFilterPanel()
             r1.box:SetState(filters.hideDeclined == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
 
             r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-            r2.box:SetState(filters.bountifulOnly == true); r2.text:SetText("Bountiful Only"); r2.box:Show(); r2.text:Show()
+            r2.box:SetState(filters.bountifulOnly == true); r2.text:SetText(L["Bountiful Only"]); r2.box:Show(); r2.text:Show()
             y = y - ROW_H
         else
             browserToggleRows["matchMyRaidLockout"].box:Hide()
@@ -2730,7 +2813,7 @@ function addonTable.UpdateBrowserFilterPanel()
 
             activityHeader:ClearAllPoints()
             activityHeader:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 16)
-            activityHeader:SetText(GetBrowserActivitySectionTitle() or "Filter Activities")
+            activityHeader:SetText(GetBrowserActivitySectionTitle() or L["Filter Activities"])
             activityHeader:Show()
 
             activitySelectAllBtn:ClearAllPoints()
@@ -2763,12 +2846,14 @@ function addonTable.UpdateBrowserFilterPanel()
             end
 
             local endY = UpdateBrowserActivityButtons(y - 34)
+            endY = UpdatePlayerMythicPlusRatingText(mode, endY - 2)
             local contentH = math.max(1, math.abs(endY) + 20)
             browserContent:SetHeight(contentH)
             browserFilterPanel:SetHeight(32 + contentH + 8)
         else
             activityDivider:Hide()
             activityHeader:Hide()
+            playerMythicRatingText:Hide()
             activitySelectAllBtn:Hide()
             activitySelectNoneBtn:Hide()
             activitySelectBountifulBtn:Hide()
@@ -2851,7 +2936,7 @@ end
 -- Supporters Flyout Panel
 local supportersPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.SupportersPanel = supportersPanel
-supportersPanel:SetSize(190, 410) 
+supportersPanel:SetSize(190, 470) 
 supportersPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
 supportersPanel:Hide()
 supportersPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1) 
@@ -3267,7 +3352,7 @@ suppTitle:SetText("Supporters")
 suppTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
 
 local fontPickerLabel = supportersPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-fontPickerLabel:SetPoint("TOPLEFT", supportersPanel, "TOPLEFT", 15, -250)
+fontPickerLabel:SetPoint("TOPLEFT", supportersPanel, "TOPLEFT", 15, -310)
 fontPickerLabel:SetText("Addon Font")
 fontPickerLabel:SetTextColor(1, 1, 1)
 fontPickerLabel:Hide()
@@ -3315,7 +3400,7 @@ if addonTable.Patreons then
 end
 suppScrollChild:SetHeight(math.max(1, math.abs(syOffset)))
 
-local socialY = -250
+local socialY = -310
 if addonTable.Socials then
     for _, social in ipairs(addonTable.Socials) do
         local btn = addonTable.CreateFlatButton(supportersPanel, social.name, 160)
@@ -3328,7 +3413,7 @@ if addonTable.Socials then
 end
 
 local fontPickerButton = addonTable.CreateFlatButton(supportersPanel, addonTable.GetActiveFontName and addonTable.GetActiveFontName() or "OakUI Font", 160)
-fontPickerButton:SetPoint("TOP", supportersPanel, "TOP", 0, -270)
+fontPickerButton:SetPoint("TOP", supportersPanel, "TOP", 0, -330)
 fontPickerButton:Hide()
 
 local fontPickerList = CreateFrame("Frame", nil, supportersPanel, "BackdropTemplate")
@@ -3446,7 +3531,7 @@ function addonTable.SetupBlizzardLFGHook()
             
             local text = LFGListFrame.ApplicationViewer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
             text:SetPoint("LEFT", lfgToggleBox, "RIGHT", 8, 0)
-            text:SetText("Auto-Open Sorter")
+            text:SetText(L["Auto-Open Sorter"])
             
             lfgToggleBox:SetScript("OnClick", function(self)
                 OakLFGSorterDB.autoOpen = not OakLFGSorterDB.autoOpen

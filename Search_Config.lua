@@ -1,4 +1,5 @@
 local _, addonTable = ...
+local L = addonTable.L
 
 addonTable.SearchConfig = addonTable.SearchConfig or {}
 
@@ -133,20 +134,20 @@ function addonTable.IsCurrentBountifulDelve(label)
 end
 
 addonTable.SearchConfig.FiveManDifficultyOptions = {
-    { value = "ANY", label = "Any Difficulty" },
-    { value = "NORMAL", label = "Normal" },
-    { value = "HEROIC", label = "Heroic" },
-    { value = "MYTHIC", label = "Mythic" },
-    { value = "MYTHIC_PLUS", label = "Mythic+" },
+    { value = "ANY", label = L["Any Difficulty"] },
+    { value = "NORMAL", label = L["Normal"] },
+    { value = "HEROIC", label = L["Heroic"] },
+    { value = "MYTHIC", label = L["Mythic"] },
+    { value = "MYTHIC_PLUS", label = L["Mythic+"] },
 }
 
 addonTable.SearchConfig.DifficultyOptionsByMode = {
     mythic_plus = addonTable.SearchConfig.FiveManDifficultyOptions,
     dungeon = addonTable.SearchConfig.FiveManDifficultyOptions,
     raid = {
-        { value = "ANY", label = "Any Difficulty" },
-        { value = "NORMAL", label = "Normal" },
-        { value = "HEROIC", label = "Heroic" },
-        { value = "MYTHIC", label = "Mythic" },
+        { value = "ANY", label = L["Any Difficulty"] },
+        { value = "NORMAL", label = L["Normal"] },
+        { value = "HEROIC", label = L["Heroic"] },
+        { value = "MYTHIC", label = L["Mythic"] },
     },
 }

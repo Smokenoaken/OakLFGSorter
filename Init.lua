@@ -337,6 +337,7 @@ local fontDropdownCounter = 0
 local registeredThemeRefreshers = {}
 local registeredFlatButtons = {}
 local registeredCogButtons = {}
+local textMeasureFrame
 
 function addonTable.RegisterFontDropdown(button)
     if not button then
@@ -609,6 +610,9 @@ local function RefreshRegisteredButtons()
             end
             button:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
             button:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+            if button.RefreshAutoWidth then
+                button:RefreshAutoWidth()
+            end
         else
             registeredFlatButtons[key] = nil
         end
@@ -989,6 +993,43 @@ function addonTable.CreateFlatButton(parent, label, width)
     btn.text:SetPoint("CENTER")
     btn.text:SetText(label)
 
+    function btn:SetLabel(text)
+        self.text:SetText(text or "")
+        self:RefreshAutoWidth()
+    end
+
+    function btn:SetAutoWidth(minWidth, maxWidth, padding)
+        self.autoWidthMin = tonumber(minWidth) or self:GetWidth() or 0
+        self.autoWidthMax = tonumber(maxWidth)
+        self.autoWidthPadding = tonumber(padding) or 20
+        self:RefreshAutoWidth()
+    end
+
+    function btn:RefreshAutoWidth()
+        if not self.autoWidthMin then
+            return
+        end
+
+        if not textMeasureFrame then
+            textMeasureFrame = UIParent:CreateFontString(nil, "ARTWORK", "OakLFG_FontRegular")
+            textMeasureFrame:Hide()
+        end
+
+        local fontObject = self.text:GetFontObject() or _G["OakLFG_FontRegular"]
+        if fontObject then
+            textMeasureFrame:SetFontObject(fontObject)
+        end
+        textMeasureFrame:SetText(self.text:GetText() or "")
+
+        local targetWidth = math.ceil((textMeasureFrame:GetUnboundedStringWidth() or 0) + (self.autoWidthPadding or 20))
+        targetWidth = math.max(self.autoWidthMin or 0, targetWidth)
+        if self.autoWidthMax then
+            targetWidth = math.min(self.autoWidthMax, targetWidth)
+        end
+
+        self:SetWidth(targetWidth)
+    end
+
     btn:SetScript("OnEnter", function(self) self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1) end)
     btn:SetScript("OnLeave", function(self) self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER)) end)
     registeredFlatButtons[btn] = btn
@@ -997,6 +1038,7 @@ end
 
 function addonTable.CreateSimpleDropdown(parent, width, labelProvider, optionListProvider, onSelect)
     local dropdownButton = addonTable.CreateFlatButton(parent, labelProvider(), width)
+    local inheritedSetAutoWidth = dropdownButton.SetAutoWidth
     dropdownButton.arrow = dropdownButton:CreateTexture(nil, "ARTWORK")
     dropdownButton.arrow:SetSize(10, 10)
     dropdownButton.arrow:SetPoint("RIGHT", dropdownButton, "RIGHT", -6, 0)
@@ -1047,6 +1089,9 @@ function addonTable.CreateSimpleDropdown(parent, width, labelProvider, optionLis
 
     local function RefreshSelection()
         dropdownButton.text:SetText(labelProvider())
+        if dropdownButton.RefreshAutoWidth then
+            dropdownButton:RefreshAutoWidth()
+        end
     end
 
     local function RefreshOptions()
@@ -1112,6 +1157,13 @@ function addonTable.CreateSimpleDropdown(parent, width, labelProvider, optionLis
 
     function dropdownButton:RefreshSelection()
         RefreshSelection()
+    end
+
+    function dropdownButton:SetAutoWidth(minWidth, maxWidth, padding)
+        local extraPadding = (tonumber(padding) or 24) + 14
+        if type(inheritedSetAutoWidth) == "function" then
+            inheritedSetAutoWidth(self, minWidth, maxWidth, extraPadding)
+        end
     end
 
     dropdownButton:SetScript("OnClick", function(self)

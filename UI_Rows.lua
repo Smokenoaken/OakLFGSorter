@@ -411,7 +411,8 @@ groupCountText:SetTextColor(0.75, 0.75, 0.75)
 groupCountText:Hide()
 addonTable.groupCountText = groupCountText
 
-local suppBtn = addonTable.CreateFlatButton(footer, "Supporters & Links", 150)
+local suppBtn = addonTable.CreateFlatButton(footer, L["Supporters & Links"], 150)
+suppBtn:SetAutoWidth(150, 220, 22)
 suppBtn:SetPoint("LEFT", brezText, "RIGHT", 20, GetFooterButtonYOffset())
 suppBtn:SetScript("OnClick", function()
     if addonTable.SupportersPanel:IsShown() then

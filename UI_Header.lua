@@ -96,6 +96,7 @@ scaleEdit:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
 
 local scaleReset = addonTable.CreateFlatButton(titleHeader, L["Reset"], 45)
 scaleReset:SetPoint("LEFT", scaleEdit, "RIGHT", 5, 0)
+scaleReset:SetAutoWidth(45, 120, 20)
 scaleReset:SetScript("OnEnter", function(self) 
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")

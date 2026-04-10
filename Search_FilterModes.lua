@@ -50,9 +50,9 @@ function addonTable.GetSearchActivitySectionTitle(mode)
     if mode == "raid" then
         return L["Filter Raids"]
     elseif mode == "delve" then
-        return "Filter Delves"
+        return L["Filter Delves"]
     elseif mode == "mythic_plus" or mode == "dungeon" then
-        return "Filter Dungeons"
+        return L["Filter Dungeons"]
     end
 
     return nil
@@ -132,4 +132,3 @@ function addonTable.GetLocalizedSeasonDungeonLabels()
 
     return localizedDefaults or fallbackDefaults
 end
-

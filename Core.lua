@@ -1,5 +1,6 @@
 local addonName, addonTable = ...
 local OAK_LFG = addonTable.OAK_LFG
+local L = addonTable.L
 
 local function ShouldMuteApplicantPing()
     if not OakLFGSorterDB or not OakLFGSorterDB.muteApplicantPing then
@@ -74,6 +75,17 @@ local function GetActiveListingActivityID()
     return activityID, safeEntryInfo
 end
 
+local LISTING_CATEGORY_ID = {
+    QUESTING = 1,
+    DUNGEON = 2,
+    RAID = 3,
+    ARENA = 4,
+    CUSTOM = 6,
+    RATED_BATTLEGROUND = 9,
+    CLASSIC_RAID = 114,
+    DELVES = 121,
+}
+
 local function GetListingMode(activityInfo)
     if not activityInfo then
         return "generic"
@@ -98,6 +110,7 @@ local function GetListingMode(activityInfo)
     local cleanShortName = strlower(tostring(activityInfo.shortName or ""):gsub("%s*%(.+%)", ""))
     local activityText = fullName .. " " .. shortName
     local maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or 0
+    local categoryID = tonumber(activityInfo.categoryID or activityInfo.groupFinderCategoryID or activityInfo.category) or 0
 
     if activityInfo.isMythicPlusActivity then
         return "mythic_plus"
@@ -107,6 +120,12 @@ local function GetListingMode(activityInfo)
         return "pvp"
     elseif activityInfo.isCurrentRaidActivity then
         return "raid"
+    elseif categoryID == LISTING_CATEGORY_ID.CLASSIC_RAID then
+        return "legacy_raid"
+    elseif categoryID == LISTING_CATEGORY_ID.DELVES then
+        return "delve"
+    elseif categoryID == LISTING_CATEGORY_ID.QUESTING then
+        return "open_world"
     elseif activityText:find("legacy", 1, true) and activityText:find("raid", 1, true) then
         return "legacy_raid"
     elseif activityText:find("delve", 1, true) or delveLookup[cleanFullName] or delveLookup[cleanShortName] then
@@ -143,16 +162,7 @@ addonTable.CurrentSearchContext = addonTable.CurrentSearchContext or { mode = "g
 addonTable.SearchApplications = addonTable.SearchApplications or {}
 addonTable._lastSearchResultsSignature = addonTable._lastSearchResultsSignature or nil
 
-local CATEGORY_ID = {
-    QUESTING = 1,
-    DUNGEON = 2,
-    RAID = 3,
-    ARENA = 4,
-    CUSTOM = 6,
-    RATED_BATTLEGROUND = 9,
-    CLASSIC_RAID = 114,
-    DELVES = 121,
-}
+local CATEGORY_ID = LISTING_CATEGORY_ID
 
 local function GetPveFilterMask()
     return Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 0
@@ -175,15 +185,15 @@ local function GetCurrentSeasonFilterMask()
 end
 
 addonTable.BrowserCategoryOptions = {
-    { id = "DUNGEONS", label = "Dungeons", categoryID = CATEGORY_ID.DUNGEON, filters = bit.bor(GetCurrentSeasonFilterMask(), GetPveFilterMask()), mode = "mythic_plus" },
-    { id = "RAIDS_MIDNIGHT", label = "Raids - Midnight", categoryID = CATEGORY_ID.RAID, filters = bit.bor(GetCurrentExpansionFilterMask(), GetPveFilterMask()), mode = "raid" },
-    { id = "RAIDS_LEGACY", label = "Raids - Legacy", categoryID = CATEGORY_ID.CLASSIC_RAID, filters = 0, mode = "legacy_raid" },
-    { id = "DELVES", label = "Delves", categoryID = CATEGORY_ID.DELVES, filters = 0, mode = "delve" },
-    { id = "QUESTING", label = "Questing", categoryID = CATEGORY_ID.QUESTING, filters = 0, mode = "open_world" },
-    { id = "CUSTOM", label = "Custom", categoryID = CATEGORY_ID.CUSTOM, filters = 0, mode = "generic" },
-    { id = "__PVP_SEPARATOR__", label = "PvP", separator = true },
+    { id = "DUNGEONS", label = L["Dungeons"], categoryID = CATEGORY_ID.DUNGEON, filters = bit.bor(GetCurrentSeasonFilterMask(), GetPveFilterMask()), mode = "mythic_plus" },
+    { id = "RAIDS_MIDNIGHT", label = L["Raids - Current"], categoryID = CATEGORY_ID.RAID, filters = bit.bor(GetCurrentExpansionFilterMask(), GetPveFilterMask()), mode = "raid" },
+    { id = "RAIDS_LEGACY", label = L["Raids - Legacy"], categoryID = CATEGORY_ID.CLASSIC_RAID, filters = 0, mode = "legacy_raid" },
+    { id = "DELVES", label = L["Delves"], categoryID = CATEGORY_ID.DELVES, filters = 0, mode = "delve" },
+    { id = "QUESTING", label = L["Questing"], categoryID = CATEGORY_ID.QUESTING, filters = 0, mode = "open_world" },
+    { id = "CUSTOM", label = L["Custom"], categoryID = CATEGORY_ID.CUSTOM, filters = 0, mode = "generic" },
+    { id = "__PVP_SEPARATOR__", label = L["PvP"], separator = true },
     { id = "RBG", label = "RBG", categoryID = CATEGORY_ID.RATED_BATTLEGROUND, filters = 0, mode = "rated_pvp" },
-    { id = "ARENA", label = "Arena", categoryID = CATEGORY_ID.ARENA, filters = 0, mode = "pvp" },
+    { id = "ARENA", label = L["Arena"], categoryID = CATEGORY_ID.ARENA, filters = 0, mode = "pvp" },
 }
 
 function addonTable.GetBrowserCategoryConfig(categoryKey)
@@ -210,7 +220,7 @@ end
 
 function addonTable.GetBrowserCategoryLabel(categoryKey)
     local config = addonTable.GetBrowserCategoryConfig(categoryKey)
-    return config and config.label or "Dungeons"
+    return config and config.label or L["Dungeons"]
 end
 
 function addonTable.SetBrowserCategory(categoryKey)
@@ -835,13 +845,14 @@ function addonTable.UpdateSearchContext()
     local selection = GetCurrentSearchSelection()
     local preferOakSelection = context.useOakCategorySelection == true and context.selectedCategoryKey ~= nil
 
-    if not preferOakSelection and selection and selection.categoryID then
+    if selection and selection.categoryID and (not preferOakSelection or selection.categoryID == context.selectedCategoryID) then
         context.selectedCategoryID = selection.categoryID
         context.categoryID = selection.categoryID
         context.searchSelection = selection
     else
         local storedConfig = addonTable.GetBrowserCategoryConfig and addonTable.GetBrowserCategoryConfig(context.selectedCategoryKey)
         if storedConfig then
+            local liveMatchesStoredCategory = selection and selection.categoryID and selection.categoryID == storedConfig.categoryID
             context.useOakCategorySelection = true
             context.selectedCategoryKey = storedConfig.id
             context.selectedCategoryID = storedConfig.categoryID
@@ -849,10 +860,13 @@ function addonTable.UpdateSearchContext()
             context.mode = storedConfig.mode or context.mode or "generic"
             context.searchSelection = {
                 categoryID = storedConfig.categoryID,
-                filters = storedConfig.filters or 0,
-                preferredFilters = storedConfig.preferredFilters or 0,
-                languageFilter = storedConfig.languageFilter,
-                searchCrossFactionListings = storedConfig.searchCrossFactionListings or false,
+                -- When Blizzard is already on the same category, preserve its exact live
+                -- search flags instead of rebuilding them from Oak defaults. Localized
+                -- clients appear to depend on this matching Blizzard's own request.
+                filters = (liveMatchesStoredCategory and selection.filters) or storedConfig.filters or 0,
+                preferredFilters = (liveMatchesStoredCategory and selection.preferredFilters) or storedConfig.preferredFilters or 0,
+                languageFilter = selection and selection.languageFilter or storedConfig.languageFilter,
+                searchCrossFactionListings = (selection and selection.searchCrossFactionListings) or storedConfig.searchCrossFactionListings or false,
             }
         end
     end
@@ -1447,7 +1461,7 @@ function addonTable.RunBrowserSearch()
     local categoryID = context and (context.categoryID or context.selectedCategoryID) or nil
     local categoryKey = context and context.selectedCategoryKey or nil
     local advancedFilter = nil
-    local activityIDsFilter = BuildSelectedActivityIDFilter()
+    local panel = LFGListFrame and LFGListFrame.SearchPanel
 
     if not categoryID then
         return false, "No search category selected."
@@ -1464,6 +1478,17 @@ function addonTable.RunBrowserSearch()
         end
     end
 
+    -- When Blizzard is already on the same category, use Blizzard's own search routine.
+    -- This preserves any internal state or locale-specific behavior that Oak may not
+    -- reproduce by reconstructing C_LFGList.Search arguments manually.
+    if panel and (panel.selectedCategory or panel.categoryID) == categoryID and type(LFGListSearchPanel_DoSearch) == "function" then
+        local ok, err = pcall(LFGListSearchPanel_DoSearch, panel)
+        if ok then
+            return true
+        end
+        return false, tostring(err)
+    end
+
     local success, err = pcall(
         C_LFGList.Search,
         categoryID,
@@ -1472,7 +1497,7 @@ function addonTable.RunBrowserSearch()
         selection and selection.languageFilter or nil,
         selection and selection.searchCrossFactionListings or false,
         advancedFilter,
-        activityIDsFilter
+        nil
     )
 
     if not success then
