@@ -83,7 +83,7 @@ That produces a release zip in `dist\` with the correct top-level addon folder. 
 
 ## Version
 
-Current repo version: `2.5.3`
+Current repo version: `2.5.4`
 
 ## Project Summary
 

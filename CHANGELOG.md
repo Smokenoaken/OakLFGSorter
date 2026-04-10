@@ -1,3 +1,10 @@
+## v2.5.4
+
+- Fixed localized browser searches so Oak now matches Blizzard results on non-English clients.
+- Restored same-category searches to Blizzard's live search path to avoid request mismatches.
+- Added the player's current M+ rating to the dungeon filter panel with Raider.IO/Blizzard score coloring.
+- Expanded the Supporters panel and updated localized browser/filter UI labels and auto-fit sizing.
+
 ## v2.5.3
 
 - Added live bountiful delve detection with yellow-highlighted delve labels in both the browser list and delve filter panel.
