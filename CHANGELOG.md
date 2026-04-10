@@ -1,3 +1,9 @@
+## v2.5.5
+
+- Disabled browser apply while the player has an active group listing and added an explanatory tooltip.
+- Kept the browser join checkmark visible but desaturated so leaders can see why group signup is blocked.
+- Included the recent localized browser search sync and filter-panel quality-of-life improvements.
+
 ## v2.5.4
 
 - Fixed localized browser searches so Oak now matches Blizzard results on non-English clients.
