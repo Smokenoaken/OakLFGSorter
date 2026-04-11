@@ -63,6 +63,27 @@ local function OpenOakBrowser()
         addonTable.OAK_LFG:Show()
     end
 end
+addonTable.OpenOakBrowser = OpenOakBrowser
+
+local function ToggleOakBrowser()
+    local oakFrame = addonTable.OAK_LFG
+    local searchFrame = addonTable.OAK_SEARCH
+
+    if (oakFrame and oakFrame:IsShown()) or (searchFrame and searchFrame:IsShown()) then
+        addonTable.userExplicitlyClosed = true
+        if searchFrame and searchFrame:IsShown() then
+            searchFrame:Hide()
+        end
+        if oakFrame and oakFrame:IsShown() then
+            oakFrame:Hide()
+        end
+        return
+    end
+
+    addonTable.userExplicitlyClosed = false
+    OpenOakBrowser()
+end
+addonTable.ToggleBrowserWindow = ToggleOakBrowser
 
 local function OpenOakOptions()
     OpenOakBrowser()
@@ -74,6 +95,7 @@ local function OpenOakOptions()
         end
     end
 end
+addonTable.OpenOakOptions = OpenOakOptions
 
 function addonTable.UpdateMinimapButtonVisibility()
     if not minimapButton then

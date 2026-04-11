@@ -1,0 +1,5 @@
+<Bindings>
+    <Binding name="OAKLFGSORTER_TOGGLEBROWSER" header="OAKLFGSORTER">
+        OakLFGSorter_ToggleBrowserWindow()
+    </Binding>
+</Bindings>

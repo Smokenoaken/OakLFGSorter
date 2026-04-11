@@ -301,6 +301,12 @@ function addonTable.SetCurrentViewMode(mode)
     if mode == "browser" and addonTable.UpdateSearchQuickSignupControls then
         addonTable.UpdateSearchQuickSignupControls()
     end
+    if addonTable.UpdateFooterActionVisibility then
+        addonTable.UpdateFooterActionVisibility()
+    end
+    if addonTable.UpdatePartyKeysPanel then
+        addonTable.UpdatePartyKeysPanel()
+    end
 end
 
 -- Debounce and throttle search result events: LFG_LIST_SEARCH_RESULT_UPDATED can
@@ -1517,6 +1523,468 @@ function addonTable.OpenGroupFinderForOak()
     end
 end
 
+local function TryShowPVEFramePanel(panelName, targetFrameName)
+    if type(PVEFrame_ShowFrame) == "function" then
+        local ok = pcall(PVEFrame_ShowFrame, panelName, targetFrameName)
+        if ok then
+            return true
+        end
+    end
+
+    if type(PVEFrame_ToggleFrame) == "function" then
+        local ok = pcall(PVEFrame_ToggleFrame, panelName, targetFrameName)
+        if ok then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function ShowNamedFrame(frameName)
+    local frame = frameName and _G[frameName]
+    if not frame then
+        return false
+    end
+
+    if type(ShowUIPanel) == "function" then
+        local ok = pcall(ShowUIPanel, frame)
+        if ok then
+            return true
+        end
+    end
+
+    local ok = pcall(frame.Show, frame)
+    return ok and true or false
+end
+
+function addonTable.OpenBlizzardFinderPanel(panelKey)
+    if UIParentLoadAddOn then
+        pcall(UIParentLoadAddOn, "Blizzard_GroupFinder")
+        if panelKey == "pvp" then
+            pcall(UIParentLoadAddOn, "Blizzard_PVPUI")
+        end
+    end
+
+    local opened = false
+
+    if panelKey == "dungeon" then
+        opened = TryShowPVEFramePanel("GroupFinderFrame", "LFDParentFrame")
+        if not opened then
+            opened = ShowNamedFrame("LFDParentFrame")
+        end
+    elseif panelKey == "raid" then
+        opened = TryShowPVEFramePanel("GroupFinderFrame", "RaidFinderFrame")
+        if not opened then
+            opened = ShowNamedFrame("RaidFinderFrame")
+        end
+        if not opened then
+            opened = ShowNamedFrame("RaidFinderQueueFrame")
+        end
+    elseif panelKey == "pvp" then
+        if type(TogglePVPUI) == "function" then
+            local ok = pcall(TogglePVPUI)
+            if ok then
+                opened = true
+            end
+        end
+        if not opened and type(PVPUIFrame_ShowFrame) == "function" then
+            local ok = pcall(PVPUIFrame_ShowFrame, "HonorFrame")
+            if ok then
+                opened = true
+            end
+        end
+        if not opened then
+            opened = ShowNamedFrame("PVPUIFrame")
+        end
+    end
+
+    if panelKey ~= "pvp" and not opened and PVEFrame then
+        if type(ShowUIPanel) == "function" then
+            pcall(ShowUIPanel, PVEFrame)
+        else
+            pcall(PVEFrame.Show, PVEFrame)
+        end
+    end
+
+    addonTable.activeEmbeddedFinderPanel = panelKey
+    if addonTable.UpdateFinderTabs then
+        addonTable.UpdateFinderTabs()
+    end
+
+    return opened
+end
+
+local function TryOpenPremadeGroupListingCategory(categoryKey)
+    local config = addonTable.GetBrowserCategoryConfig and addonTable.GetBrowserCategoryConfig(categoryKey)
+    if not config or not config.categoryID then
+        return false
+    end
+
+    if UIParentLoadAddOn then
+        pcall(UIParentLoadAddOn, "Blizzard_GroupFinder")
+    end
+
+    local function ShowPremadeGroupsFrame()
+        if type(PVEFrame_ShowFrame) == "function" then
+            if pcall(PVEFrame_ShowFrame, "GroupFinderFrame", "LFGListFrame") then
+                return true
+            end
+            if pcall(PVEFrame_ShowFrame, "GroupFinderFrame") then
+                return true
+            end
+        end
+
+        if LFGListFrame then
+            if type(ShowUIPanel) == "function" then
+                local ok = pcall(ShowUIPanel, LFGListFrame)
+                if ok then
+                    return true
+                end
+            end
+            local ok = pcall(LFGListFrame.Show, LFGListFrame)
+            if ok then
+                return true
+            end
+        end
+
+        if PVEFrame then
+            if type(ShowUIPanel) == "function" then
+                pcall(ShowUIPanel, PVEFrame)
+            else
+                pcall(PVEFrame.Show, PVEFrame)
+            end
+        end
+
+        return false
+    end
+
+    ShowPremadeGroupsFrame()
+
+    local function ClickFrameButton(button)
+        if not button then
+            return false
+        end
+        if button.Click then
+            local ok = pcall(button.Click, button)
+            if ok then
+                return true
+            end
+        end
+        if button.GetScript then
+            local onClick = button:GetScript("OnClick")
+            if type(onClick) == "function" then
+                local ok = pcall(onClick, button, "LeftButton")
+                if ok then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function GetButtonLabelText(button)
+        if not button then
+            return ""
+        end
+
+        local candidates = {
+            button.Name,
+            button.name,
+            button.Label,
+            button.label,
+            button.Text,
+            button.text,
+            button.NameText,
+            button.nameText,
+        }
+
+        for _, region in ipairs(candidates) do
+            if type(region) == "table" and region.GetText then
+                local text = tostring(region:GetText() or "")
+                if text ~= "" then
+                    return text
+                end
+            end
+        end
+
+        if button.GetText then
+            local text = tostring(button:GetText() or "")
+            if text ~= "" then
+                return text
+            end
+        end
+
+        return ""
+    end
+
+    local function NormalizeLabel(text)
+        text = strlower(tostring(text or ""))
+        text = text:gsub("%s+", " ")
+        text = text:gsub("^%s+", ""):gsub("%s+$", "")
+        return text
+    end
+
+    local function GetDesiredTopLevelTabLabel()
+        if categoryKey == "RBG" or categoryKey == "ARENA" then
+            return NormalizeLabel(PVP or "Player vs. Player"), NormalizeLabel("Player vs. Player")
+        end
+        return NormalizeLabel(DUNGEONS_AND_RAIDS or "Dungeons & Raids"), NormalizeLabel("Dungeons & Raids")
+    end
+
+    local function GetDesiredPremadeCategoryLabels()
+        local aliases = {}
+        local desired = {
+            DUNGEONS = { "Dungeons" },
+            RAIDS_MIDNIGHT = { "Raids - Midnight", "Raids - Current" },
+            RAIDS_LEGACY = { "Raids - Legacy" },
+            DELVES = { "Delves" },
+            QUESTING = { "Questing" },
+            CUSTOM = { "Custom" },
+            RBG = { "Rated Battleground", "RBG", "Battlegrounds" },
+            ARENA = { "Arena" },
+        }
+
+        for _, label in ipairs(desired[categoryKey] or { config.label }) do
+            aliases[NormalizeLabel(label)] = true
+        end
+
+        return aliases
+    end
+
+    local function ClickTopLevelGroupFinderTab()
+        local desiredA, desiredB = GetDesiredTopLevelTabLabel()
+        for index = 1, 5 do
+            local button = _G["PVEFrameTab" .. index]
+            local label = NormalizeLabel(GetButtonLabelText(button))
+            if label ~= "" and (label == desiredA or label == desiredB) then
+                if ClickFrameButton(button) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function ClickPremadeGroupsButton()
+        local premadeText = strlower(tostring(PREMADE_GROUPS or "Premade Groups"))
+        local fallbackMatch = "premade"
+
+        for index = 1, 8 do
+            local button = _G["GroupFinderFrameGroupButton" .. index] or (GroupFinderFrame and GroupFinderFrame["groupButton" .. index])
+            local label = strlower(GetButtonLabelText(button))
+            if label ~= "" and (label == premadeText or label:find(fallbackMatch, 1, true)) then
+                if ClickFrameButton(button) then
+                    return true
+                end
+            end
+        end
+
+        if GroupFinderFrameGroupButton3 and ClickFrameButton(GroupFinderFrameGroupButton3) then
+            return true
+        end
+
+        if LFGListFrame then
+            if type(ShowUIPanel) == "function" then
+                pcall(ShowUIPanel, LFGListFrame)
+            else
+                pcall(LFGListFrame.Show, LFGListFrame)
+            end
+            return true
+        end
+
+        return false
+    end
+
+    local function ForcePvpPremadeGroups()
+        if not (categoryKey == "RBG" or categoryKey == "ARENA") then
+            return false
+        end
+
+        ClickTopLevelGroupFinderTab()
+
+        local success = ClickPremadeGroupsButton()
+        if success then
+            return true
+        end
+
+        local pvpFrame = GroupFinderFrame and GroupFinderFrame.GroupButton4 and GroupFinderFrame.GroupButton4:GetParent()
+        if pvpFrame and pvpFrame.PremadeGroupButton then
+            return ClickFrameButton(pvpFrame.PremadeGroupButton)
+        end
+
+        return false
+    end
+
+    local function ResetToCategorySelection()
+        local entryCreation = LFGListFrame and LFGListFrame.EntryCreation
+        if entryCreation and entryCreation:IsShown() then
+            local cancelButton = entryCreation.CancelButton or entryCreation.BackButton
+            if cancelButton then
+                ClickFrameButton(cancelButton)
+            end
+        end
+
+        local searchPanel = LFGListFrame and LFGListFrame.SearchPanel
+        if searchPanel and searchPanel:IsShown() then
+            local backButton = searchPanel.BackButton or searchPanel.CancelButton
+            if backButton then
+                ClickFrameButton(backButton)
+            end
+        end
+    end
+
+    ClickTopLevelGroupFinderTab()
+    ResetToCategorySelection()
+    if categoryKey == "RBG" or categoryKey == "ARENA" then
+        ForcePvpPremadeGroups()
+    else
+        ClickPremadeGroupsButton()
+    end
+
+    local function applyCategorySelection(skipReset)
+        ClickTopLevelGroupFinderTab()
+        if not skipReset then
+            ResetToCategorySelection()
+        end
+        if categoryKey == "RBG" or categoryKey == "ARENA" then
+            ForcePvpPremadeGroups()
+        end
+        local categorySelection = LFGListFrame and LFGListFrame.CategorySelection
+        if not categorySelection then
+            return false
+        end
+
+        if categorySelection.Show and not categorySelection:IsShown() then
+            pcall(categorySelection.Show, categorySelection)
+        end
+
+        -- Try mixin method form first (WoW 12.x uses LFGListCategorySelectionMixin:SelectCategory),
+        -- then fall back to the legacy global function.
+        if type(categorySelection.SelectCategory) == "function" then
+            pcall(categorySelection.SelectCategory, categorySelection, config.categoryID, config.filters or 0)
+        end
+        if type(LFGListCategorySelection_SelectCategory) == "function" then
+            pcall(LFGListCategorySelection_SelectCategory, categorySelection, config.categoryID, config.filters or 0)
+        end
+        if categorySelection.selectedCategory == nil then
+            categorySelection.selectedCategory = config.categoryID
+        end
+        if categorySelection.selectedFilters == nil then
+            categorySelection.selectedFilters = config.filters or 0
+        end
+
+        -- Trigger the StartGroupButton state update so it reflects the new selection.
+        if type(categorySelection.UpdateStartButton) == "function" then
+            pcall(categorySelection.UpdateStartButton, categorySelection)
+        elseif type(LFGListCategorySelection_UpdateStartButton) == "function" then
+            pcall(LFGListCategorySelection_UpdateStartButton, categorySelection)
+        end
+
+        local clickedCategoryButton = false
+        local categoryButtons = categorySelection.CategoryButtons
+        local aliases = GetDesiredPremadeCategoryLabels()
+        if type(categoryButtons) == "table" then
+            for _, categoryButton in pairs(categoryButtons) do
+                if categoryButton then
+                    local buttonLabel = NormalizeLabel(GetButtonLabelText(categoryButton))
+                    if aliases[buttonLabel] then
+                        clickedCategoryButton = ClickFrameButton(categoryButton) or clickedCategoryButton
+                        break
+                    end
+                end
+            end
+        end
+
+        if LFGListFrame and LFGListFrame.EntryCreation and LFGListFrame.EntryCreation:IsShown() then
+            return true
+        end
+
+        local startButton = categorySelection.StartGroupButton or categorySelection.FindGroupButton or _G["LFGListFrameCategorySelectionStartGroupButton"] or _G["LFGListFrameCategorySelectionFindGroupButton"]
+        -- Restore the first post-handoff behavior:
+        -- • allow Blizzard-disabled buttons to be force-clicked after selection refresh
+        -- • skip Legacy Raids entirely because category 114 crashes EntryCreation
+        -- • only require available activities for PvP categories
+        local startButtonSafe = startButton ~= nil and categoryKey ~= "RAIDS_LEGACY"
+        if startButtonSafe and (categoryKey == "RBG" or categoryKey == "ARENA") then
+            local ok, avail = pcall(function()
+                return C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetAvailableActivities(config.categoryID) or {}
+            end)
+            startButtonSafe = ok and type(avail) == "table" and #avail > 0
+        end
+        if startButtonSafe and startButton.SetEnabled and startButton.IsEnabled and not startButton:IsEnabled() then
+            pcall(startButton.SetEnabled, startButton, true)
+        end
+        if startButtonSafe and ClickFrameButton(startButton) then
+            if LFGListFrame and LFGListFrame.EntryCreation and LFGListFrame.EntryCreation:IsShown() then
+                return true
+            end
+        end
+
+        -- Fall through to the EntryCreation direct path for all categories including raids/PvP.
+        local availableActivities = C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetAvailableActivities(config.categoryID) or nil
+        local activityID = type(availableActivities) == "table" and availableActivities[1] or nil
+
+        local entryCreation = LFGListFrame and LFGListFrame.EntryCreation
+        if entryCreation and activityID then
+            -- Try mixin method forms first (WoW 12.x), then legacy globals.
+            if type(entryCreation.OnCategorySelected) == "function" then
+                pcall(entryCreation.OnCategorySelected, entryCreation, config.categoryID, config.filters or 0)
+            elseif type(LFGListEntryCreation_OnCategorySelected) == "function" then
+                pcall(LFGListEntryCreation_OnCategorySelected, entryCreation, config.categoryID, config.filters or 0)
+            end
+
+            if type(entryCreation.PopulateActivities) == "function" then
+                pcall(entryCreation.PopulateActivities, entryCreation, config.categoryID, config.filters or 0)
+            elseif type(LFGListEntryCreation_PopulateActivities) == "function" then
+                pcall(LFGListEntryCreation_PopulateActivities, entryCreation, config.categoryID, config.filters or 0)
+            end
+
+            if type(entryCreation.Select) == "function" then
+                pcall(entryCreation.Select, entryCreation, activityID)
+            elseif type(LFGListEntryCreation_Select) == "function" then
+                pcall(LFGListEntryCreation_Select, entryCreation, activityID)
+            end
+
+            local activityFinder = entryCreation.ActivityFinder or LFGListFrame.EntryCreationActivityFinder
+            if activityFinder then
+                if type(LFGListEntryCreationActivityFinder_Show) == "function" then
+                    pcall(LFGListEntryCreationActivityFinder_Show, activityFinder, entryCreation)
+                end
+                if type(LFGListEntryCreationActivityFinder_Select) == "function" then
+                    pcall(LFGListEntryCreationActivityFinder_Select, activityFinder, activityID)
+                end
+                if type(LFGListEntryCreationActivityFinder_Accept) == "function" then
+                    pcall(LFGListEntryCreationActivityFinder_Accept, activityFinder)
+                end
+            end
+
+            if entryCreation:IsShown() then
+                return true
+            end
+        end
+
+        return clickedCategoryButton or (activityID ~= nil)
+    end
+
+    if applyCategorySelection() then
+        return true
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.05, function() applyCategorySelection(true) end)
+        C_Timer.After(0.20, function() applyCategorySelection(true) end)
+        C_Timer.After(0.50, function() applyCategorySelection(true) end)
+    end
+
+    return true
+end
+
+function addonTable.OpenBlizzardListingPanel(categoryKey)
+    return TryOpenPremadeGroupListingCategory(categoryKey)
+end
+
+
 function addonTable.ApplyToSearchResult(searchResultID)
     if addonTable.BeginSearchSignup then
         addonTable.BeginSearchSignup(searchResultID)
@@ -2027,13 +2495,8 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             end
         end
     elseif event == "GROUP_ROSTER_UPDATE" then
-        if OAK_LFG:IsShown() then 
-            -- Check if the joining player triggered a group fill/delist
-            if not C_LFGList.HasActiveEntryInfo() then
-                OAK_LFG:Hide()
-            else
-                addonTable.UpdateDisplay() 
-            end
+        if OAK_LFG:IsShown() then
+            addonTable.UpdateDisplay()
         end
     end
 end)
@@ -2090,16 +2553,18 @@ local function OakLFGCommand(msg)
 
         print("|cFF00FF00Oak LFG Sorter:|r Applicant and search window position, scale, and note settings reset.")
     else
-        -- Show the appropriate browser: applicant browser when listing, search browser otherwise
-        -- User is explicitly toggling — clear the close flag so auto-open resumes if they re-open.
-        addonTable.userExplicitlyClosed = false
-        if C_LFGList.HasActiveEntryInfo() then
-            if OAK_LFG:IsShown() then OAK_LFG:Hide() else OAK_LFG:Show() end
-        elseif addonTable.OAK_SEARCH then
-            local OAK_SEARCH = addonTable.OAK_SEARCH
-            if OAK_SEARCH:IsShown() then OAK_SEARCH:Hide() else OAK_SEARCH:Show() end
+        if addonTable.ToggleBrowserWindow then
+            addonTable.ToggleBrowserWindow()
         else
-            if OAK_LFG:IsShown() then OAK_LFG:Hide() else OAK_LFG:Show() end
+            addonTable.userExplicitlyClosed = false
+            if C_LFGList.HasActiveEntryInfo() then
+                if OAK_LFG:IsShown() then OAK_LFG:Hide() else OAK_LFG:Show() end
+            elseif addonTable.OAK_SEARCH then
+                local OAK_SEARCH = addonTable.OAK_SEARCH
+                if OAK_SEARCH:IsShown() then OAK_SEARCH:Hide() else OAK_SEARCH:Show() end
+            else
+                if OAK_LFG:IsShown() then OAK_LFG:Hide() else OAK_LFG:Show() end
+            end
         end
     end
 end
@@ -2107,6 +2572,17 @@ end
 SLASH_OAKLFG1 = "/oaklfg"
 SLASH_OAKLFG2 = "/lfg"
 SlashCmdList["OAKLFG"] = OakLFGCommand
+
+function OakLFGSorter_ToggleBrowserWindow()
+    if addonTable and addonTable.ToggleBrowserWindow then
+        addonTable.ToggleBrowserWindow()
+    elseif addonTable and addonTable.OpenOakBrowser then
+        addonTable.OpenOakBrowser()
+    elseif addonTable and addonTable.OAK_LFG then
+        addonTable.userExplicitlyClosed = false
+        addonTable.OAK_LFG:Show()
+    end
+end
 
 -- Debug: dump raw leaderPvpRatingInfo fields from first PVP result
 SLASH_OAKPVPDEBUG1 = "/oakpvpdebug"
@@ -2152,6 +2628,7 @@ SlashCmdList["OAKPVPDEBUG"] = function()
         print("|cffff9900OAK PVP Debug:|r No PVP results found in cache.")
     end
 end
+
 
 
 

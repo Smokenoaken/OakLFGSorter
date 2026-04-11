@@ -2966,7 +2966,7 @@ end)
 
 local optionsPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.OptionsPanel = optionsPanel
-optionsPanel:SetSize(205, 500)
+optionsPanel:SetSize(205, 540)
 optionsPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
 optionsPanel:Hide()
 optionsPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1)
@@ -3032,6 +3032,173 @@ local optionsMinimapLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLF
 optionsMinimapLabel:SetPoint("LEFT", optionsMinimapBox, "RIGHT", 8, 0)
 optionsMinimapLabel:SetText(L["Show Minimap Button"])
 
+local optionsPartyKeysBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
+optionsPartyKeysBox:SetSize(16, 16)
+optionsPartyKeysBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+optionsPartyKeysBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -108)
+local optionsPartyKeysLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+optionsPartyKeysLabel:SetPoint("LEFT", optionsPartyKeysBox, "RIGHT", 8, 0)
+optionsPartyKeysLabel:SetText("Show Party Keys")
+
+do
+    local BROWSER_BINDING_COMMAND = "OAKLFGSORTER_TOGGLEBROWSER"
+    local browserBindingCaptureActive = false
+    local optionsKeybindLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    optionsKeybindLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -132)
+    optionsKeybindLabel:SetText("Browser Keybind")
+
+    local optionsKeybindValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    optionsKeybindValue:SetPoint("TOPLEFT", optionsKeybindLabel, "BOTTOMLEFT", 0, -4)
+    optionsKeybindValue:SetWidth(175)
+    optionsKeybindValue:SetJustifyH("LEFT")
+    optionsKeybindValue:SetJustifyV("TOP")
+    optionsKeybindValue:SetTextColor(0.84, 0.84, 0.84)
+    addonTable.OptionsKeybindValue = optionsKeybindValue
+
+    local function FormatOakBindingText()
+        local key1, key2 = GetBindingKey and GetBindingKey(BROWSER_BINDING_COMMAND)
+        local formatted = {}
+
+        if key1 then
+            formatted[#formatted + 1] = (GetBindingText and GetBindingText(key1, "KEY_")) or key1
+        end
+        if key2 then
+            formatted[#formatted + 1] = (GetBindingText and GetBindingText(key2, "KEY_")) or key2
+        end
+
+        if #formatted == 0 then
+            return "Not bound."
+        end
+
+        return table.concat(formatted, ", ")
+    end
+
+    local function StopBrowserBindingCapture()
+        browserBindingCaptureActive = false
+        optionsPanel:EnableKeyboard(false)
+        optionsPanel:SetPropagateKeyboardInput(true)
+    end
+
+    local function SaveBrowserBinding(bindingKey)
+        if InCombatLockdown and InCombatLockdown() then
+            optionsKeybindValue:SetText("Cannot change bindings in combat.")
+            StopBrowserBindingCapture()
+            return
+        end
+
+        local old1, old2 = GetBindingKey(BROWSER_BINDING_COMMAND)
+        if old1 then SetBinding(old1, nil) end
+        if old2 then SetBinding(old2, nil) end
+        if bindingKey and bindingKey ~= "" then
+            SetBinding(bindingKey, BROWSER_BINDING_COMMAND)
+        end
+
+        SaveBindings(GetCurrentBindingSet())
+        StopBrowserBindingCapture()
+        if addonTable.RefreshOptionsPanel then
+            addonTable.RefreshOptionsPanel()
+        end
+    end
+
+    local function BuildCapturedBinding(key)
+        if not key or key == "" then
+            return nil
+        end
+
+        if key == "LSHIFT" or key == "RSHIFT" or key == "LCTRL" or key == "RCTRL" or key == "LALT" or key == "RALT" then
+            return nil
+        end
+
+        local prefix = ""
+        if IsControlKeyDown and IsControlKeyDown() and key ~= "LCTRL" and key ~= "RCTRL" then
+            prefix = prefix .. "CTRL-"
+        end
+        if IsAltKeyDown and IsAltKeyDown() and key ~= "LALT" and key ~= "RALT" then
+            prefix = prefix .. "ALT-"
+        end
+        if IsShiftKeyDown and IsShiftKeyDown() and key ~= "LSHIFT" and key ~= "RSHIFT" then
+            prefix = prefix .. "SHIFT-"
+        end
+
+        return prefix .. key
+    end
+
+    local optionsSetBindButton = addonTable.CreateFlatButton(optionsPanel, "Set Key", 84)
+    optionsSetBindButton:SetPoint("TOPLEFT", optionsKeybindValue, "BOTTOMLEFT", 0, -6)
+    optionsSetBindButton:SetScript("OnClick", function()
+        if InCombatLockdown and InCombatLockdown() then
+            optionsKeybindValue:SetText("Cannot change bindings in combat.")
+            return
+        end
+
+        browserBindingCaptureActive = true
+        optionsPanel:EnableKeyboard(true)
+        optionsPanel:SetPropagateKeyboardInput(false)
+        optionsKeybindValue:SetText("Press a key combination. Esc cancels. Backspace clears.")
+        if optionsSetBindButton.text then
+            optionsSetBindButton.text:SetText("Press Key...")
+        end
+    end)
+    optionsSetBindButton:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        if not browserBindingCaptureActive then
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+            GameTooltip:SetText("Set Key", 1, 1, 1)
+            GameTooltip:AddLine("Assign or replace Oak's browser toggle binding.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end
+    end)
+    optionsSetBindButton:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+        GameTooltip:Hide()
+    end)
+
+    local optionsClearBindButton = addonTable.CreateFlatButton(optionsPanel, "Clear", 70)
+    optionsClearBindButton:SetPoint("LEFT", optionsSetBindButton, "RIGHT", 6, 0)
+    optionsClearBindButton:SetScript("OnClick", function()
+        SaveBrowserBinding(nil)
+    end)
+
+    optionsPanel:SetPropagateKeyboardInput(true)
+    optionsPanel:SetScript("OnKeyDown", function(_, key)
+        if not browserBindingCaptureActive then
+            return
+        end
+
+        if key == "ESCAPE" then
+            StopBrowserBindingCapture()
+            if addonTable.RefreshOptionsPanel then
+                addonTable.RefreshOptionsPanel()
+            end
+            return
+        end
+
+        if key == "BACKSPACE" then
+            SaveBrowserBinding(nil)
+            return
+        end
+
+        local bindingKey = BuildCapturedBinding(key)
+        if not bindingKey then
+            optionsKeybindValue:SetText("Choose a non-modifier key.")
+            return
+        end
+
+        SaveBrowserBinding(bindingKey)
+    end)
+
+    addonTable.FormatOakBindingText = FormatOakBindingText
+    addonTable.IsBrowserBindingCaptureActive = function()
+        return browserBindingCaptureActive
+    end
+    addonTable.OptionsSetBindButton = optionsSetBindButton
+end
+
+optionsPanel:HookScript("OnHide", function()
+    optionsPanel:EnableKeyboard(false)
+    optionsPanel:SetPropagateKeyboardInput(true)
+end)
+
 local function ApplySpecToggleVisual(button, label, isActive)
     if isActive then
         button:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
@@ -3094,17 +3261,34 @@ optionsMinimapBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
+optionsPartyKeysBox:SetScript("OnClick", function()
+    OakLFGSorterDB.showPartyKeys = not (OakLFGSorterDB.showPartyKeys == true)
+    if addonTable.UpdatePartyKeysPanel then addonTable.UpdatePartyKeysPanel() end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end)
+optionsPartyKeysBox:SetScript("OnEnter", function(self)
+    ApplyMinimapToggleVisual(self, optionsPartyKeysLabel, OakLFGSorterDB.showPartyKeys == true)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Show Party Keys", 1, 1, 1)
+    GameTooltip:AddLine("Show the Party Keys panel while browsing dungeons or listing groups.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsPartyKeysBox:SetScript("OnLeave", function()
+    ApplyMinimapToggleVisual(optionsPartyKeysBox, optionsPartyKeysLabel, OakLFGSorterDB.showPartyKeys == true)
+    GameTooltip:Hide()
+end)
+
 local optionsStyleLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsStyleLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -118)
+optionsStyleLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -190)
 optionsStyleLabel:SetText("Style")
 optionsStyleButton, optionsStyleList = addonTable.CreateThemeStyleDropdown(optionsPanel, 170)
-optionsStyleButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -138)
+optionsStyleButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -208)
 
 local optionsThemeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsThemeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -174)
+optionsThemeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -240)
 optionsThemeLabel:SetText("Accent")
 optionsThemeButton, optionsThemeList = addonTable.CreateThemeDropdown(optionsPanel, 112)
-optionsThemeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -194)
+optionsThemeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -258)
 
 optionsThemeColorButton = addonTable.CreateFlatButton(optionsPanel, "Color", 52)
 optionsThemeColorButton:SetPoint("LEFT", optionsThemeButton, "RIGHT", 6, 0)
@@ -3133,7 +3317,7 @@ optionsThemeColorButton:SetScript("OnLeave", function(self)
 end)
 
 local optionsRegionFilterLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -230)
+optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -268)
 optionsRegionFilterLabel:SetText("Filter Regions")
 
 local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
@@ -3166,27 +3350,27 @@ local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
     regionFilterLabels[regionCode] = label
 end
 
-CreateRegionFilterOption(optionsPanel, "NA", 15, -252)
-CreateRegionFilterOption(optionsPanel, "OCE", 105, -252)
-CreateRegionFilterOption(optionsPanel, "LATAM", 15, -274)
-CreateRegionFilterOption(optionsPanel, "BR", 105, -274)
-CreateRegionFilterOption(optionsPanel, "EU", 15, -296)
-CreateRegionFilterOption(optionsPanel, "OTHER", 105, -296)
+CreateRegionFilterOption(optionsPanel, "NA", 15, -288)
+CreateRegionFilterOption(optionsPanel, "OCE", 105, -288)
+CreateRegionFilterOption(optionsPanel, "LATAM", 15, -310)
+CreateRegionFilterOption(optionsPanel, "BR", 105, -310)
+CreateRegionFilterOption(optionsPanel, "EU", 15, -332)
+CreateRegionFilterOption(optionsPanel, "OTHER", 105, -332)
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -328)
+optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -362)
 optionsFontLabel:SetText(L["Addon Font"])
 local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
-optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -348)
+optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -380)
 
 local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -384)
+optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -412)
 optionsFontSizeLabel:SetText(L["Font Size"])
 local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -384)
+optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -412)
 
 local optionsFontSizeSlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsFontSizeSlider:SetSize(170, 10)
-optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -406)
+optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -430)
 optionsFontSizeSlider:SetMinMaxValues(10, 18)
 optionsFontSizeSlider:SetValueStep(1)
 optionsFontSizeSlider:SetObeyStepOnDrag(true)
@@ -3222,14 +3406,14 @@ end)
 optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
 
 local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -442)
+optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -462)
 optionsOpacityLabel:SetText("Window Opacity")
 local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -442)
+optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -462)
 
 local optionsOpacitySlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsOpacitySlider:SetSize(170, 10)
-optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -464)
+optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -480)
 optionsOpacitySlider:SetMinMaxValues(0.35, 1.0)
 optionsOpacitySlider:SetValueStep(0.05)
 optionsOpacitySlider:SetObeyStepOnDrag(true)
@@ -3267,6 +3451,15 @@ local function RefreshOptionsPanel()
     ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
     ApplySpecToggleVisual(optionsSpecBox, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
     ApplyMinimapToggleVisual(optionsMinimapBox, optionsMinimapLabel, not (OakLFGSorterDB and OakLFGSorterDB.hideMinimapButton == true))
+    ApplyMinimapToggleVisual(optionsPartyKeysBox, optionsPartyKeysLabel, OakLFGSorterDB.showPartyKeys == true)
+    if addonTable.OptionsKeybindValue and not (addonTable.IsBrowserBindingCaptureActive and addonTable.IsBrowserBindingCaptureActive()) then
+        local bindingText = addonTable.FormatOakBindingText and addonTable.FormatOakBindingText() or "Not bound."
+        addonTable.OptionsKeybindValue:SetText(bindingText)
+        if addonTable.OptionsSetBindButton and addonTable.OptionsSetBindButton.text then
+            addonTable.OptionsSetBindButton.text:SetText(bindingText)
+        end
+    end
+
     if optionsStyleButton and optionsStyleButton.RefreshSelection then
         optionsStyleButton:RefreshSelection()
     end
@@ -3292,6 +3485,14 @@ local function RefreshOptionsPanel()
 end
 
 addonTable.RefreshOptionsPanel = RefreshOptionsPanel
+
+local optionsBindingsEventFrame = CreateFrame("Frame")
+optionsBindingsEventFrame:RegisterEvent("UPDATE_BINDINGS")
+optionsBindingsEventFrame:SetScript("OnEvent", function()
+    if addonTable.RefreshOptionsPanel then
+        addonTable.RefreshOptionsPanel()
+    end
+end)
 
 addonTable.RegisterThemeRefresh("ui_filters_theme", function()
     if addonTable.ApplyBackdropStyle then
@@ -3339,6 +3540,49 @@ function addonTable.ToggleOptionsPanel()
     end
     if addonTable.AnchorRIOPanelToOak then
         addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
+    end
+end
+
+local function OpenOakOptionsFromBlizzard()
+    if SettingsPanel and SettingsPanel:IsShown() then
+        HideUIPanel(SettingsPanel)
+    elseif InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then
+        HideUIPanel(InterfaceOptionsFrame)
+    end
+
+    if addonTable.OpenOakOptions then
+        addonTable.OpenOakOptions()
+    elseif addonTable.OpenOakBrowser then
+        addonTable.OpenOakBrowser()
+        if addonTable.ToggleOptionsPanel and not (addonTable.OptionsPanel and addonTable.OptionsPanel:IsShown()) then
+            addonTable.ToggleOptionsPanel()
+        end
+    end
+end
+
+do
+    local settingsFrame = CreateFrame("Frame", "OakLFGSorterBlizzardOptionsPanel")
+    settingsFrame.name = "OAK LFG Sorter"
+
+    local title = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText("OAK LFG Sorter")
+
+    local description = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    description:SetText("Open Oak's in-window options panel.")
+
+    local openButton = CreateFrame("Button", nil, settingsFrame, "UIPanelButtonTemplate")
+    openButton:SetSize(180, 24)
+    openButton:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -14)
+    openButton:SetText("Open Oak Options")
+    openButton:SetScript("OnClick", OpenOakOptionsFromBlizzard)
+
+    if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
+        local category = Settings.RegisterCanvasLayoutCategory(settingsFrame, settingsFrame.name, settingsFrame.name)
+        Settings.RegisterAddOnCategory(category)
+    elseif InterfaceOptions_AddCategory then
+        InterfaceOptions_AddCategory(settingsFrame)
     end
 end
 
@@ -3563,18 +3807,12 @@ function addonTable.SetupBlizzardLFGHook()
     if LFGListFrame and LFGListFrame.SearchPanel and not addonTable.SearchPanelHooked then
         addonTable.SearchPanelHooked = true
         LFGListFrame.SearchPanel:HookScript("OnShow", function()
-            if not C_LFGList.HasActiveEntryInfo() then
-                -- Mark this as a system-initiated hide so OAK_LFG:OnHide doesn't
-                -- treat it as a user explicit close (which would suppress auto-reopen).
-                addonTable.systemHidingBrowser = true
-                OAK_LFG:Hide()
-                addonTable.systemHidingBrowser = false
+            if OakLFGSorterDB and OakLFGSorterDB.autoOpen and not addonTable.userExplicitlyClosed then
+                OAK_LFG:Show()
             end
         end)
-        -- When Blizzard's search panel hides (user closed the LFG panel or navigated away),
-        -- reset the explicit-close flag so auto-open works fresh next time.
         LFGListFrame.SearchPanel:HookScript("OnHide", function()
-            addonTable.userExplicitlyClosed = false
+            -- Preserve the user's explicit close preference; do not force-reset it here.
         end)
     end
 end

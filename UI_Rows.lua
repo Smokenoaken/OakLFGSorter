@@ -405,15 +405,51 @@ local brezText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 brezText:SetPoint("LEFT", lustText, "RIGHT", 20, 0)
 
 -- Browser mode: "Showing X of Y groups" replaces lust/brez indicators
-local groupCountText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-groupCountText:SetPoint("LEFT", footer, "LEFT", 10, 0)
+local groupCountText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+groupCountText:SetPoint("LEFT", footer, "LEFT", 4, 0)
 groupCountText:SetTextColor(0.75, 0.75, 0.75)
 groupCountText:Hide()
 addonTable.groupCountText = groupCountText
 
+local lfgBtn = addonTable.CreateFlatButton(footer, "LFG", 40)
+lfgBtn.isBrowserFooterControl = true
+lfgBtn:SetAutoWidth(40, 70, 18)
+lfgBtn:SetScript("OnClick", function()
+    if addonTable.OpenBlizzardFinderPanel then
+        addonTable.OpenBlizzardFinderPanel("dungeon")
+    end
+end)
+lfgBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Open Blizzard Dungeon Finder", 1, 1, 1)
+    GameTooltip:Show()
+end)
+lfgBtn:SetScript("OnLeave", function(self)
+    GameTooltip:Hide()
+end)
+
+local lfrBtn = addonTable.CreateFlatButton(footer, "LFR", 40)
+lfrBtn.isBrowserFooterControl = true
+lfrBtn:SetAutoWidth(40, 70, 18)
+lfrBtn:SetScript("OnClick", function()
+    if addonTable.OpenBlizzardFinderPanel then
+        addonTable.OpenBlizzardFinderPanel("raid")
+    end
+end)
+lfrBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Open Blizzard Raid Finder", 1, 1, 1)
+    GameTooltip:Show()
+end)
+lfrBtn:SetScript("OnLeave", function(self)
+    GameTooltip:Hide()
+end)
+
 local suppBtn = addonTable.CreateFlatButton(footer, L["Supporters & Links"], 150)
 suppBtn:SetAutoWidth(150, 220, 22)
-suppBtn:SetPoint("LEFT", brezText, "RIGHT", 20, GetFooterButtonYOffset())
+suppBtn:SetPoint("CENTER", footer, "CENTER", 0, GetFooterButtonYOffset())
+lfrBtn:SetPoint("RIGHT", suppBtn, "LEFT", -4, 0)
+lfgBtn:SetPoint("RIGHT", lfrBtn, "LEFT", -2, 0)
 suppBtn:SetScript("OnClick", function()
     if addonTable.SupportersPanel:IsShown() then
         addonTable.SupportersPanel:Hide()
@@ -447,12 +483,160 @@ optionsBtn:SetScript("OnClick", function()
     end
 end)
 
+local listBtn = addonTable.CreateFlatButton(footer, "List", 42)
+listBtn.isBrowserFooterControl = true
+listBtn:SetAutoWidth(42, 72, 18)
+listBtn:SetPoint("LEFT", optionsBtn, "RIGHT", 6, 0)
+listBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Open Blizzard Listing Panel", 1, 1, 1)
+    GameTooltip:AddLine("Choose a listing category and open Blizzard's native listing flow for that category.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+listBtn:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+local pvpBtn = addonTable.CreateFlatButton(footer, "PVP", 42)
+pvpBtn.isBrowserFooterControl = true
+pvpBtn:SetAutoWidth(42, 72, 18)
+pvpBtn:SetPoint("LEFT", listBtn, "RIGHT", 2, 0)
+pvpBtn:SetScript("OnClick", function()
+    if addonTable.OpenBlizzardFinderPanel then
+        addonTable.OpenBlizzardFinderPanel("pvp")
+    end
+end)
+pvpBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Open Blizzard PVP Panel", 1, 1, 1)
+    GameTooltip:AddLine("Open Blizzard's native Player vs. Player panel.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+pvpBtn:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+local listDropdown = CreateFrame("Frame", nil, footer, "BackdropTemplate")
+addonTable.ApplyBackdropStyle(listDropdown, "panel")
+listDropdown:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+listDropdown:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+listDropdown:SetFrameStrata("FULLSCREEN_DIALOG")
+listDropdown:SetClampedToScreen(true)
+listDropdown:Hide()
+
+local listDropdownButtons = {}
+local listDropdownOrder = {
+    "DUNGEONS",
+    "RAIDS_MIDNIGHT",
+    "RAIDS_LEGACY",
+    "DELVES",
+    "QUESTING",
+    "CUSTOM",
+}
+
+local function GetListingDropdownOptions()
+    local options = {}
+    for _, id in ipairs(listDropdownOrder) do
+        local config = addonTable.GetBrowserCategoryConfig and addonTable.GetBrowserCategoryConfig(id)
+        if config and not config.separator then
+            table.insert(options, config)
+        end
+    end
+    return options
+end
+
+local function RefreshListingDropdown()
+    local options = GetListingDropdownOptions()
+    local width = 150
+    local rowHeight = 22
+    listDropdown:SetSize(width + 2, (#options * rowHeight) + 2)
+
+    for _, button in ipairs(listDropdownButtons) do
+        button:Hide()
+    end
+
+    for index, option in ipairs(options) do
+        local button = listDropdownButtons[index]
+        if not button then
+            button = CreateFrame("Button", nil, listDropdown, "BackdropTemplate")
+            button.bg = button:CreateTexture(nil, "BACKGROUND")
+            button.bg:SetAllPoints()
+            button.text = button:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+            button.text:SetPoint("LEFT", button, "LEFT", 8, 0)
+            button.text:SetPoint("RIGHT", button, "RIGHT", -8, 0)
+            button.text:SetJustifyH("LEFT")
+            listDropdownButtons[index] = button
+        end
+
+        button.optionID = option.id
+        button:SetPoint("TOPLEFT", listDropdown, "TOPLEFT", 1, -1 - ((index - 1) * rowHeight))
+        button:SetSize(width, rowHeight)
+        button.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
+        button.text:SetText(option.label)
+        button.text:SetTextColor(1, 1, 1, 1)
+        button:SetScript("OnEnter", function(self)
+            self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_DROPDOWN_HOVER))
+        end)
+        button:SetScript("OnLeave", function(self)
+            self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
+        end)
+        button:SetScript("OnClick", function(self)
+            listDropdown:Hide()
+            if addonTable.OpenBlizzardListingPanel then
+                addonTable.OpenBlizzardListingPanel(self.optionID)
+            end
+        end)
+        button:Show()
+    end
+end
+
+listBtn:SetScript("OnClick", function(self)
+    RefreshListingDropdown()
+    if listDropdown:IsShown() then
+        listDropdown:Hide()
+        return
+    end
+
+    listDropdown:ClearAllPoints()
+    listDropdown:SetPoint("BOTTOMLEFT", self, "TOPLEFT", 0, 2)
+    listDropdown:Show()
+end)
+
+addonTable.RegisterThemeRefresh("listing_dropdown_theme", function()
+    listDropdown:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+    listDropdown:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    if listDropdown:IsShown() then
+        RefreshListingDropdown()
+    end
+end)
+
 local footerVersionText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 footerVersionText:SetPoint("RIGHT", footer, "RIGHT", -4, 0)
 footerVersionText:SetText(addonTable.VersionText and addonTable.VersionText:GetText() or "")
 
+local function UpdateFooterActionVisibility()
+    local isBrowser = IsBrowserMode()
+    if isBrowser then
+        lfgBtn:Show()
+        lfrBtn:Show()
+        listBtn:Show()
+        pvpBtn:Show()
+    else
+        lfgBtn:Hide()
+        lfrBtn:Hide()
+        listBtn:Hide()
+        pvpBtn:Hide()
+        if listDropdown then
+            listDropdown:Hide()
+        end
+    end
+end
+addonTable.UpdateFooterActionVisibility = UpdateFooterActionVisibility
+UpdateFooterActionVisibility()
+
 function addonTable.UpdateGroupBuffs()
     local isBrowser = IsBrowserMode()
+    UpdateFooterActionVisibility()
 
     if isBrowser then
         -- Browser mode: show group count, hide lust/brez indicators

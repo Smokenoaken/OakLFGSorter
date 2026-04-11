@@ -42,6 +42,9 @@ addonTable.L = setmetatable({}, {
     end,
 })
 
+BINDING_HEADER_OAKLFGSORTER = "OAK LFG Sorter"
+BINDING_NAME_OAKLFGSORTER_TOGGLEBROWSER = "Toggle Browser Window"
+
 -- Global Database
 OakLFGSorterDB = OakLFGSorterDB or {}
 if OakLFGSorterDB.autoOpen == nil then OakLFGSorterDB.autoOpen = true end
@@ -54,6 +57,7 @@ if type(OakLFGSorterDB.browserCategoryOverrides) ~= "table" then OakLFGSorterDB.
 if OakLFGSorterDB.autoHideFilledRoles == nil then OakLFGSorterDB.autoHideFilledRoles = false end
 if OakLFGSorterDB.showRegions == nil then OakLFGSorterDB.showRegions = false end
 if OakLFGSorterDB.lowLatencyOnly == nil then OakLFGSorterDB.lowLatencyOnly = false end
+if OakLFGSorterDB.showPartyKeys == nil then OakLFGSorterDB.showPartyKeys = true end
 if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "OakUI Font" end
 if OakLFGSorterDB.fontSize == nil then OakLFGSorterDB.fontSize = 12 end
 if OakLFGSorterDB.windowOpacity == nil then OakLFGSorterDB.windowOpacity = 0.85 end
@@ -481,9 +485,9 @@ addonTable.ThemeStyles = {
             rowB = { 0.22, 0.17, 0.10, 0.24 },
             stickyPanel = { 0.25, 0.24, 0.12, 0.95 },
             contextBar = { 0.26, 0.21, 0.13, 0.88 },
-            quickSignupBar = { 0.26, 0.21, 0.13, 0.88 },
+            quickSignupBar = { 0.36, 0.29, 0.18, 0.96 },
             sliderTrack = { 0.14, 0.10, 0.06, 1.0 },
-            buttonInactive = { 0.30, 0.24, 0.15, 1.0 },
+            buttonInactive = { 0.36, 0.29, 0.18, 1.0 },
             toggleOffFill = { 0.20, 0.15, 0.09, 0.97 },
             titleBar = { 0.33, 0.25, 0.13, 1.0 },
             dropdownHover = { 1.0, 0.92, 0.68, 0.14 },
@@ -503,9 +507,9 @@ addonTable.ThemeStyles = {
             rowB = { 0.175, 0.165, 0.154, 0.24 },
             stickyPanel = { 0.205, 0.198, 0.186, 0.95 },
             contextBar = { 0.20, 0.193, 0.182, 0.89 },
-            quickSignupBar = { 0.20, 0.193, 0.182, 0.89 },
+            quickSignupBar = { 0.29, 0.277, 0.255, 0.97 },
             sliderTrack = { 0.115, 0.108, 0.098, 1.0 },
-            buttonInactive = { 0.235, 0.225, 0.212, 1.0 },
+            buttonInactive = { 0.29, 0.277, 0.255, 1.0 },
             toggleOffFill = { 0.165, 0.157, 0.147, 0.97 },
             titleBar = { 0.255, 0.243, 0.224, 1.0 },
             dropdownHover = { 1.0, 0.93, 0.68, 0.10 },
@@ -603,13 +607,39 @@ local function NotifyThemeRefreshers()
 end
 
 local function RefreshRegisteredButtons()
+    local style = addonTable.GetThemeStyle and addonTable.GetThemeStyle() or "OAK"
+    local useQuickSignupButtonFill = style == "BLIZZARD" or style == "BLIZZARD_GRAY"
+    local flatButtonFill = useQuickSignupButtonFill and addonTable.OAK_COLOR_QUICKSIGNUP or addonTable.OAK_COLOR_PANE
+    local function EnsureButtonVisualFill(button)
+        if not button then
+            return nil
+        end
+        if not button.OakVisualFill then
+            local fill = button:CreateTexture(nil, "BACKGROUND", nil, 1)
+            fill:SetPoint("TOPLEFT", button, "TOPLEFT", 4, -4)
+            fill:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -4, 4)
+            button.OakVisualFill = fill
+        end
+        return button.OakVisualFill
+    end
+
     for key, button in pairs(registeredFlatButtons) do
         if button and button.SetBackdropColor then
             if addonTable.ApplyBackdropStyle then
                 addonTable.ApplyBackdropStyle(button, "button")
             end
-            button:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
+            button:SetBackdropColor(unpack(flatButtonFill))
             button:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+            local visualFill = EnsureButtonVisualFill(button)
+            if visualFill then
+                if useQuickSignupButtonFill then
+                    visualFill:SetTexture(addonTable.FLAT_TEX)
+                    visualFill:SetVertexColor(flatButtonFill[1] or 0, flatButtonFill[2] or 0, flatButtonFill[3] or 0, flatButtonFill[4] or 1)
+                    visualFill:Show()
+                else
+                    visualFill:Hide()
+                end
+            end
             if button.RefreshAutoWidth then
                 button:RefreshAutoWidth()
             end
@@ -623,8 +653,18 @@ local function RefreshRegisteredButtons()
             if addonTable.ApplyBackdropStyle then
                 addonTable.ApplyBackdropStyle(button, "button")
             end
-            button:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
+            button:SetBackdropColor(unpack(flatButtonFill))
             button:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+            local visualFill = EnsureButtonVisualFill(button)
+            if visualFill then
+                if useQuickSignupButtonFill then
+                    visualFill:SetTexture(addonTable.FLAT_TEX)
+                    visualFill:SetVertexColor(flatButtonFill[1] or 0, flatButtonFill[2] or 0, flatButtonFill[3] or 0, flatButtonFill[4] or 1)
+                    visualFill:Show()
+                else
+                    visualFill:Hide()
+                end
+            end
         else
             registeredCogButtons[key] = nil
         end
