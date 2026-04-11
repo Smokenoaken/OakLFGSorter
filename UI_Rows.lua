@@ -226,6 +226,9 @@ if scrollBar then
         thumb:SetSize(8, 60)
     end
     scrollBar:SetWidth(8)
+    scrollBar:ClearAllPoints()
+    scrollBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -12, SCROLL_TOP_OFFSET - 1)
+    scrollBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -12, 35)
 end
 
 local scrollChild = CreateFrame("Frame")
@@ -399,56 +402,60 @@ local function GetFooterButtonYOffset()
     return 0
 end
 
-local lustText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-lustText:SetPoint("LEFT", footer, "LEFT", 10, 0)
-local brezText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-brezText:SetPoint("LEFT", lustText, "RIGHT", 20, 0)
+local lustText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+lustText:SetPoint("LEFT", footer, "LEFT", 0, 0)
+local brezText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+brezText:SetPoint("LEFT", lustText, "RIGHT", 10, 0)
 
 -- Browser mode: "Showing X of Y groups" replaces lust/brez indicators
 local groupCountText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-groupCountText:SetPoint("LEFT", footer, "LEFT", 4, 0)
+groupCountText:SetPoint("LEFT", footer, "LEFT", 2, 0)
 groupCountText:SetTextColor(0.75, 0.75, 0.75)
 groupCountText:Hide()
 addonTable.groupCountText = groupCountText
 
 local lfgBtn = addonTable.CreateFlatButton(footer, "LFG", 40)
 lfgBtn.isBrowserFooterControl = true
-lfgBtn:SetAutoWidth(40, 70, 18)
+lfgBtn:SetAutoWidth(32, 50, 10)
 lfgBtn:SetScript("OnClick", function()
     if addonTable.OpenBlizzardFinderPanel then
         addonTable.OpenBlizzardFinderPanel("dungeon")
     end
 end)
 lfgBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:SetText("Open Blizzard Dungeon Finder", 1, 1, 1)
     GameTooltip:Show()
 end)
 lfgBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(0, 0, 0, 1)
     GameTooltip:Hide()
 end)
 
 local lfrBtn = addonTable.CreateFlatButton(footer, "LFR", 40)
 lfrBtn.isBrowserFooterControl = true
-lfrBtn:SetAutoWidth(40, 70, 18)
+lfrBtn:SetAutoWidth(32, 50, 10)
 lfrBtn:SetScript("OnClick", function()
     if addonTable.OpenBlizzardFinderPanel then
         addonTable.OpenBlizzardFinderPanel("raid")
     end
 end)
 lfrBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:SetText("Open Blizzard Raid Finder", 1, 1, 1)
     GameTooltip:Show()
 end)
 lfrBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(0, 0, 0, 1)
     GameTooltip:Hide()
 end)
 
 local suppBtn = addonTable.CreateFlatButton(footer, L["Supporters & Links"], 150)
-suppBtn:SetAutoWidth(150, 220, 22)
-suppBtn:SetPoint("CENTER", footer, "CENTER", 0, GetFooterButtonYOffset())
-lfrBtn:SetPoint("RIGHT", suppBtn, "LEFT", -4, 0)
+suppBtn:SetAutoWidth(110, 156, 10)
+suppBtn:SetPoint("CENTER", footer, "CENTER", 18, GetFooterButtonYOffset())
+lfrBtn:SetPoint("RIGHT", suppBtn, "LEFT", -2, 0)
 lfgBtn:SetPoint("RIGHT", lfrBtn, "LEFT", -2, 0)
 suppBtn:SetScript("OnClick", function()
     if addonTable.SupportersPanel:IsShown() then
@@ -465,7 +472,7 @@ suppBtn:SetScript("OnClick", function()
 end)
 
 local optionsBtn = addonTable.CreateCogButton(footer, 22)
-optionsBtn:SetPoint("LEFT", suppBtn, "RIGHT", 6, 0)
+optionsBtn:SetPoint("LEFT", suppBtn, "RIGHT", 3, 0)
 optionsBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -474,7 +481,7 @@ optionsBtn:SetScript("OnEnter", function(self)
     GameTooltip:Show()
 end)
 optionsBtn:SetScript("OnLeave", function(self)
-    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    self:SetBackdropBorderColor(0, 0, 0, 1)
     GameTooltip:Hide()
 end)
 optionsBtn:SetScript("OnClick", function()
@@ -485,21 +492,23 @@ end)
 
 local listBtn = addonTable.CreateFlatButton(footer, "List", 42)
 listBtn.isBrowserFooterControl = true
-listBtn:SetAutoWidth(42, 72, 18)
-listBtn:SetPoint("LEFT", optionsBtn, "RIGHT", 6, 0)
+listBtn:SetAutoWidth(34, 50, 10)
+listBtn:SetPoint("LEFT", optionsBtn, "RIGHT", 3, 0)
 listBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:SetText("Open Blizzard Listing Panel", 1, 1, 1)
     GameTooltip:AddLine("Choose a listing category and open Blizzard's native listing flow for that category.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
-listBtn:SetScript("OnLeave", function()
+listBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(0, 0, 0, 1)
     GameTooltip:Hide()
 end)
 
 local pvpBtn = addonTable.CreateFlatButton(footer, "PVP", 42)
 pvpBtn.isBrowserFooterControl = true
-pvpBtn:SetAutoWidth(42, 72, 18)
+pvpBtn:SetAutoWidth(34, 50, 10)
 pvpBtn:SetPoint("LEFT", listBtn, "RIGHT", 2, 0)
 pvpBtn:SetScript("OnClick", function()
     if addonTable.OpenBlizzardFinderPanel then
@@ -507,12 +516,14 @@ pvpBtn:SetScript("OnClick", function()
     end
 end)
 pvpBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:SetText("Open Blizzard PVP Panel", 1, 1, 1)
     GameTooltip:AddLine("Open Blizzard's native Player vs. Player panel.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
-pvpBtn:SetScript("OnLeave", function()
+pvpBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(0, 0, 0, 1)
     GameTooltip:Hide()
 end)
 
@@ -611,19 +622,46 @@ addonTable.RegisterThemeRefresh("listing_dropdown_theme", function()
 end)
 
 local footerVersionText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-footerVersionText:SetPoint("RIGHT", footer, "RIGHT", -4, 0)
+footerVersionText:SetPoint("RIGHT", footer, "RIGHT", -2, 0)
 footerVersionText:SetText(addonTable.VersionText and addonTable.VersionText:GetText() or "")
+
+local mythicPanelBtn = addonTable.CreateFlatButton(footer, "M+", 40)
+mythicPanelBtn:SetAutoWidth(28, 42, 8)
+mythicPanelBtn:SetPoint("RIGHT", suppBtn, "LEFT", -2, 0)
+lfrBtn:ClearAllPoints()
+lfrBtn:SetPoint("RIGHT", mythicPanelBtn, "LEFT", -2, 0)
+lfgBtn:ClearAllPoints()
+lfgBtn:SetPoint("RIGHT", lfrBtn, "LEFT", -2, 0)
+mythicPanelBtn:SetScript("OnClick", function()
+    if addonTable.ToggleMythicPlusPanel then
+        addonTable.ToggleMythicPlusPanel()
+    end
+end)
+mythicPanelBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Mythic+ Overview", 1, 1, 1)
+    GameTooltip:AddLine("Open your condensed Mythic+ score, dungeon, affix, and vault panel.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+mythicPanelBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(0, 0, 0, 1)
+    GameTooltip:Hide()
+end)
 
 local function UpdateFooterActionVisibility()
     local isBrowser = IsBrowserMode()
+    local hasActiveListing = C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()
     if isBrowser then
         lfgBtn:Show()
         lfrBtn:Show()
+        mythicPanelBtn:Show()
         listBtn:Show()
         pvpBtn:Show()
     else
         lfgBtn:Hide()
         lfrBtn:Hide()
+        mythicPanelBtn:Show()
         listBtn:Hide()
         pvpBtn:Hide()
         if listDropdown then
@@ -669,10 +707,10 @@ function addonTable.UpdateGroupBuffs()
             CheckClass(uClass)
         end
     end
-    if hasLust then lustText:SetText("|cFF55FF55|TInterface\\Icons\\spell_nature_bloodlust:16|t Lust Covered|r")
-    else lustText:SetText("|cFFFF5555|TInterface\\Icons\\spell_nature_bloodlust:16|t Need Lust|r") end
-    if hasBrez then brezText:SetText("|cFF55FF55|TInterface\\Icons\\spell_holy_resurrection:16|t B-Rez Covered|r")
-    else brezText:SetText("|cFFFF5555|TInterface\\Icons\\spell_holy_resurrection:16|t Need B-Rez|r") end
+    if hasLust then lustText:SetText("|cFF55FF55|TInterface\\Icons\\spell_nature_bloodlust:13|t Lust Covered|r")
+    else lustText:SetText("|cFFFF5555|TInterface\\Icons\\spell_nature_bloodlust:13|t Need Lust|r") end
+    if hasBrez then brezText:SetText("|cFF55FF55|TInterface\\Icons\\spell_holy_resurrection:13|t B-Rez Covered|r")
+    else brezText:SetText("|cFFFF5555|TInterface\\Icons\\spell_holy_resurrection:13|t Need B-Rez|r") end
 end
 
 local function SortGroups(grpA, grpB, sortBy, isAscending)
@@ -926,6 +964,7 @@ function addonTable.UpdateHeaderVisuals()
         rating = C_RATING,
         key = C_KEY,
     }
+    local pad = addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
 
     for _, header in ipairs(headers) do
         local column
@@ -943,7 +982,7 @@ function addonTable.UpdateHeaderVisuals()
 
         if column then
             header:ClearAllPoints()
-            header:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", column.x, HEADER_TOP_OFFSET)
+            header:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", column.x + pad, HEADER_TOP_OFFSET)
             header:SetSize(column.w, 22)
             local leftPadding = (column.align == "LEFT") and 6 or 2
             local rightPadding = (column.align == "LEFT") and 12 or 2
@@ -1208,6 +1247,22 @@ local function GetBrowserRowColor(result, isAltColor)
     return unpack(color)
 end
 
+local function GetApplicantStatusText(group)
+    local status = addonTable.NormalizeApplicationStatus and addonTable.NormalizeApplicationStatus(group and group.applicationStatus or "none") or tostring(group and group.applicationStatus or "none")
+    if status == "invited" or status == "inviteaccepted" then
+        return "Invited"
+    end
+    return nil
+end
+
+local function GetApplicantRowColor(group, isAltColor)
+    if GetApplicantStatusText(group) then
+        return 0.12, 0.32, 0.16, 0.55
+    end
+    local color = isAltColor and addonTable.ROW_COLOR_B or addonTable.ROW_COLOR_A
+    return unpack(color)
+end
+
 CreateHeader(L["Role"], "role", C_ROLE)
 CreateHeader(L["Class"], "class", C_CLASS)
 CreateHeader(L["Spec"], "spec", C_SPEC)
@@ -1223,7 +1278,8 @@ noteVisibilityBtn:SetSize(20, 22)
 
 local function UpdateNotesToggleLayout()
     local noteColumn = GetCurrentNoteColumn()
-    local xOffset = noteColumn.x
+    local pad = addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
+    local xOffset = noteColumn.x + pad
     local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
 
     if hideNotes then
@@ -1247,14 +1303,14 @@ local function UpdateNotesToggleLayout()
         notesToggleBtn.text:SetPoint("CENTER", notesToggleBtn, "CENTER", 0, 0)
         notesToggleBtn.text:SetJustifyH("CENTER")
 
-        local headerWidth = math.max(40, noteColumn.w - 24)
+        local headerWidth = math.max(36, noteColumn.w - 28)
         notesHeader:SetWidth(headerWidth)
         notesHeader:ClearAllPoints()
         notesHeader:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", xOffset, HEADER_TOP_OFFSET)
         notesHeader:Show()
 
         noteVisibilityBtn:ClearAllPoints()
-        noteVisibilityBtn:SetPoint("TOPLEFT", notesHeader, "TOPRIGHT", 4, 0)
+        noteVisibilityBtn:SetPoint("TOPLEFT", notesHeader, "TOPRIGHT", 2, 0)
         noteVisibilityBtn:Show()
 
         notesToggleBtn:Hide()
@@ -1271,15 +1327,44 @@ local function UpdateNotesToggleVisual()
 end
 
 addonTable.RegisterThemeRefresh("ui_rows_theme", function()
+    local pad = addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
+    local scrollRightOffset = -12
+    local scrollBottomOffset = 35
+    if (addonTable.GetThemeStyle and (addonTable.GetThemeStyle() == "BLIZZARD" or addonTable.GetThemeStyle() == "BLIZZARD_GRAY")) then
+        scrollRightOffset = -6
+        scrollBottomOffset = 33
+    else
+        scrollRightOffset = -12 - pad
+        scrollBottomOffset = 35 + pad
+    end
     ApplyApplicantContextInsets()
     ApplyFooterInsets()
     suppBtn:ClearAllPoints()
-    suppBtn:SetPoint("LEFT", brezText, "RIGHT", 20, GetFooterButtonYOffset())
+    suppBtn:SetPoint("CENTER", footer, "CENTER", 18, GetFooterButtonYOffset())
+    mythicPanelBtn:ClearAllPoints()
+    mythicPanelBtn:SetPoint("RIGHT", suppBtn, "LEFT", -2, 0)
+    lfrBtn:ClearAllPoints()
+    lfrBtn:SetPoint("RIGHT", mythicPanelBtn, "LEFT", -2, 0)
+    lfgBtn:ClearAllPoints()
+    lfgBtn:SetPoint("RIGHT", lfrBtn, "LEFT", -2, 0)
     optionsBtn:ClearAllPoints()
-    optionsBtn:SetPoint("LEFT", suppBtn, "RIGHT", 6, 0)
+    optionsBtn:SetPoint("LEFT", suppBtn, "RIGHT", 3, 0)
+    listBtn:ClearAllPoints()
+    listBtn:SetPoint("LEFT", optionsBtn, "RIGHT", 3, 0)
+    pvpBtn:ClearAllPoints()
+    pvpBtn:SetPoint("LEFT", listBtn, "RIGHT", 2, 0)
     stickyPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_STICKY or {0.05, 0.10, 0.05, 0.95}))
     applicantContextBar:SetBackdropColor(unpack(addonTable.OAK_COLOR_CONTEXT or {0.08, 0.08, 0.10, 0.75}))
     _ssLineTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[1] or 0.9), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[2] or 0.9), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[3] or 0.9), addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[4] or 1.0)
+    if scrollBar then
+        local thumb = scrollBar:GetThumbTexture()
+        if thumb then
+            thumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        end
+        scrollBar:ClearAllPoints()
+        scrollBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", scrollRightOffset, SCROLL_TOP_OFFSET - 1)
+        scrollBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", scrollRightOffset, scrollBottomOffset)
+    end
     _bsepTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[1] or 0.7), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[2] or 0.7), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[3] or 0.7), addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[4] or 0.9)
     UpdateNotesToggleVisual()
     if addonTable.UpdateDisplay then
@@ -1594,6 +1679,10 @@ local function ConfigureApplicantRowLayout(row)
     ConfigureTextColumn(row.noteText, row, GetCurrentRowNoteColumn(), 5)
 end
 
+local function GetBrowserInviteRightInset()
+    return -5
+end
+
 local function SetBrowserCompSlot(slotFrame, role, className, filled)
     local coords = addonTable.RoleTexCoords[role]
     if coords then
@@ -1676,6 +1765,30 @@ local ROLE_ICON = {
 -- Plain text is used intentionally — WoW texture/atlas paths for the leader crown
 -- vary across versions and font rendering of Unicode glyphs is inconsistent.
 local LEADER_CROWN = " - Leader"
+
+local function NormalizeTooltipLeaderName(name)
+    local text = tostring(name or "")
+    local baseName = text:match("([^%-]+)") or text
+    return strlower(baseName)
+end
+
+local function FindLeaderPlayerIndex(result)
+    if not (result and type(result.players) == "table" and #result.players > 0) then
+        return nil
+    end
+
+    local leaderKey = NormalizeTooltipLeaderName(result.leaderName)
+    if leaderKey ~= "" then
+        for index, player in ipairs(result.players) do
+            local playerKey = NormalizeTooltipLeaderName(player and player.name)
+            if playerKey ~= "" and playerKey == leaderKey then
+                return index
+            end
+        end
+    end
+
+    return 1
+end
 
 -- Append RIO milestones (Best Run, Best for Dungeon, Timed X-Y Runs) without
 -- the "Raider.IO M+ Score" section header — the caller adds the header with the score value.
@@ -1805,10 +1918,11 @@ local function BuildBrowserGroupTooltip(result)
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Members: (" .. #result.players .. ")", 1, 0.82, 0)
         local isRaidContext = (listingMode == "raid" or listingMode == "legacy_raid" or listingMode == "open_world")
+        local leaderIndex = FindLeaderPlayerIndex(result) or 1
         if isRaidContext and #result.players > 5 then
             -- Raid: grouped display (spec×count) to keep tooltip compact.
             -- Show the group leader first with a crown, then group the rest.
-            local leaderPlayer = result.players[1]
+            local leaderPlayer = result.players[leaderIndex]
             if leaderPlayer then
                 local cc = leaderPlayer.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[leaderPlayer.class]
                 local r, g, b = cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1
@@ -1822,7 +1936,8 @@ local function BuildBrowserGroupTooltip(result)
             -- Group remaining members by role+class+spec
             local counts = {}
             local order  = {}
-            for i = 2, #result.players do
+            for i = 1, #result.players do
+                if i ~= leaderIndex then
                 local player = result.players[i]
                 local specKey = (player.role or "DAMAGER") .. "|" .. (player.class or "?") .. "|" .. (player.specName or "")
                 if not counts[specKey] then
@@ -1830,6 +1945,7 @@ local function BuildBrowserGroupTooltip(result)
                     table.insert(order, specKey)
                 end
                 counts[specKey].count = counts[specKey].count + 1
+                end
             end
             -- Sort: class first (keeps Holy/Ret Paladins together, etc.),
             -- then role within class, then spec name for a stable order.
@@ -1872,14 +1988,16 @@ local function BuildBrowserGroupTooltip(result)
                 GameTooltip:AddLine(line, r, g, b)
             end
             -- Leader always first
-            if result.players[1] then
-                RenderMemberLine(result.players[1], true)
+            if result.players[leaderIndex] then
+                RenderMemberLine(result.players[leaderIndex], true)
             end
             -- Remaining members sorted by class, then role, then spec
             if #result.players > 1 then
                 local rest = {}
-                for i = 2, #result.players do
-                    table.insert(rest, result.players[i])
+                for i = 1, #result.players do
+                    if i ~= leaderIndex then
+                        table.insert(rest, result.players[i])
+                    end
                 end
                 table.sort(rest, function(a, b)
                     local ca = a.class or ""
@@ -1894,6 +2012,14 @@ local function BuildBrowserGroupTooltip(result)
                     RenderMemberLine(player, false)
                 end
             end
+        end
+    end
+
+    if result.raidListing and type(result.raidListing.defeatedBossList) == "table" and #result.raidListing.defeatedBossList > 0 then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Bosses Defeated:", 1, 0.82, 0)
+        for _, bossName in ipairs(result.raidListing.defeatedBossList) do
+            GameTooltip:AddLine(bossName, 1, 1, 1)
         end
     end
 
@@ -2166,7 +2292,12 @@ local function CreateRow(index, parentOverride, prevRowOverride)
             end
         elseif self.groupID then 
             C_LFGList.InviteApplicant(self.groupID)
-            if self.inviteBtn then 
+            if self.inviteBtn then
+                if self.searchResult == nil and self.bg then
+                    self.bg:SetColorTexture(0.12, 0.32, 0.16, 0.55)
+                end
+                self.applicationStatus = "invited"
+                self.groupApplicationStatus = "invited"
                 self.inviteBtn:Hide()
                 self.declineBtn:Hide()
                 self.statusText:SetText("Invited")
@@ -2264,6 +2395,11 @@ local function CreateRow(index, parentOverride, prevRowOverride)
         elseif r.groupID then
             -- Applicant mode
             C_LFGList.InviteApplicant(r.groupID)
+            if r.searchResult == nil and r.bg then
+                r.bg:SetColorTexture(0.12, 0.32, 0.16, 0.55)
+            end
+            r.applicationStatus = "invited"
+            r.groupApplicationStatus = "invited"
             self:Hide()
             r.declineBtn:Hide()
             r.statusText:SetText("Invited")
@@ -2397,7 +2533,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         -- Note text is left-justified and never reaches the far-right anyway.
         if isBrowser and row.inviteBtn then
             row.inviteBtn:ClearAllPoints()
-            row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+            row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", GetBrowserInviteRightInset(), 0)
         end
     end
 
@@ -2430,7 +2566,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         end
         if row.inviteBtn then
             row.inviteBtn:ClearAllPoints()
-            row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+            row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", GetBrowserInviteRightInset(), 0)
         end
     end
 
@@ -2518,7 +2654,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
         -- in raid-browser collapsed mode because BR_RAID_NOTE.x + 27 = 517 exceeds the
         -- 500px scrollChild width, pushing the button completely off-screen.
         row.inviteBtn:ClearAllPoints()
-        row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+        row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", GetBrowserInviteRightInset(), 0)
     end
     if isRaidMode then
         -- Raid mode: hide comp slots, show Tank/Healer/DPS counts in ilvlText
@@ -2665,9 +2801,10 @@ local function PopulateBrowserRow(row, result, isAltColor)
     end
     local inviteTexture = row.inviteBtn:GetNormalTexture()
     if inviteTexture then
-        local canApply = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) or CanApplyToSearchResult()
-        inviteTexture:SetDesaturated(not canApply)
-        inviteTexture:SetAlpha(canApply and 1 or 0.55)
+        local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
+        local canApply = isApplied or CanApplyToSearchResult()
+        inviteTexture:SetDesaturated(not isApplied and not canApply)
+        inviteTexture:SetAlpha((isApplied or canApply) and 1 or 0.55)
     end
 end
 
@@ -2805,7 +2942,8 @@ function addonTable.UpdateDisplay()
 
         for _, group in ipairs(activeGroups) do
             local isMulti = group.numMembers > 1
-            local bgColor = isAltColor and addonTable.ROW_COLOR_B or addonTable.ROW_COLOR_A
+            local bgColor = { GetApplicantRowColor(group, isAltColor) }
+            local applicantStatusText = GetApplicantStatusText(group)
 
             for i, member in ipairs(group.members) do
                 if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
@@ -2816,6 +2954,8 @@ function addonTable.UpdateDisplay()
                 row.groupID = group.id
                 row.applicantID = group.id
                 row.memberIdx = member.memberIdx
+                row.applicationStatus = group.applicationStatus
+                row.groupApplicationStatus = group.applicationStatus
                 row.memberName = member.name
                 row.fullComment = group.comment
                 row.rioProfile = member.rioProfile
@@ -2873,16 +3013,29 @@ function addonTable.UpdateDisplay()
 
                 if i == 1 then
                     row.noteText:SetText(group.comment or "")
-                    row.statusText:Hide()
                     -- Restore applicant-mode button positions (rows may have been used in browser mode
                     -- which repositions inviteBtn to the right edge, causing the two buttons to stack)
                     row.declineBtn:ClearAllPoints()
                     row.declineBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
                     row.inviteBtn:ClearAllPoints()
                     row.inviteBtn:SetPoint("RIGHT", row.declineBtn, "LEFT", -10, 0)
-                    -- OnClick/OnEnter/OnLeave are static handlers in CreateRow; no per-update closures
-                    row.inviteBtn:Show()
-                    row.declineBtn:Show()
+                    if applicantStatusText then
+                        row.inviteBtn:Hide()
+                        row.declineBtn:Hide()
+                        row.statusText:SetText(applicantStatusText)
+                        row.statusText:SetTextColor(0.2, 1, 0.2)
+                        row.statusText:Show()
+                    else
+                        -- OnClick/OnEnter/OnLeave are static handlers in CreateRow; no per-update closures
+                        row.statusText:Hide()
+                        row.inviteBtn:Show()
+                        row.declineBtn:Show()
+                        local inviteTexture = row.inviteBtn:GetNormalTexture()
+                        if inviteTexture then
+                            inviteTexture:SetDesaturated(false)
+                            inviteTexture:SetAlpha(1)
+                        end
+                    end
                 else
                     row.noteText:SetText("")
                     row.inviteBtn:Hide()

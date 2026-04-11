@@ -6,11 +6,28 @@ if not OAK_LFG then
 end
 
 local openRaidLib = LibStub and LibStub:GetLibrary("LibOpenRaid-1.0", true)
+local function GetOpenRaidLib()
+    if not openRaidLib and LibStub then
+        openRaidLib = LibStub:GetLibrary("LibOpenRaid-1.0", true)
+    end
+    return openRaidLib
+end
 local PARTY_KEY_ROWS = 5
 local ROW_HEIGHT = 14
-local PANEL_WIDTH = 152
+local PANEL_WIDTH = 164
 local PANEL_PADDING = 3
 local TITLE_HEIGHT = 10
+
+local RIO_DUNGEON_ABBREVIATIONS = {
+    ["seat of the triumvirate"] = "SEAT",
+    ["skyreach"] = "SR",
+    ["algeth'ar academy"] = "AA",
+    ["magisters' terrace"] = "MT",
+    ["maisara caverns"] = "MC",
+    ["windrunner spire"] = "WS",
+    ["nexus-point xenas"] = "NPX",
+    ["pit of saron"] = "POS",
+}
 
 local function GetTeleportSpellID(mapID)
     if _G.QUI_DungeonData and _G.QUI_DungeonData.GetTeleportSpellID then
@@ -20,12 +37,19 @@ local function GetTeleportSpellID(mapID)
 end
 
 local function GetDungeonLabel(mapID)
-    if _G.QUI_DungeonData and _G.QUI_DungeonData.GetShortName then
-        return _G.QUI_DungeonData.GetShortName(mapID)
-    end
     local name = mapID and C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapID)
     if not name then
         return "???"
+    end
+    local normalized = tostring(name):lower()
+    if RIO_DUNGEON_ABBREVIATIONS[normalized] then
+        return RIO_DUNGEON_ABBREVIATIONS[normalized]
+    end
+    if _G.QUI_DungeonData and _G.QUI_DungeonData.GetShortName then
+        local shortName = _G.QUI_DungeonData.GetShortName(mapID)
+        if shortName and shortName ~= "" then
+            return shortName
+        end
     end
     return name:sub(1, 4):upper()
 end
@@ -45,6 +69,8 @@ end
 local partyKeysPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 partyKeysPanel:SetSize(PANEL_WIDTH, TITLE_HEIGHT + PANEL_PADDING * 2)
 partyKeysPanel:SetPoint("TOPLEFT", OAK_LFG, "BOTTOMLEFT", 10, -2)
+partyKeysPanel:SetFrameStrata("DIALOG")
+partyKeysPanel:SetFrameLevel((OAK_LFG:GetFrameLevel() or 0) + 5)
 addonTable.ApplyBackdropStyle(partyKeysPanel, "panel")
 partyKeysPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 partyKeysPanel:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
@@ -67,21 +93,22 @@ local function CreateRow(index)
     row.icon:SetPoint("LEFT", row, "LEFT", 0, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    row.level = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-    row.level:SetPoint("CENTER", row.icon, "CENTER", 0, 0)
-
     row.dungeonButton = CreateFrame("Button", nil, row, "SecureActionButtonTemplate")
     row.dungeonButton:SetPoint("LEFT", row, "LEFT", 14, 0)
-    row.dungeonButton:SetSize(34, 12)
+    row.dungeonButton:SetSize(54, 12)
     row.dungeonButton:RegisterForClicks("AnyUp", "AnyDown")
 
     row.dungeonText = row.dungeonButton:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-    row.dungeonText:SetAllPoints()
+    row.dungeonText:SetPoint("LEFT", row.dungeonButton, "LEFT", 0, 0)
     row.dungeonText:SetJustifyH("LEFT")
 
+    row.level = row.dungeonButton:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.level:SetPoint("LEFT", row.dungeonText, "RIGHT", 2, 0)
+    row.level:SetJustifyH("LEFT")
+
     row.player = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-    row.player:SetPoint("LEFT", row.dungeonButton, "RIGHT", 2, 0)
-    row.player:SetWidth(58)
+    row.player:SetPoint("LEFT", row.dungeonButton, "RIGHT", 4, 0)
+    row.player:SetWidth(60)
     row.player:SetJustifyH("LEFT")
 
     row.score = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
@@ -112,7 +139,7 @@ for i = 1, PARTY_KEY_ROWS do
 end
 
 local function ShouldShowPartyKeys()
-    if not openRaidLib then
+    if not GetOpenRaidLib() then
         return false
     end
     if not (OakLFGSorterDB and OakLFGSorterDB.showPartyKeys == true) then
@@ -168,10 +195,17 @@ local function UpdatePartyKeysPanel()
         return
     end
 
-    local allKeystones = openRaidLib.GetAllKeystonesInfo and openRaidLib.GetAllKeystonesInfo() or {}
+    local lib = GetOpenRaidLib()
+    if not lib then
+        HideRows()
+        partyKeysPanel:Hide()
+        return
+    end
+
+    local allKeystones = lib.GetAllKeystonesInfo and lib.GetAllKeystonesInfo() or {}
     local display = {}
 
-    local playerKey = openRaidLib.GetKeystoneInfo and openRaidLib.GetKeystoneInfo("player")
+    local playerKey = lib.GetKeystoneInfo and lib.GetKeystoneInfo("player")
     if playerKey and playerKey.level and playerKey.level > 0 then
         table.insert(display, { unit = "player", info = playerKey, fullName = UnitName("player") or "player" })
     end
@@ -230,8 +264,9 @@ local function UpdatePartyKeysPanel()
         row.dungeonButton.tooltipDungeon = dungeonName
         row.dungeonButton.spellID = spellID
         if spellID and IsSpellKnown(spellID) then
+            local spellName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or GetSpellInfo(spellID)
             row.dungeonButton:SetAttribute("type", "spell")
-            row.dungeonButton:SetAttribute("spell", spellID)
+            row.dungeonButton:SetAttribute("spell", spellName or spellID)
             row.dungeonText:SetTextColor(0.55, 1, 0.55, 1)
         else
             row.dungeonButton:SetAttribute("type", nil)

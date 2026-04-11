@@ -873,14 +873,62 @@ end
 local toggleFiltersBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Filters"], 60)
 toggleFiltersBtn:SetPoint("RIGHT", addonTable.CloseButton, "LEFT", -10, 0)
 toggleFiltersBtn:SetAutoWidth(60, 130, 22)
+toggleFiltersBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Filters", 1, 1, 1)
+    GameTooltip:AddLine("Open Oak's filter panel for the current view.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+toggleFiltersBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
 
 local refreshBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Refresh"], 60)
 refreshBtn:SetPoint("RIGHT", toggleFiltersBtn, "LEFT", -5, 0)
 refreshBtn:SetAutoWidth(60, 130, 22)
+refreshBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Refresh", 1, 1, 1)
+    GameTooltip:AddLine("Refresh Oak's current browser results or applicant list.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+refreshBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
 
 local delistBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Delist"], 60)
 delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
 delistBtn:SetAutoWidth(60, 130, 22)
+delistBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Delist", 1, 1, 1)
+    GameTooltip:AddLine("Remove your current group listing from Blizzard's finder.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+delistBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
+
+local editListingBtn = addonTable.CreateFlatButton(addonTable.TitleHeader, L["Edit"], 50)
+editListingBtn:SetPoint("RIGHT", delistBtn, "LEFT", -5, 0)
+editListingBtn:SetAutoWidth(50, 120, 22)
+editListingBtn:SetScript("OnEnter", function(self)
+    self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Edit Listing", 1, 1, 1)
+    GameTooltip:AddLine("Open Blizzard's edit listing screen for your active group.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+editListingBtn:SetScript("OnLeave", function(self)
+    self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    GameTooltip:Hide()
+end)
 
 local function ResetNativeBrowserAdvancedFilters()
     if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then
@@ -1002,6 +1050,7 @@ end)
 function addonTable.UpdateTopBarActions()
     if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
         delistBtn:Hide()
+        editListingBtn:Hide()
         if categoryDropdownButton then
             categoryDropdownButton:Show()
         end
@@ -1019,9 +1068,17 @@ function addonTable.UpdateTopBarActions()
         end)
     else
         delistBtn:Show()
+        editListingBtn:Show()
         if categoryDropdownButton then
             categoryDropdownButton:Hide()
         end
+
+        editListingBtn:SetLabel(L["Edit"])
+        editListingBtn:SetScript("OnClick", function()
+            if addonTable.OpenCurrentListingForEdit then
+                addonTable.OpenCurrentListingForEdit()
+            end
+        end)
 
         delistBtn:SetLabel(L["Delist"])
         delistBtn:SetScript("OnClick", function()
@@ -1055,6 +1112,7 @@ function addonTable.UpdateTopBarLayout()
     toggleFiltersBtn:ClearAllPoints()
     refreshBtn:ClearAllPoints()
     delistBtn:ClearAllPoints()
+    editListingBtn:ClearAllPoints()
     if categoryDropdownButton then
         categoryDropdownButton:ClearAllPoints()
     end
@@ -1077,6 +1135,7 @@ function addonTable.UpdateTopBarLayout()
         toggleFiltersBtn:SetWidth(54)
         refreshBtn:SetWidth(58)
         delistBtn:SetWidth(54)
+        editListingBtn:SetWidth(48)
         if categoryDropdownButton then
             categoryDropdownButton:SetWidth(92)
         end
@@ -1088,6 +1147,7 @@ function addonTable.UpdateTopBarLayout()
         end
         if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() ~= "browser" then
             delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -4, 0)
+            editListingBtn:SetPoint("RIGHT", delistBtn, "LEFT", -4, 0)
         elseif categoryDropdownButton then
             categoryDropdownButton:Show()
         end
@@ -1106,6 +1166,7 @@ function addonTable.UpdateTopBarLayout()
         if toggleFiltersBtn.RefreshAutoWidth then toggleFiltersBtn:RefreshAutoWidth() else toggleFiltersBtn:SetWidth(60) end
         if refreshBtn.RefreshAutoWidth then refreshBtn:RefreshAutoWidth() else refreshBtn:SetWidth(60) end
         if delistBtn.RefreshAutoWidth then delistBtn:RefreshAutoWidth() else delistBtn:SetWidth(60) end
+        if editListingBtn.RefreshAutoWidth then editListingBtn:RefreshAutoWidth() else editListingBtn:SetWidth(50) end
         if categoryDropdownButton then
             if categoryDropdownButton.RefreshAutoWidth then
                 categoryDropdownButton:RefreshAutoWidth()
@@ -1121,6 +1182,7 @@ function addonTable.UpdateTopBarLayout()
         end
         if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() ~= "browser" then
             delistBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+            editListingBtn:SetPoint("RIGHT", delistBtn, "LEFT", -5, 0)
         elseif categoryDropdownButton then
             categoryDropdownButton:Show()
         end
@@ -1151,6 +1213,9 @@ end
 filterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 filterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 filterPanel:HookScript("OnShow", function()
+    if addonTable.HideMythicPlusPanel then
+        addonTable.HideMythicPlusPanel()
+    end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
     elseif addonTable.AnchorRIOPanelToOak then
@@ -1168,7 +1233,10 @@ end)
 local filterTitle = filterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 filterTitle:SetPoint("TOP", filterPanel, "TOP", 0, -10)
 filterTitle:SetText(L["Filters"])
-filterTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+do
+    local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+    filterTitle:SetTextColor(accent.r, accent.g, accent.b)
+end
 
 local yOffset = -35
 local rolesToFilter = { {"TANK", L["Tank"]}, {"HEALER", L["Healer"]}, {"DAMAGER", "DPS"} }
@@ -1184,7 +1252,10 @@ for _, rData in ipairs(rolesToFilter) do
 end
 
 local div1 = filterPanel:CreateTexture(nil, "ARTWORK")
-div1:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.5)
+do
+    local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+    div1:SetColorTexture(accent.r, accent.g, accent.b, 0.5)
+end
 div1:SetSize(160, 1)
 div1:SetPoint("TOP", filterPanel, "TOP", 0, yOffset - 3)
 yOffset = yOffset - 12
@@ -1377,6 +1448,9 @@ end
 browserFilterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 browserFilterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 browserFilterPanel:HookScript("OnShow", function()
+    if addonTable.HideMythicPlusPanel then
+        addonTable.HideMythicPlusPanel()
+    end
     -- Populate/refresh the panel contents every time it becomes visible.
     -- This is the single authoritative place that calls UpdateBrowserFilterPanel on open
     -- so the panel is always fully laid out regardless of what triggered the Show.
@@ -1400,7 +1474,10 @@ end)
 local browserTitle = browserFilterPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
 browserTitle:SetPoint("TOP", browserFilterPanel, "TOP", 0, -10)
 browserTitle:SetText(L["Search Filters"])
-browserTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+do
+    local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+    browserTitle:SetTextColor(accent.r, accent.g, accent.b)
+end
 
 local browserContent = CreateFrame("Frame", nil, browserFilterPanel)
 browserContent:SetPoint("TOPLEFT", browserFilterPanel, "TOPLEFT", 14, -32)
@@ -1784,7 +1861,10 @@ local raidRangeRows = {}
 local function CreateRaidRangeRow(filterKey, labelText)
     local label = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     label:SetText(labelText)
-    label:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+    do
+        local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+        label:SetTextColor(accent.r, accent.g, accent.b)
+    end
     label:Hide()
 
     local box = CreateBrowserRangeBox(browserContent, filterKey, 60)
@@ -1888,7 +1968,10 @@ browserNoClassBox:SetScript("OnClick", MakeNativeAdvToggle("needsMyClass"))
 -- Min Rating input
 local browserMinRatingLabel = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 browserMinRatingLabel:SetText(L["Min Rating"])
-browserMinRatingLabel:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+do
+    local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+    browserMinRatingLabel:SetTextColor(accent.r, accent.g, accent.b)
+end
 
 browserMinRatingBox = CreateFrame("EditBox", nil, browserContent, "BackdropTemplate")
 browserMinRatingBox:SetSize(60, 20)
@@ -2443,6 +2526,16 @@ function addonTable.UpdateBrowserFilterPanel()
     local showActivityFilters = BrowserModeUsesActivityFilter(mode)
     local isRaidMode = (mode == "raid") or (mode == "legacy_raid")
     local isDelveMode = (mode == "delve")
+    local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+
+    browserTitle:SetTextColor(accent.r, accent.g, accent.b)
+    browserMinRatingLabel:SetTextColor(accent.r, accent.g, accent.b)
+    for _, key in ipairs({"raidBossKills", "raidTanks", "raidHealers", "raidDps"}) do
+        local row = raidRangeRows[key]
+        if row and row.label then
+            row.label:SetTextColor(accent.r, accent.g, accent.b)
+        end
+    end
 
     -- Validate difficulty for current mode
     local validDifficulty = {}
@@ -2950,6 +3043,9 @@ end
 supportersPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 supportersPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 supportersPanel:HookScript("OnShow", function()
+    if addonTable.HideMythicPlusPanel then
+        addonTable.HideMythicPlusPanel()
+    end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
     elseif addonTable.AnchorRIOPanelToOak then
@@ -2980,6 +3076,9 @@ end
 optionsPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 optionsPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 optionsPanel:HookScript("OnShow", function()
+    if addonTable.HideMythicPlusPanel then
+        addonTable.HideMythicPlusPanel()
+    end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
     elseif addonTable.AnchorRIOPanelToOak then
@@ -3059,11 +3158,47 @@ do
         local key1, key2 = GetBindingKey and GetBindingKey(BROWSER_BINDING_COMMAND)
         local formatted = {}
 
+        local function FormatSingleBinding(binding)
+            if not binding or binding == "" then
+                return nil
+            end
+
+            local normalized = tostring(binding):upper()
+            local tokens = {}
+            for token in normalized:gmatch("[^-]+") do
+                tokens[#tokens + 1] = token
+            end
+
+            if #tokens == 0 then
+                return nil
+            end
+
+            local parts = {}
+            for i = 1, #tokens - 1 do
+                local token = tokens[i]
+                if token == "C" or token == "CTRL" or token == "CONTROL" then
+                    parts[#parts + 1] = "CTRL"
+                elseif token == "A" or token == "ALT" then
+                    parts[#parts + 1] = "ALT"
+                elseif token == "S" or token == "SHIFT" then
+                    parts[#parts + 1] = "SHIFT"
+                end
+            end
+
+            local keyToken = tokens[#tokens]
+            local keyText = (GetBindingText and GetBindingText(keyToken, "KEY_")) or keyToken
+            if keyText and keyText ~= "" then
+                parts[#parts + 1] = keyText
+            end
+
+            return table.concat(parts, " + ")
+        end
+
         if key1 then
-            formatted[#formatted + 1] = (GetBindingText and GetBindingText(key1, "KEY_")) or key1
+            formatted[#formatted + 1] = FormatSingleBinding(key1)
         end
         if key2 then
-            formatted[#formatted + 1] = (GetBindingText and GetBindingText(key2, "KEY_")) or key2
+            formatted[#formatted + 1] = FormatSingleBinding(key2)
         end
 
         if #formatted == 0 then
@@ -3149,7 +3284,7 @@ do
         end
     end)
     optionsSetBindButton:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+        self:SetBackdropBorderColor(0, 0, 0, 1)
         GameTooltip:Hide()
     end)
 
@@ -3383,9 +3518,19 @@ optionsFontSizeSlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK 
 optionsFontSizeSlider:SetBackdropBorderColor(0, 0, 0, 1)
 local optionsFontSizeThumb = optionsFontSizeSlider:CreateTexture(nil, "ARTWORK")
 optionsFontSizeThumb:SetTexture(addonTable.FLAT_TEX)
-optionsFontSizeThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+do
+    local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+    optionsFontSizeThumb:SetVertexColor(accent.r, accent.g, accent.b, 1)
+end
 optionsFontSizeThumb:SetSize(10, 14)
 optionsFontSizeSlider:SetThumbTexture(optionsFontSizeThumb)
+if optionsFontSizeSlider.GetThumbTexture then
+    local thumbTex = optionsFontSizeSlider:GetThumbTexture()
+    if thumbTex then
+        local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+        thumbTex:SetVertexColor(accent.r, accent.g, accent.b, 1)
+    end
+end
 optionsFontSizeSlider:SetScript("OnValueChanged", function(self, value)
     local rounded = math.floor((value or 12) + 0.5)
     optionsFontSizeValue:SetText(tostring(rounded))
@@ -3426,9 +3571,19 @@ optionsOpacitySlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK o
 optionsOpacitySlider:SetBackdropBorderColor(0, 0, 0, 1)
 local optionsOpacityThumb = optionsOpacitySlider:CreateTexture(nil, "ARTWORK")
 optionsOpacityThumb:SetTexture(addonTable.FLAT_TEX)
-optionsOpacityThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+do
+    local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+    optionsOpacityThumb:SetVertexColor(accent.r, accent.g, accent.b, 1)
+end
 optionsOpacityThumb:SetSize(10, 14)
 optionsOpacitySlider:SetThumbTexture(optionsOpacityThumb)
+if optionsOpacitySlider.GetThumbTexture then
+    local thumbTex = optionsOpacitySlider:GetThumbTexture()
+    if thumbTex then
+        local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+        thumbTex:SetVertexColor(accent.r, accent.g, accent.b, 1)
+    end
+end
 optionsOpacitySlider:SetScript("OnValueChanged", function(self, value)
     local rounded = math.floor(value * 100 + 0.5) / 100
     optionsOpacityValue:SetText(string.format("%d%%", rounded * 100))
@@ -3482,6 +3637,23 @@ local function RefreshOptionsPanel()
     if addonTable.GetWindowOpacity then
         optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity())
     end
+    do
+        local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+        optionsFontSizeThumb:SetVertexColor(accent.r, accent.g, accent.b, 1)
+        optionsOpacityThumb:SetVertexColor(accent.r, accent.g, accent.b, 1)
+        if optionsFontSizeSlider.GetThumbTexture then
+            local thumbTex = optionsFontSizeSlider:GetThumbTexture()
+            if thumbTex then
+                thumbTex:SetVertexColor(accent.r, accent.g, accent.b, 1)
+            end
+        end
+        if optionsOpacitySlider.GetThumbTexture then
+            local thumbTex = optionsOpacitySlider:GetThumbTexture()
+            if thumbTex then
+                thumbTex:SetVertexColor(accent.r, accent.g, accent.b, 1)
+            end
+        end
+    end
 end
 
 addonTable.RefreshOptionsPanel = RefreshOptionsPanel
@@ -3506,24 +3678,47 @@ addonTable.RegisterThemeRefresh("ui_filters_theme", function()
     browserFilterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     supportersPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     optionsPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-    optionsTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
-    suppTitle:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
     fontPickerList:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-    div1:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.5)
     div2:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.5)
     bottomDivider:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
-    optionsFontSizeThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-    optionsOpacityThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
+    optionsTitle:SetTextColor(accent.r, accent.g, accent.b)
+    suppTitle:SetTextColor(accent.r, accent.g, accent.b)
+    optionsFontSizeThumb:SetVertexColor(accent.r, accent.g, accent.b, 1)
+    optionsOpacityThumb:SetVertexColor(accent.r, accent.g, accent.b, 1)
     if addonTable.ApplyBackdropStyle then
         addonTable.ApplyBackdropStyle(optionsFontSizeSlider, "inset")
         addonTable.ApplyBackdropStyle(optionsOpacitySlider, "inset")
     end
     optionsFontSizeSlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
     optionsOpacitySlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
+    optionsFontSizeSlider:SetBackdropBorderColor(accent.r, accent.g, accent.b, 1)
+    optionsOpacitySlider:SetBackdropBorderColor(accent.r, accent.g, accent.b, 1)
+    if optionsFontSizeSlider.GetThumbTexture then
+        local thumbTex = optionsFontSizeSlider:GetThumbTexture()
+        if thumbTex then
+            thumbTex:SetVertexColor(accent.r, accent.g, accent.b, 1)
+        end
+    end
+    if optionsOpacitySlider.GetThumbTexture then
+        local thumbTex = optionsOpacitySlider:GetThumbTexture()
+        if thumbTex then
+            thumbTex:SetVertexColor(accent.r, accent.g, accent.b, 1)
+        end
+    end
     if optionsThemeColorButton and optionsThemeColorButton.swatch and addonTable.GetThemeAccentColor then
         local color = addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil)
         optionsThemeColorButton.swatch:SetColorTexture(color.r, color.g, color.b, 1)
     end
+    filterTitle:SetTextColor(accent.r, accent.g, accent.b)
+    browserTitle:SetTextColor(accent.r, accent.g, accent.b)
+    browserMinRatingLabel:SetTextColor(accent.r, accent.g, accent.b)
+    for _, row in pairs(raidRangeRows) do
+        if row and row.label then
+            row.label:SetTextColor(accent.r, accent.g, accent.b)
+        end
+    end
+    div1:SetColorTexture(accent.r, accent.g, accent.b, 0.5)
     RefreshOptionsPanel()
 end)
 

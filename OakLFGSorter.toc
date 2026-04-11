@@ -23,6 +23,7 @@ UI_Filters.lua
 UI_Rows.lua
 Core.lua
 Party_Keys.lua
+MythicPlus_Panel.lua
 MinimapButton.lua
 Search_Signup.lua
 Search_Integration.lua

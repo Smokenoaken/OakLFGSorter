@@ -218,6 +218,31 @@ function addonTable.GetBrowserCategoryConfig(categoryKey)
     return addonTable.BrowserCategoryOptions[1]
 end
 
+function addonTable.GetCurrentListingCategoryKey()
+    local listingContext = addonTable.UpdateListingContext and addonTable.UpdateListingContext() or addonTable.CurrentListingContext
+    local activityInfo = listingContext and listingContext.activityInfo or nil
+    local mode = listingContext and listingContext.mode or GetListingMode(activityInfo)
+    local categoryID = tonumber(activityInfo and (activityInfo.categoryID or activityInfo.groupFinderCategoryID or activityInfo.category)) or 0
+
+    if mode == "mythic_plus" or mode == "dungeon" then
+        return "DUNGEONS"
+    elseif mode == "raid" then
+        return "RAIDS_MIDNIGHT"
+    elseif mode == "legacy_raid" or categoryID == CATEGORY_ID.CLASSIC_RAID then
+        return "RAIDS_LEGACY"
+    elseif mode == "delve" or categoryID == CATEGORY_ID.DELVES then
+        return "DELVES"
+    elseif mode == "open_world" or categoryID == CATEGORY_ID.QUESTING then
+        return "QUESTING"
+    elseif mode == "rated_pvp" then
+        return "RBG"
+    elseif mode == "pvp" then
+        return "ARENA"
+    end
+
+    return "CUSTOM"
+end
+
 function addonTable.GetBrowserCategoryLabel(categoryKey)
     local config = addonTable.GetBrowserCategoryConfig(categoryKey)
     return config and config.label or L["Dungeons"]
@@ -1984,6 +2009,39 @@ function addonTable.OpenBlizzardListingPanel(categoryKey)
     return TryOpenPremadeGroupListingCategory(categoryKey)
 end
 
+function addonTable.OpenCurrentListingForEdit()
+    if UIParentLoadAddOn then
+        pcall(UIParentLoadAddOn, "Blizzard_GroupFinder")
+    end
+
+    if PVEFrame and not PVEFrame:IsShown() then
+        if type(PVEFrame_ShowFrame) == "function" then
+            pcall(PVEFrame_ShowFrame, "GroupFinderFrame", "PVEListFrame")
+        elseif type(ShowUIPanel) == "function" then
+            pcall(ShowUIPanel, PVEFrame)
+        else
+            pcall(PVEFrame.Show, PVEFrame)
+        end
+    end
+
+    local editButton = PVEFrame and PVEFrame.ApplicationViewer and PVEFrame.ApplicationViewer.EditButton
+        or LFGListFrame and LFGListFrame.ApplicationViewer and LFGListFrame.ApplicationViewer.EditButton
+        or PVEFrame and PVEFrame.LFGListFrame and PVEFrame.LFGListFrame.ApplicationViewer and PVEFrame.LFGListFrame.ApplicationViewer.EditButton
+
+    if editButton and editButton.Click then
+        local ok = pcall(editButton.Click, editButton)
+        if ok then
+            return true
+        end
+    end
+
+    local categoryKey = addonTable.GetCurrentListingCategoryKey and addonTable.GetCurrentListingCategoryKey() or nil
+    if categoryKey then
+        return TryOpenPremadeGroupListingCategory(categoryKey)
+    end
+    return false
+end
+
 
 function addonTable.ApplyToSearchResult(searchResultID)
     if addonTable.BeginSearchSignup then
@@ -2230,9 +2288,16 @@ local function FetchApplicantData()
     for _, applicantID in ipairs(applicants) do
         local info = C_LFGList.GetApplicantInfo(applicantID)
         
-        if info and info.applicationStatus == "applied" and info.numMembers > 0 then
+        local applicantStatus = NormalizeApplicationStatus(info and info.applicationStatus or "none")
+        if info and (applicantStatus == "applied" or applicantStatus == "invited" or applicantStatus == "inviteaccepted") and info.numMembers > 0 then
             
-            local group = { id = applicantID, numMembers = info.numMembers, comment = info.comment, members = {} }
+            local group = {
+                id = applicantID,
+                numMembers = info.numMembers,
+                comment = info.comment,
+                members = {},
+                applicationStatus = applicantStatus,
+            }
 
             for i = 1, info.numMembers do
                 local name, class, _, _, itemLevel, _, tank, healer, damage, _, isFriend, dungeonScore, _, _, _, specID = C_LFGList.GetApplicantMemberInfo(applicantID, i)

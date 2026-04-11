@@ -187,6 +187,7 @@ function addonTable.ApplyWindowOpacity()
     local baseColor = addonTable.OAK_COLOR_BG or {0.106, 0.106, 0.129, 0.85}
     local frames = {
         addonTable.OAK_LFG,
+        addonTable.MythicPlusPanel,
         addonTable.FilterPanel,
         addonTable.BrowserFilterPanel,
         addonTable.SupportersPanel,
@@ -610,6 +611,7 @@ local function RefreshRegisteredButtons()
     local style = addonTable.GetThemeStyle and addonTable.GetThemeStyle() or "OAK"
     local useQuickSignupButtonFill = style == "BLIZZARD" or style == "BLIZZARD_GRAY"
     local flatButtonFill = useQuickSignupButtonFill and addonTable.OAK_COLOR_QUICKSIGNUP or addonTable.OAK_COLOR_PANE
+    local borderColor = {0, 0, 0, 1}
     local function EnsureButtonVisualFill(button)
         if not button then
             return nil
@@ -629,16 +631,12 @@ local function RefreshRegisteredButtons()
                 addonTable.ApplyBackdropStyle(button, "button")
             end
             button:SetBackdropColor(unpack(flatButtonFill))
-            button:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+            button:SetBackdropBorderColor(unpack(borderColor))
             local visualFill = EnsureButtonVisualFill(button)
             if visualFill then
-                if useQuickSignupButtonFill then
-                    visualFill:SetTexture(addonTable.FLAT_TEX)
-                    visualFill:SetVertexColor(flatButtonFill[1] or 0, flatButtonFill[2] or 0, flatButtonFill[3] or 0, flatButtonFill[4] or 1)
-                    visualFill:Show()
-                else
-                    visualFill:Hide()
-                end
+                visualFill:SetTexture(addonTable.FLAT_TEX)
+                visualFill:SetVertexColor(flatButtonFill[1] or 0, flatButtonFill[2] or 0, flatButtonFill[3] or 0, flatButtonFill[4] or 1)
+                visualFill:Show()
             end
             if button.RefreshAutoWidth then
                 button:RefreshAutoWidth()
@@ -654,16 +652,12 @@ local function RefreshRegisteredButtons()
                 addonTable.ApplyBackdropStyle(button, "button")
             end
             button:SetBackdropColor(unpack(flatButtonFill))
-            button:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+            button:SetBackdropBorderColor(unpack(borderColor))
             local visualFill = EnsureButtonVisualFill(button)
             if visualFill then
-                if useQuickSignupButtonFill then
-                    visualFill:SetTexture(addonTable.FLAT_TEX)
-                    visualFill:SetVertexColor(flatButtonFill[1] or 0, flatButtonFill[2] or 0, flatButtonFill[3] or 0, flatButtonFill[4] or 1)
-                    visualFill:Show()
-                else
-                    visualFill:Hide()
-                end
+                visualFill:SetTexture(addonTable.FLAT_TEX)
+                visualFill:SetVertexColor(flatButtonFill[1] or 0, flatButtonFill[2] or 0, flatButtonFill[3] or 0, flatButtonFill[4] or 1)
+                visualFill:Show()
             end
         else
             registeredCogButtons[key] = nil
@@ -907,10 +901,10 @@ function addonTable.GetBackdropStyle(kind)
     if style == "BLIZZARD" or style == "BLIZZARD_GRAY" then
         if kind == "button" then
             return {
-                bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                edgeSize = 12,
-                insets = { left = 3, right = 3, top = 3, bottom = 3 },
+                bgFile = addonTable.FLAT_TEX,
+                edgeFile = addonTable.FLAT_TEX,
+                edgeSize = 1,
+                insets = { left = 1, right = 1, top = 1, bottom = 1 },
             }
         elseif kind == "inset" then
             return {
@@ -1027,7 +1021,7 @@ function addonTable.CreateFlatButton(parent, label, width)
     btn:SetSize(width, 22)
     addonTable.ApplyBackdropStyle(btn, "button")
     btn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE)) 
-    btn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    btn:SetBackdropBorderColor(0, 0, 0, 1)
 
     btn.text = btn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
     btn.text:SetPoint("CENTER")
@@ -1070,8 +1064,12 @@ function addonTable.CreateFlatButton(parent, label, width)
         self:SetWidth(targetWidth)
     end
 
-    btn:SetScript("OnEnter", function(self) self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1) end)
-    btn:SetScript("OnLeave", function(self) self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER)) end)
+    btn:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(0, 0, 0, 1)
+    end)
     registeredFlatButtons[btn] = btn
     return btn
 end
@@ -1277,7 +1275,7 @@ function addonTable.CreateCogButton(parent, size)
     btn:SetSize(size, size)
     addonTable.ApplyBackdropStyle(btn, "button")
     btn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
-    btn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    btn:SetBackdropBorderColor(0, 0, 0, 1)
 
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
     btn.icon:SetSize(size - 8, size - 8)
@@ -1293,7 +1291,7 @@ function addonTable.CreateCogButton(parent, size)
         self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     end)
     btn:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+        self:SetBackdropBorderColor(0, 0, 0, 1)
     end)
     registeredCogButtons[btn] = btn
 
