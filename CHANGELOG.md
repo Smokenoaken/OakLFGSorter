@@ -1,3 +1,7 @@
+## v3.0.1
+
+- Fixed region filters so applicant view now respects enabled regions
+
 ## v3.0.0
 
 - Added Oak footer controls for Blizzard LFG, LFR, List, PvP, and Mythic+ access

@@ -479,7 +479,7 @@ addonTable.CloseButton = closeBtn
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
-VersionText:SetText("|cff888888v3.0.0|r")
+VersionText:SetText("|cff888888v3.0.1|r")
 VersionText:Hide()
 
 addonTable.RegisterThemeRefresh("ui_header_theme", function()
@@ -531,7 +531,7 @@ StaticPopupDialogs["OAK_LFG_URL_COPY"] = {
 OAK_LFG:HookScript("OnHide", function()
     GameTooltip:Hide()
     -- If the browser wasn't hidden by a system call (SearchPanel:OnShow),
-    -- the user closed it intentionally (X button or Escape) â€” suppress auto-reopen.
+    -- the user closed it intentionally (X button or Escape) Ã¢â‚¬â€ suppress auto-reopen.
     if not addonTable.systemHidingBrowser then
         addonTable.userExplicitlyClosed = true
     end
