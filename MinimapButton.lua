@@ -1,9 +1,50 @@
 local addonName, addonTable = ...
 
 local minimapButton
+local combatQueueFrame
+local pendingOpenAfterCombat = false
+local pendingOpenNoticeShown = false
 
 local function IsGroupFinderInteractionBlocked()
     return InCombatLockdown and InCombatLockdown()
+end
+
+local function NotifyQueuedOpen()
+    if pendingOpenNoticeShown then
+        return
+    end
+    pendingOpenNoticeShown = true
+    print("|cFF00FF00Oak LFG Sorter:|r Cannot open during combat. Oak will open when combat ends.")
+end
+
+local function QueueOpenAfterCombat()
+    pendingOpenAfterCombat = true
+    if combatQueueFrame then
+        combatQueueFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
+    NotifyQueuedOpen()
+end
+
+local function ShowOakFrameSafely()
+    local oakFrame = addonTable.OAK_LFG
+    if not oakFrame then
+        return false
+    end
+
+    if oakFrame:IsShown() then
+        pendingOpenAfterCombat = false
+        return true
+    end
+
+    if IsGroupFinderInteractionBlocked() then
+        QueueOpenAfterCombat()
+        return false
+    end
+
+    pendingOpenAfterCombat = false
+    pendingOpenNoticeShown = false
+    oakFrame:Show()
+    return true
 end
 
 local function EnsureDB()
@@ -45,7 +86,7 @@ local function OpenOakBrowser()
                     addonTable.SetCurrentViewMode("applicant")
                 end
             end
-            addonTable.OAK_LFG:Show()
+            QueueOpenAfterCombat()
         end
         return
     end
@@ -59,9 +100,7 @@ local function OpenOakBrowser()
     if addonTable.RunBrowserSearch then
         addonTable.RunBrowserSearch()
     end
-    if addonTable.OAK_LFG then
-        addonTable.OAK_LFG:Show()
-    end
+    ShowOakFrameSafely()
 end
 addonTable.OpenOakBrowser = OpenOakBrowser
 
@@ -86,7 +125,20 @@ end
 addonTable.ToggleBrowserWindow = ToggleOakBrowser
 
 local function OpenOakOptions()
-    OpenOakBrowser()
+    if IsGroupFinderInteractionBlocked() then
+        if addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
+            print("|cFF00FF00Oak LFG Sorter:|r Options cannot open during combat.")
+        else
+            addonTable.userExplicitlyClosed = false
+            QueueOpenAfterCombat()
+        end
+        return
+    end
+
+    if not (addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown()) then
+        OpenOakBrowser()
+    end
+
     if addonTable.ToggleOptionsPanel then
         if not (addonTable.OptionsPanel and addonTable.OptionsPanel:IsShown()) then
             addonTable.ToggleOptionsPanel()
@@ -165,27 +217,12 @@ local function CreateMinimapButton()
         if mouseButton == "RightButton" then
             OpenOakOptions()
         else
-            if C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo() and addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
-                local currentMode = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() or "browser"
-                addonTable.userExplicitlyClosed = false
-                if addonTable.SetCurrentViewMode then
-                    if currentMode == "browser" then
-                        addonTable.SetCurrentViewMode("applicant")
-                    else
-                        addonTable.SetCurrentViewMode("browser")
-                        if not IsGroupFinderInteractionBlocked() then
-                            if addonTable.OpenGroupFinderForOak then
-                                addonTable.OpenGroupFinderForOak()
-                            end
-                            if addonTable.RunBrowserSearch then
-                                addonTable.RunBrowserSearch()
-                            end
-                        end
-                    end
+            if addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
+                addonTable.userExplicitlyClosed = true
+                if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
+                    addonTable.OAK_SEARCH:Hide()
                 end
-                if addonTable.OAK_LFG then
-                    addonTable.OAK_LFG:Show()
-                end
+                addonTable.OAK_LFG:Hide()
             else
                 OpenOakBrowser()
             end
@@ -223,4 +260,46 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:SetScript("OnEvent", function()
     EnsureDB()
     CreateMinimapButton()
+end)
+
+combatQueueFrame = CreateFrame("Frame")
+combatQueueFrame:SetScript("OnEvent", function(self, event)
+    if event ~= "PLAYER_REGEN_ENABLED" then
+        return
+    end
+
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    if not pendingOpenAfterCombat then
+        return
+    end
+
+    pendingOpenAfterCombat = false
+    pendingOpenNoticeShown = false
+    if addonTable.userExplicitlyClosed then
+        return
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if IsGroupFinderInteractionBlocked() then
+                QueueOpenAfterCombat()
+                return
+            end
+            if addonTable.userExplicitlyClosed then
+                return
+            end
+            if addonTable.OpenOakBrowser then
+                addonTable.OpenOakBrowser()
+            else
+                ShowOakFrameSafely()
+            end
+        end)
+        return
+    end
+
+    if addonTable.OpenOakBrowser then
+        addonTable.OpenOakBrowser()
+    else
+        ShowOakFrameSafely()
+    end
 end)

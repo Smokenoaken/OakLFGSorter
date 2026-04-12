@@ -1,3 +1,9 @@
+## v3.0.4
+
+- Fixed minimap open/close behavior so left-click now cleanly toggles Oak
+- Prevented combat lockdown errors by queuing minimap opens until combat ends
+- Added chat feedback when Oak or its options cannot open during combat
+
 ## v3.0.3
 
 - Added applicant isLeaver flagging with red <!> markers and tooltip detail
