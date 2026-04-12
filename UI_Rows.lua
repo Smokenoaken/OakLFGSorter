@@ -165,6 +165,11 @@ local function GetHeaderTooltipData(sortKey)
             return modeConfig.keyLabel, "Sort by bracket type."
         end
         return modeConfig.keyLabel, "Sort by best key level or key-related metric."
+    elseif sortKey == "region" then
+        if addonTable.ShouldShowRegionFlags and addonTable.ShouldShowRegionFlags() then
+            return "Region", "Sort by the displayed flag derived from the leader's or applicant's realm."
+        end
+        return "Region", "Sort by the displayed region derived from the leader's or applicant's realm."
     end
 
     return nil, nil
@@ -720,6 +725,9 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
 
     if isBrowser then
         if sortBy == "role" then valA, valB = grpA.dungeonName or grpA.activityFilterLabel or grpA.activityName or "", grpB.dungeonName or grpB.activityFilterLabel or grpB.activityName or ""
+        elseif sortBy == "region" then
+            valA = addonTable.GetRegionSortKey and addonTable.GetRegionSortKey(grpA.regionInfo) or "zzz_other"
+            valB = addonTable.GetRegionSortKey and addonTable.GetRegionSortKey(grpB.regionInfo) or "zzz_other"
         elseif sortBy == "class" then valA, valB = grpA.displayName or grpA.name or "", grpB.displayName or grpB.name or ""
         elseif sortBy == "spec" then valA, valB = grpA.playstyleShortLabel or "", grpB.playstyleShortLabel or ""
         elseif sortBy == "ilvl" then
@@ -741,6 +749,9 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
         elseif sortBy == "note" then valA, valB = grpA.comment or "", grpB.comment or "" end
     else
         if sortBy == "role" then valA, valB = roleWeights[grpA.leadRole] or 99, roleWeights[grpB.leadRole] or 99
+        elseif sortBy == "region" then
+            valA = addonTable.GetRegionSortKey and addonTable.GetRegionSortKey(grpA.regionInfo) or "zzz_other"
+            valB = addonTable.GetRegionSortKey and addonTable.GetRegionSortKey(grpB.regionInfo) or "zzz_other"
         elseif sortBy == "class" then valA, valB = grpA.leadClass, grpB.leadClass
         elseif sortBy == "spec" then 
             valA = addonTable.SpecShortNames[grpA.leadSpec] or tostring(grpA.leadSpec or "")
@@ -802,6 +813,7 @@ local C_RATING = { x = 255, w = 74,  align = "CENTER" }
 local C_KEY    = { x = 329, w = 40,  align = "CENTER" }
 local C_NOTE   = { x = 369, w = 201, align = "LEFT" }
 local B_DUNGEON = { x = 10,  w = 145, align = "LEFT" }    -- [10,  155]
+local B_DUNGEON_REGION_SPLIT = { x = 10,  w = 121, align = "LEFT" }
 local B_COMP    = { x = 155, w = 103, align = "CENTER" }   -- [155, 258]  comp slot icons
 local B_TITLE   = { x = 258, w = 102, align = "LEFT" }     -- [258, 360]  listing title
 local B_RATING  = { x = 360, w = 70,  align = "CENTER" }   -- [360, 430]
@@ -809,12 +821,14 @@ local B_AGE     = { x = 430, w = 45,  align = "CENTER" }   -- [430, 475]
 local B_NOTE    = { x = 475, w = 130, align = "LEFT" }     -- [475, 605]
 -- PVP browser column constants (Arena 2v2/3v3): Arena | Comp | Title | PVP Rating | Age | Notes
 local B_PVP_ARENA  = { x = 10,  w = 88,  align = "LEFT"   }  -- [10,  98]  "2v2" / "3v3" + region tag
+local B_PVP_ARENA_REGION_SPLIT  = { x = 10,  w = 64,  align = "LEFT"   }
 local B_PVP_COMP   = { x = 98,  w = 72,  align = "CENTER" }  -- [98,  170] max 3 spec slots
 local B_PVP_TITLE  = { x = 170, w = 120, align = "LEFT"   }  -- [170, 290] listing title
 local B_PVP_RATING = { x = 290, w = 80,  align = "CENTER" }  -- [290, 370]
 local B_PVP_AGE    = { x = 370, w = 45,  align = "CENTER" }  -- [370, 415]
 local B_PVP_NOTE   = { x = 415, w = 190, align = "LEFT"   }  -- [415, 605]
 local B_RBG_ACTIVITY = { x = 10,  w = 88,  align = "LEFT"   }
+local B_RBG_ACTIVITY_REGION_SPLIT = { x = 10,  w = 64,  align = "LEFT"   }
 local B_RBG_COMP     = { x = 98,  w = 96,  align = "CENTER" }
 local B_RBG_TITLE    = { x = 194, w = 96,  align = "LEFT"   }
 local B_RBG_RATING   = { x = 290, w = 80,  align = "CENTER" }
@@ -822,6 +836,13 @@ local B_RBG_AGE      = { x = 370, w = 45,  align = "CENTER" }
 local B_RBG_NOTE     = { x = 415, w = 190, align = "LEFT"   }
 local ROW_X_OFFSET = 10
 local REGION_TAG_WIDTH = 24
+local REGION_COLUMNS = {
+    applicant = { x = 149, w = 28, align = "CENTER" },
+    browser = { x = 131, w = REGION_TAG_WIDTH, align = "CENTER" },
+    pvp = { x = 74, w = REGION_TAG_WIDTH, align = "CENTER" },
+    rbg = { x = 74, w = REGION_TAG_WIDTH, align = "CENTER" },
+    raid = { x = 106, w = REGION_TAG_WIDTH, align = "CENTER" },
+}
 
 local function RowColumn(column)
     return { x = column.x - ROW_X_OFFSET, w = column.w, align = column.align }
@@ -855,6 +876,7 @@ local BR_RBG_NOTE     = RowColumn(B_RBG_NOTE)
 
 -- Raid browser column constants: Raid | Difficulty | Comp | Title | Kills | Age | Notes
 local B_RAID_NAME  = { x = 10,  w = 120, align = "LEFT"   }  -- [10,  130]
+local B_RAID_NAME_REGION_SPLIT  = { x = 10,  w = 96, align = "LEFT"   }
 local B_RAID_DIFF  = { x = 130, w = 65,  align = "CENTER" }  -- [130, 195]
 local B_RAID_COMP  = { x = 195, w = 103, align = "CENTER" }  -- [195, 298]
 local B_RAID_TITLE = { x = 298, w = 107, align = "LEFT"   }  -- [298, 405]
@@ -923,9 +945,16 @@ function addonTable.UpdateHeaderVisuals()
     local isRaidBrowser = IsRaidBrowserMode()
     local isPvpBrowser = IsPvpBrowserMode()
     local isRbgBrowser = IsRatedBattlegroundBrowserMode()
+    local showRegions = addonTable.ShouldShowRegions and addonTable.ShouldShowRegions()
+
+    if not showRegions and addonTable.CurrentSortBy == "region" then
+        addonTable.CurrentSortBy = isBrowser and "rating" or "ilvl"
+        addonTable.CurrentIsAscending = false
+    end
 
     local browserColumns = {
-        role   = B_DUNGEON,
+        role   = showRegions and B_DUNGEON_REGION_SPLIT or B_DUNGEON,
+        region = REGION_COLUMNS.browser,
         class  = B_TITLE,
         spec   = nil,       -- hidden in non-raid browser
         ilvl   = B_COMP,    -- "Comp" in browser
@@ -933,7 +962,8 @@ function addonTable.UpdateHeaderVisuals()
         key    = B_AGE,     -- "Age" in browser
     }
     local pvpBrowserColumns = {
-        role   = B_PVP_ARENA,
+        role   = showRegions and B_PVP_ARENA_REGION_SPLIT or B_PVP_ARENA,
+        region = REGION_COLUMNS.pvp,
         class  = B_PVP_TITLE,
         spec   = nil,
         ilvl   = B_PVP_COMP,
@@ -941,7 +971,8 @@ function addonTable.UpdateHeaderVisuals()
         key    = B_PVP_AGE,
     }
     local rbgBrowserColumns = {
-        role   = B_RBG_ACTIVITY,
+        role   = showRegions and B_RBG_ACTIVITY_REGION_SPLIT or B_RBG_ACTIVITY,
+        region = REGION_COLUMNS.rbg,
         class  = B_RBG_TITLE,
         spec   = nil,
         ilvl   = B_RBG_COMP,
@@ -949,7 +980,8 @@ function addonTable.UpdateHeaderVisuals()
         key    = B_RBG_AGE,
     }
     local raidBrowserColumns = {
-        role   = B_RAID_NAME,
+        role   = showRegions and B_RAID_NAME_REGION_SPLIT or B_RAID_NAME,
+        region = REGION_COLUMNS.raid,
         class  = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and B_RAID_TITLE_COLLAPSED or B_RAID_TITLE,
         spec   = B_RAID_DIFF,   -- "Difficulty" in raid browser
         ilvl   = B_RAID_COMP,
@@ -958,7 +990,8 @@ function addonTable.UpdateHeaderVisuals()
     }
     local defaultColumns = {
         role = C_ROLE,
-        class = C_CLASS,
+        region = REGION_COLUMNS.applicant,
+        class = showRegions and { x = 45, w = 104, align = "LEFT" } or C_CLASS,
         spec = C_SPEC,
         ilvl = C_ILVL,
         rating = C_RATING,
@@ -1001,6 +1034,12 @@ function addonTable.UpdateHeaderVisuals()
             end
         elseif header.sortKey == "key" then
             if isBrowser or showSecondaryMetric then
+                header:Show()
+            else
+                header:Hide()
+            end
+        elseif header.sortKey == "region" then
+            if showRegions then
                 header:Show()
             else
                 header:Hide()
@@ -1053,6 +1092,8 @@ function addonTable.UpdateHeaderVisuals()
             header.text:SetText(L["Comp"])
         elseif isRaidBrowser and header.sortKey == "spec" then
             header.text:SetText("Difficulty")
+        elseif header.sortKey == "region" then
+            header.text:SetText("Reg")
         else
             header.text:SetText(header.baseText)
         end
@@ -1264,6 +1305,7 @@ local function GetApplicantRowColor(group, isAltColor)
 end
 
 CreateHeader(L["Role"], "role", C_ROLE)
+CreateHeader("Reg", "region", REGION_COLUMNS.applicant)
 CreateHeader(L["Class"], "class", C_CLASS)
 CreateHeader(L["Spec"], "spec", C_SPEC)
 CreateHeader(L["iLvl"], "ilvl", C_ILVL)
@@ -1771,7 +1813,7 @@ local function SetBrowserCompSlotSpec(slotFrame, specID, className, filled)
 end
 
 -- Role icon texture markup (LFG portrait-roles spritesheet)
-local ROLE_ICON = {
+addonTable.RoleIconMarkup = {
     TANK    = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:13:13:0:0:64:64:0:19:22:41|t ",
     HEALER  = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:13:13:0:0:64:64:20:39:1:20|t ",
     DAMAGER = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:13:13:0:0:64:64:20:39:22:41|t ",
@@ -1781,21 +1823,21 @@ local ROLE_ICON = {
 -- vary across versions and font rendering of Unicode glyphs is inconsistent.
 local LEADER_CROWN = " - Leader"
 
-local function NormalizeTooltipLeaderName(name)
+function addonTable.NormalizeTooltipLeaderName(name)
     local text = tostring(name or "")
     local baseName = text:match("([^%-]+)") or text
     return strlower(baseName)
 end
 
-local function FindLeaderPlayerIndex(result)
+function addonTable.FindLeaderPlayerIndex(result)
     if not (result and type(result.players) == "table" and #result.players > 0) then
         return nil
     end
 
-    local leaderKey = NormalizeTooltipLeaderName(result.leaderName)
+    local leaderKey = addonTable.NormalizeTooltipLeaderName(result.leaderName)
     if leaderKey ~= "" then
         for index, player in ipairs(result.players) do
-            local playerKey = NormalizeTooltipLeaderName(player and player.name)
+            local playerKey = addonTable.NormalizeTooltipLeaderName(player and player.name)
             if playerKey ~= "" and playerKey == leaderKey then
                 return index
             end
@@ -1807,7 +1849,7 @@ end
 
 -- Append RIO milestones (Best Run, Best for Dungeon, Timed X-Y Runs) without
 -- the "Raider.IO M+ Score" section header — the caller adds the header with the score value.
-local function AppendRIOMilestonesNoHeader(tooltip, rioProfile)
+function addonTable.AppendRIOMilestonesNoHeader(tooltip, rioProfile)
     local mPlus = rioProfile and rioProfile.mythicKeystoneProfile
     if type(mPlus) ~= "table" then return end
     local milestones = mPlus.sortedMilestones
@@ -1819,9 +1861,86 @@ local function AppendRIOMilestonesNoHeader(tooltip, rioProfile)
     end
 end
 
+local function NormalizeFriendMatchName(name, realm)
+    local fullName = tostring(name or "")
+    if tostring(realm or "") ~= "" and not fullName:find("-", 1, true) then
+        fullName = fullName .. "-" .. tostring(realm)
+    end
+    if Ambiguate then
+        fullName = Ambiguate(fullName, "mail")
+    end
+    return strlower(fullName)
+end
+
+local function BuildSearchResultFriendNameList(result)
+    if type(result) ~= "table" or type(result.players) ~= "table" or #result.players == 0 then
+        return {}
+    end
+
+    local playerNames = {}
+    for _, player in ipairs(result.players) do
+        local normalized = NormalizeFriendMatchName(player and player.name)
+        if normalized ~= "" then
+            playerNames[normalized] = player.name or normalized
+        end
+    end
+
+    local matches = {}
+    local seen = {}
+
+    local function AddMatch(name, realm)
+        local normalized = NormalizeFriendMatchName(name, realm)
+        local displayName = playerNames[normalized]
+        if displayName and not seen[normalized] then
+            seen[normalized] = true
+            matches[#matches + 1] = displayName
+        end
+    end
+
+    if C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetFriendInfoByIndex then
+        local numFriends = tonumber(C_FriendList.GetNumFriends()) or 0
+        for i = 1, numFriends do
+            local info = C_FriendList.GetFriendInfoByIndex(i)
+            if info then
+                AddMatch(info.name, info.realmName)
+            end
+        end
+    end
+
+    if BNGetNumFriends and C_BattleNet and C_BattleNet.GetFriendAccountInfo then
+        local numBNetFriends = select(1, BNGetNumFriends())
+        numBNetFriends = tonumber(numBNetFriends) or 0
+        for i = 1, numBNetFriends do
+            local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
+            if accountInfo then
+                local gameInfo = accountInfo.gameAccountInfo
+                if gameInfo then
+                    AddMatch(gameInfo.characterName, gameInfo.realmName)
+                end
+
+                if C_BattleNet.GetFriendNumGameAccounts and C_BattleNet.GetFriendGameAccountInfo then
+                    local numGameAccounts = tonumber(C_BattleNet.GetFriendNumGameAccounts(i)) or 0
+                    for gameIndex = 1, numGameAccounts do
+                        local extraGameInfo = C_BattleNet.GetFriendGameAccountInfo(i, gameIndex)
+                        if extraGameInfo then
+                            AddMatch(extraGameInfo.characterName, extraGameInfo.realmName)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(matches, function(a, b)
+        return strlower(tostring(a or "")) < strlower(tostring(b or ""))
+    end)
+
+    return matches
+end
+
 -- Build the rich hover tooltip for a browser search-result row (screenshot 1 style).
 -- Shift-held is handled upstream and shows the full RIO profile panel instead.
-local function BuildBrowserGroupTooltip(result)
+function addonTable.BuildBrowserGroupTooltip(result)
     -- Fetch the RIO profile lazily at tooltip time (not stored in the result to save memory)
     local rioProfile = nil
     if result.leaderName and result.leaderName ~= "" and RaiderIO and RaiderIO.GetProfile then
@@ -1933,7 +2052,7 @@ local function BuildBrowserGroupTooltip(result)
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Members: (" .. #result.players .. ")", 1, 0.82, 0)
         local isRaidContext = (listingMode == "raid" or listingMode == "legacy_raid" or listingMode == "open_world")
-        local leaderIndex = FindLeaderPlayerIndex(result) or 1
+        local leaderIndex = addonTable.FindLeaderPlayerIndex(result) or 1
         if isRaidContext and #result.players > 5 then
             -- Raid: grouped display (spec×count) to keep tooltip compact.
             -- Show the group leader first with a crown, then group the rest.
@@ -1941,7 +2060,7 @@ local function BuildBrowserGroupTooltip(result)
             if leaderPlayer then
                 local cc = leaderPlayer.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[leaderPlayer.class]
                 local r, g, b = cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1
-                local roleIcon = ROLE_ICON[leaderPlayer.role] or ROLE_ICON.DAMAGER
+                local roleIcon = addonTable.RoleIconMarkup[leaderPlayer.role] or addonTable.RoleIconMarkup.DAMAGER
                 local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[leaderPlayer.class])
                                   or leaderPlayer.class or "?"
                 local specPart = (leaderPlayer.specName and leaderPlayer.specName ~= "")
@@ -1977,7 +2096,7 @@ local function BuildBrowserGroupTooltip(result)
                 local entry = counts[key]
                 local cc = RAID_CLASS_COLORS and entry.class and RAID_CLASS_COLORS[entry.class]
                 local r, g, b = cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1
-                local roleIcon = ROLE_ICON[entry.role] or ROLE_ICON.DAMAGER
+                local roleIcon = addonTable.RoleIconMarkup[entry.role] or addonTable.RoleIconMarkup.DAMAGER
                 local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[entry.class])
                                   or entry.class or "?"
                 local specPart  = entry.specName ~= "" and (" - " .. entry.specName) or ""
@@ -1992,7 +2111,7 @@ local function BuildBrowserGroupTooltip(result)
                 local r, g, b = cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1
                 local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[player.class])
                                   or player.class or "?"
-                local roleIcon = ROLE_ICON[player.role] or ROLE_ICON.DAMAGER
+                local roleIcon = addonTable.RoleIconMarkup[player.role] or addonTable.RoleIconMarkup.DAMAGER
                 local line
                 if player.specName and player.specName ~= "" then
                     line = roleIcon .. className .. " - " .. player.specName
@@ -2049,7 +2168,7 @@ local function BuildBrowserGroupTooltip(result)
         else
             GameTooltip:AddLine("Raider.IO M+ Score", 1, 0.82, 0)
         end
-        AppendRIOMilestonesNoHeader(GameTooltip, rioProfile)
+        addonTable.AppendRIOMilestonesNoHeader(GameTooltip, rioProfile)
     end
 
     -- ── Raid Progress ─────────────────────────────────────────────────────────
@@ -2078,6 +2197,10 @@ local function BuildBrowserGroupTooltip(result)
     if (result.numBNetFriends or 0) > 0 or (result.numCharFriends or 0) > 0 then
         GameTooltip:AddLine(" ")
         GameTooltip:AddDoubleLine("Friends:", string.format("%d BNet / %d WoW", result.numBNetFriends or 0, result.numCharFriends or 0), 0.6, 0.85, 1, 0.6, 0.85, 1)
+        local friendNames = BuildSearchResultFriendNameList(result)
+        if #friendNames > 0 then
+            GameTooltip:AddLine(table.concat(friendNames, ", "), 0.85, 0.85, 0.85, true)
+        end
     end
 
     -- ── Note ──────────────────────────────────────────────────────────────────
@@ -2145,7 +2268,7 @@ local function CreateRow(index, parentOverride, prevRowOverride)
             end
 
             -- Regular hover: rich group tooltip (screenshot 1)
-            BuildBrowserGroupTooltip(result)
+            addonTable.BuildBrowserGroupTooltip(result)
             GameTooltip:Show()
         elseif self.applicantID and self.memberIdx then
             GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
@@ -2682,7 +2805,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
         local healers = tonumber(rc.HEALER)  or 0
         local dps     = tonumber(rc.DAMAGER) or 0
         row.ilvlText:SetWordWrap(false)
-        row.ilvlText:SetText(ROLE_ICON.TANK .. tanks .. "  " .. ROLE_ICON.HEALER .. healers .. "  " .. ROLE_ICON.DAMAGER .. dps)
+        row.ilvlText:SetText(addonTable.RoleIconMarkup.TANK .. tanks .. "  " .. addonTable.RoleIconMarkup.HEALER .. healers .. "  " .. addonTable.RoleIconMarkup.DAMAGER .. dps)
         row.ilvlText:Show()
     elseif isRbgMode then
         for _, slot in pairs(row.compSlots) do slot:Hide() end
@@ -2691,7 +2814,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
         local healers = tonumber(rc.HEALER)  or 0
         local dps     = tonumber(rc.DAMAGER) or 0
         row.ilvlText:SetWordWrap(false)
-        row.ilvlText:SetText(ROLE_ICON.TANK .. tanks .. "  " .. ROLE_ICON.HEALER .. healers .. "  " .. ROLE_ICON.DAMAGER .. dps)
+        row.ilvlText:SetText(addonTable.RoleIconMarkup.TANK .. tanks .. "  " .. addonTable.RoleIconMarkup.HEALER .. healers .. "  " .. addonTable.RoleIconMarkup.DAMAGER .. dps)
         row.ilvlText:Show()
     elseif isPvpMode then
         -- PVP/Arena mode: show spec/class icons for each member (max 3 slots), hide slots 4-5
@@ -2722,7 +2845,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
             local healers = tonumber(rc.HEALER)  or 0
             local dps     = tonumber(rc.DAMAGER) or 0
             row.ilvlText:SetWordWrap(false)
-            row.ilvlText:SetText(ROLE_ICON.TANK .. tanks .. "  " .. ROLE_ICON.HEALER .. healers .. "  " .. ROLE_ICON.DAMAGER .. dps)
+            row.ilvlText:SetText(addonTable.RoleIconMarkup.TANK .. tanks .. "  " .. addonTable.RoleIconMarkup.HEALER .. healers .. "  " .. addonTable.RoleIconMarkup.DAMAGER .. dps)
             row.ilvlText:Show()
         else
             row.ilvlText:Hide()

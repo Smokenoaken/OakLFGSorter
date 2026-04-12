@@ -56,6 +56,7 @@ if OakLFGSorterDB.browserCategoryKey == nil then OakLFGSorterDB.browserCategoryK
 if type(OakLFGSorterDB.browserCategoryOverrides) ~= "table" then OakLFGSorterDB.browserCategoryOverrides = {} end
 if OakLFGSorterDB.autoHideFilledRoles == nil then OakLFGSorterDB.autoHideFilledRoles = false end
 if OakLFGSorterDB.showRegions == nil then OakLFGSorterDB.showRegions = false end
+if OakLFGSorterDB.showRegionFlags == nil then OakLFGSorterDB.showRegionFlags = false end
 if OakLFGSorterDB.lowLatencyOnly == nil then OakLFGSorterDB.lowLatencyOnly = false end
 if OakLFGSorterDB.showPartyKeys == nil then OakLFGSorterDB.showPartyKeys = true end
 if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "OakUI Font" end

@@ -54,8 +54,10 @@ local quickSignupState = {
     roleButtons = {},
     roleOrder = { "TANK", "HEALER", "DAMAGER" },
     persistPatchActive = false,
+    queueButtonsHooked = false,
     originalDialogShow = nil,
 }
+local EnsureQueueRoleSelectorHooks
 
 local SIGNUP_COOLDOWN_DURATION = 1.5  -- Blizzard server-side throttle estimate (seconds)
 local lastDirectSignupTime = 0
@@ -155,6 +157,211 @@ local function GetSavedQuickSignupRoles()
     end
 
     return roles
+end
+
+local function CopyQuickSignupRoles(roleSource)
+    local roles = {}
+    for _, roleKey in ipairs(quickSignupState.roleOrder) do
+        roles[roleKey] = roleSource and roleSource[roleKey] == true or false
+    end
+    return roles
+end
+
+local function GetQueueRoleButton(roleKey, framePrefix)
+    local suffixByRole = {
+        TANK = "Tank",
+        HEALER = "Healer",
+        DAMAGER = "DPS",
+    }
+
+    local suffix = suffixByRole[roleKey]
+    if not suffix or not framePrefix then
+        return nil
+    end
+
+    return _G[framePrefix .. "RoleButton" .. suffix]
+end
+
+local function GetAllQueueRoleButtons()
+    local buttons = {}
+    for _, framePrefix in ipairs({ "LFDQueueFrame", "RaidFinderQueueFrame" }) do
+        for _, roleKey in ipairs(quickSignupState.roleOrder) do
+            local button = GetQueueRoleButton(roleKey, framePrefix)
+            if button then
+                buttons[#buttons + 1] = button
+            end
+        end
+    end
+    return buttons
+end
+
+local function ReadQueueRolesFromAPI()
+    if type(GetLFGRoles) ~= "function" then
+        return nil
+    end
+
+    local ok, a, b, c, d = pcall(GetLFGRoles)
+    if not ok then
+        return nil
+    end
+
+    if type(d) == "boolean" then
+        return {
+            TANK = b == true,
+            HEALER = c == true,
+            DAMAGER = d == true,
+        }
+    end
+
+    if type(a) == "boolean" or type(b) == "boolean" or type(c) == "boolean" then
+        return {
+            TANK = a == true,
+            HEALER = b == true,
+            DAMAGER = c == true,
+        }
+    end
+
+    return nil
+end
+
+local function ReadQueueRolesFromButtons()
+    local roles = {
+        TANK = false,
+        HEALER = false,
+        DAMAGER = false,
+    }
+    local foundAny = false
+
+    for _, framePrefix in ipairs({ "LFDQueueFrame", "RaidFinderQueueFrame" }) do
+        for _, roleKey in ipairs(quickSignupState.roleOrder) do
+            local button = GetQueueRoleButton(roleKey, framePrefix)
+            local toggleButton = button and (button.checkButton or button.CheckButton or button)
+            if toggleButton and toggleButton.GetChecked then
+                local ok, isChecked = pcall(toggleButton.GetChecked, toggleButton)
+                if ok then
+                    roles[roleKey] = roles[roleKey] or isChecked == true
+                    foundAny = true
+                end
+            end
+        end
+    end
+
+    if not foundAny then
+        return nil
+    end
+
+    return roles
+end
+
+local function ReadCurrentQueueRoles()
+    return ReadQueueRolesFromAPI() or ReadQueueRolesFromButtons()
+end
+
+local function WriteQueueRolesWithAPI(roleSettings)
+    if type(SetLFGRoles) ~= "function" then
+        return false
+    end
+
+    local ok = pcall(SetLFGRoles, roleSettings.TANK == true, roleSettings.HEALER == true, roleSettings.DAMAGER == true)
+    return ok == true
+end
+
+local function SetQueueRoleButtonState(button, shouldEnable)
+    if not button then
+        return
+    end
+
+    local toggleButton = button.checkButton or button.CheckButton or button
+    local isChecked = false
+    if toggleButton.GetChecked then
+        local ok, value = pcall(toggleButton.GetChecked, toggleButton)
+        isChecked = ok and value and true or false
+    end
+
+    if isChecked ~= shouldEnable and toggleButton.Click then
+        pcall(toggleButton.Click, toggleButton)
+    elseif toggleButton.SetChecked then
+        pcall(toggleButton.SetChecked, toggleButton, shouldEnable)
+    end
+end
+
+local function WriteQueueRolesToButtons(roleSettings)
+    local foundAny = false
+    for _, framePrefix in ipairs({ "LFDQueueFrame", "RaidFinderQueueFrame" }) do
+        for _, roleKey in ipairs(quickSignupState.roleOrder) do
+            local button = GetQueueRoleButton(roleKey, framePrefix)
+            if button then
+                SetQueueRoleButtonState(button, roleSettings[roleKey] == true)
+                foundAny = true
+            end
+        end
+    end
+    return foundAny
+end
+
+local function SyncQueueRoleSelectorsFromOakRoles()
+    local roleSettings = CopyQuickSignupRoles(GetSavedQuickSignupRoles())
+    local availableRoles = GetPlayerQuickSignupCapabilities()
+
+    for _, roleKey in ipairs(quickSignupState.roleOrder) do
+        if not availableRoles[roleKey] then
+            roleSettings[roleKey] = false
+        end
+    end
+
+    local hasEnabledRole = false
+    for _, roleKey in ipairs(quickSignupState.roleOrder) do
+        if roleSettings[roleKey] then
+            hasEnabledRole = true
+            break
+        end
+    end
+
+    if not hasEnabledRole then
+        roleSettings = CopyQuickSignupRoles(GetDefaultQuickSignupRoles())
+    end
+
+    local wroteViaAPI = WriteQueueRolesWithAPI(roleSettings)
+    local wroteViaButtons = WriteQueueRolesToButtons(roleSettings)
+    return wroteViaAPI or wroteViaButtons
+end
+
+local function SyncOakRolesFromQueueSelectors()
+    local queueRoles = ReadCurrentQueueRoles()
+    if not queueRoles then
+        return false
+    end
+
+    local availableRoles = GetPlayerQuickSignupCapabilities()
+    local normalized = {
+        TANK = availableRoles.TANK == true and queueRoles.TANK == true or false,
+        HEALER = availableRoles.HEALER == true and queueRoles.HEALER == true or false,
+        DAMAGER = availableRoles.DAMAGER == true and queueRoles.DAMAGER == true or false,
+    }
+
+    local hasEnabledRole = false
+    for _, roleKey in ipairs(quickSignupState.roleOrder) do
+        if normalized[roleKey] then
+            hasEnabledRole = true
+            break
+        end
+    end
+
+    if not hasEnabledRole then
+        normalized = CopyQuickSignupRoles(GetDefaultQuickSignupRoles())
+    end
+
+    local savedRoles = GetSavedQuickSignupRoles()
+    local changed = false
+    for _, roleKey in ipairs(quickSignupState.roleOrder) do
+        local shouldEnable = normalized[roleKey] == true
+        if savedRoles[roleKey] ~= shouldEnable then
+            savedRoles[roleKey] = shouldEnable
+            changed = true
+        end
+    end
+
+    return changed
 end
 
 local function ApplyQuickSignupDirect(searchResultID)
@@ -402,7 +609,7 @@ local function CreateQuickSignupRoleButton(parent, roleKey, tooltipText)
     btn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText(tooltipText, 1, 1, 1)
-        GameTooltip:AddLine("These buttons control the roles Oak uses for Quick Sign Up and the roles Oak preselects in the normal Blizzard popup.", 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine("These buttons control the roles Oak uses for Quick Sign Up, the roles Oak preselects in the Blizzard popup, and your Dungeon Finder / Raid Finder role selectors.", 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function()
@@ -504,6 +711,8 @@ persistNoteToggleBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
 persistNoteTooltipRegion:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 function addonTable.UpdateSearchQuickSignupControls()
+    EnsureQueueRoleSelectorHooks()
+
     if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
         quickSignupBar:Show()
     end
@@ -698,6 +907,43 @@ local function FallbackShowSignupDialog(searchResultID)
     return false
 end
 
+local function HandleQueueRoleSelectorChanged()
+    local changed = SyncOakRolesFromQueueSelectors()
+    if changed then
+        addonTable.UpdateSearchQuickSignupControls()
+        ApplySavedRolesToVisibleDialog()
+    end
+end
+
+local function HookQueueRoleSelector(button)
+    if not button or button.OakQuickSignupRoleSyncHooked then
+        return
+    end
+
+    button:HookScript("OnClick", HandleQueueRoleSelectorChanged)
+    button.OakQuickSignupRoleSyncHooked = true
+end
+
+EnsureQueueRoleSelectorHooks = function()
+    for _, button in ipairs(GetAllQueueRoleButtons()) do
+        HookQueueRoleSelector(button)
+    end
+
+    if LFDQueueFrame and not LFDQueueFrame.OakQuickSignupRoleSyncHooked then
+        LFDQueueFrame:HookScript("OnShow", function()
+            HandleQueueRoleSelectorChanged()
+        end)
+        LFDQueueFrame.OakQuickSignupRoleSyncHooked = true
+    end
+
+    if RaidFinderQueueFrame and not RaidFinderQueueFrame.OakQuickSignupRoleSyncHooked then
+        RaidFinderQueueFrame:HookScript("OnShow", function()
+            HandleQueueRoleSelectorChanged()
+        end)
+        RaidFinderQueueFrame.OakQuickSignupRoleSyncHooked = true
+    end
+end
+
 quickSignupToggleBox:SetScript("OnClick", function(self)
     OakLFGSorterDB.searchQuickSignup = not OakLFGSorterDB.searchQuickSignup
     self:SetState(OakLFGSorterDB.searchQuickSignup)
@@ -743,11 +989,13 @@ for _, roleKey in ipairs(quickSignupState.roleOrder) do
         roleSettings[self.roleKey] = not roleSettings[self.roleKey]
         addonTable.UpdateSearchQuickSignupControls()
         ApplySavedRolesToVisibleDialog()
+        SyncQueueRoleSelectorsFromOakRoles()
     end)
 end
 
 function addonTable.EnsureSearchSignupHooks()
     UpdatePersistentNotePatch()
+    EnsureQueueRoleSelectorHooks()
 
     if not LFGListApplicationDialog or LFGListApplicationDialog.OakQuickSignupHooked then
         if LFGListFrame and LFGListFrame.ApplicationViewer and not LFGListFrame.ApplicationViewer.OakRaiseAboveHooked then

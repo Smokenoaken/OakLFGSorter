@@ -55,8 +55,117 @@ local function NormalizeRealmToken(text)
     return value
 end
 
+local function NormalizeGroupfinderFlagsRealm(text)
+    local value = tostring(text or "")
+    value = value:gsub("[%s%-]", "")
+    return value
+end
+
+local FLAG_ICON_SIZE = ":9:15|t"
+local FLAG_IMAGE_PATH = "|TInterface\\AddOns\\GroupfinderFlags\\flag_icons\\"
+local FLAG_KEYS = {
+    german = "german" .. FLAG_ICON_SIZE,
+    british = "british" .. FLAG_ICON_SIZE,
+    portuguese = "portuguese" .. FLAG_ICON_SIZE,
+    russian = "russian" .. FLAG_ICON_SIZE,
+    french = "french" .. FLAG_ICON_SIZE,
+    spanish = "spanish" .. FLAG_ICON_SIZE,
+    italian = "italian" .. FLAG_ICON_SIZE,
+    american = "american" .. FLAG_ICON_SIZE,
+    brazilian = "brazilian" .. FLAG_ICON_SIZE,
+    oceanic = "oceanic" .. FLAG_ICON_SIZE,
+    mexican = "mexican" .. FLAG_ICON_SIZE,
+}
+
+local function IsGroupfinderFlagsLoaded()
+    if C_AddOns and C_AddOns.IsAddOnLoaded then
+        return C_AddOns.IsAddOnLoaded("GroupfinderFlags")
+    end
+    if IsAddOnLoaded then
+        return IsAddOnLoaded("GroupfinderFlags")
+    end
+    return false
+end
+
+local function GetGroupfinderFlagsRealmTable(regionInfo)
+    if not IsGroupfinderFlagsLoaded() or type(GroupfinderFlags) ~= "table" then
+        return nil
+    end
+
+    local code = type(regionInfo) == "table" and tostring(regionInfo.code or "") or ""
+    if code == "EU" then
+        return GroupfinderFlags.EU_REALM_LANGUAGES
+    elseif code == "NA" or code == "OCE" or code == "LATAM" or code == "BR" then
+        return GroupfinderFlags.US_REALM_LANGUAGES
+    end
+
+    return nil
+end
+
+local function GetFlagKeyForRegionInfo(regionInfo)
+    if type(regionInfo) ~= "table" then
+        return nil
+    end
+
+    local realmName = tostring(regionInfo.realm or "")
+    if realmName == "" then
+        return nil
+    end
+
+    local realmTable = GetGroupfinderFlagsRealmTable(regionInfo)
+    if type(realmTable) ~= "table" then
+        return nil
+    end
+
+    local flagKey = realmTable[realmName] or realmTable[NormalizeGroupfinderFlagsRealm(realmName)]
+    if flagKey and FLAG_KEYS[flagKey] then
+        return flagKey
+    end
+
+    return nil
+end
+
+function addonTable.GetRegionSortKey(regionInfo)
+    if type(regionInfo) ~= "table" then
+        return "zzz_other"
+    end
+
+    if addonTable.ShouldShowRegionFlags and addonTable.ShouldShowRegionFlags() then
+        local flagKey = GetFlagKeyForRegionInfo(regionInfo)
+        if flagKey then
+            return "flag_" .. flagKey
+        end
+    end
+
+    local code = tostring(regionInfo.code or "OTHER")
+    local order = {
+        NA = "region_1_na",
+        OCE = "region_2_oce",
+        LATAM = "region_3_latam",
+        BR = "region_4_br",
+        EU = "region_5_eu",
+        OTHER = "region_6_other",
+    }
+    return order[code] or ("region_9_" .. strlower(code))
+end
+
 local function GetRealmFromLeaderName(leaderName)
-    local _, realmName = strsplit("-", tostring(leaderName or ""))
+    local fullName = tostring(leaderName or "")
+    if fullName ~= "" and Ambiguate then
+        local shortName = Ambiguate(fullName, "short")
+        local mailName = Ambiguate(fullName, "mail")
+        if shortName and mailName and shortName ~= "" and mailName ~= "" then
+            if shortName == mailName then
+                if GetRealmName then
+                    return GetRealmName() or ""
+                end
+            elseif mailName:sub(1, #shortName + 1) == shortName .. "-" then
+                return mailName:sub(#shortName + 2)
+            end
+        end
+    end
+
+    local _, realmName = strsplit("-", fullName)
     if realmName and realmName ~= "" then
         return realmName
     end
@@ -112,6 +221,14 @@ end
 
 function addonTable.ShouldShowRegions()
     return OakLFGSorterDB and OakLFGSorterDB.showRegions == true
+end
+
+function addonTable.CanShowRegionFlags()
+    return IsGroupfinderFlagsLoaded() and type(GroupfinderFlags) == "table"
+end
+
+function addonTable.ShouldShowRegionFlags()
+    return addonTable.ShouldShowRegions() and OakLFGSorterDB and OakLFGSorterDB.showRegionFlags == true and addonTable.CanShowRegionFlags()
 end
 
 function addonTable.GetRegionFilterOrder()
@@ -284,6 +401,13 @@ end
 function addonTable.GetRegionBadgeMarkup(regionInfo)
     if not (addonTable.ShouldShowRegions() and type(regionInfo) == "table") then
         return ""
+    end
+
+    if addonTable.ShouldShowRegionFlags() then
+        local flagKey = GetFlagKeyForRegionInfo(regionInfo)
+        if flagKey then
+            return FLAG_IMAGE_PATH .. FLAG_KEYS[flagKey]
+        end
     end
 
     local color = regionInfo.color or REGION_COLORS.OTHER

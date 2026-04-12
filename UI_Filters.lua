@@ -12,12 +12,16 @@ local browserActivityButtons = {}
 local BrowserFilterState
 local SyncVisibleBrowserActivityButtonStates
 local browserMinRatingBox
-local BROWSER_FILTER_VERSION = 7
+local BROWSER_FILTER_VERSION = 8
 local GetPartyRoleSupply
 local ROLE_REMAINING_KEYS = {
     TANK = "TANK_REMAINING",
     HEALER = "HEALER_REMAINING",
     DAMAGER = "DAMAGER_REMAINING",
+}
+addonTable.UtilityRoleOptions = addonTable.UtilityRoleOptions or {
+    LUST = { HEALER = true, DAMAGER = true },
+    BREZ = { TANK = true, HEALER = true, DAMAGER = true },
 }
 local applicantRegionToggleBox
 local applicantRegionToggleLabel
@@ -175,6 +179,41 @@ GetPartyRoleSupply = function()
     end
 
     return counts, total
+end
+
+function addonTable.GetPartyUtilityCoverage()
+    local hasLust = false
+    local hasBrez = false
+    local seenUnits = {}
+
+    local function scanUnit(unit)
+        if not unit or seenUnits[unit] or not UnitExists(unit) then
+            return
+        end
+        seenUnits[unit] = true
+
+        local _, classToken = UnitClass(unit)
+        if addonTable.ClassProvidesLust and addonTable.ClassProvidesLust(classToken) then
+            hasLust = true
+        end
+        if addonTable.ClassProvidesBrez and addonTable.ClassProvidesBrez(classToken) then
+            hasBrez = true
+        end
+    end
+
+    scanUnit("player")
+
+    if IsInGroup() then
+        local total = GetNumGroupMembers()
+        for i = 1, total do
+            local unit = IsInRaid() and ("raid" .. i) or ("party" .. i)
+            if UnitExists(unit) and not UnitIsUnit(unit, "player") then
+                scanUnit(unit)
+            end
+        end
+    end
+
+    return hasLust, hasBrez
 end
 
 local function ResultMatchesSelectedActivities(result, filters, runtime)
@@ -586,10 +625,16 @@ function addonTable.ResultPassesBrowserFilters(result)
     if filters.partyFit and not ResultMatchesPartyFit(result, runtime) then
         return false
     end
-    if filters.needsLust and result.hasLust then
+    if filters.needsLust and not addonTable.ResultCanStillSolveMissingUtility(result, runtime, "LUST") then
         return false
     end
-    if filters.needsBrez and result.hasBrez then
+    if filters.needsBrez and not addonTable.ResultCanStillSolveMissingUtility(result, runtime, "BREZ") then
+        return false
+    end
+    if filters.hasLust and not addonTable.ResultWillHaveUtilityAfterParty(result, runtime, "LUST") then
+        return false
+    end
+    if filters.hasBrez and not addonTable.ResultWillHaveUtilityAfterParty(result, runtime, "BREZ") then
         return false
     end
     if not ResultMatchesRaidBossCount(result, filters) then return false end
@@ -597,6 +642,121 @@ function addonTable.ResultPassesBrowserFilters(result)
     if not ResultMatchesRaidLockout(result, filters) then return false end
 
     return true
+end
+
+function addonTable.ResultHasOpenUtilityPathAfterParty(result, runtime, utilityType)
+    local partyRoles = runtime and runtime.partyRoles
+    local partySize = runtime and runtime.partySize
+    if not partyRoles or not partySize then
+        partyRoles, partySize = GetPartyRoleSupply()
+    end
+
+    local maxPlayers = tonumber(result.maxPlayers)
+    if not maxPlayers or maxPlayers <= 0 then
+        maxPlayers = result.activityInfo and tonumber(result.activityInfo.maxNumPlayers or result.activityInfo.maxPlayers) or 0
+    end
+
+    local memberTotal = tonumber(result.numMembers) or 0
+    if maxPlayers > 0 and memberTotal + partySize >= maxPlayers then
+        return false
+    end
+
+    local utilityRoles = addonTable.UtilityRoleOptions and addonTable.UtilityRoleOptions[utilityType]
+    if not utilityRoles then
+        return false
+    end
+
+    if type(result.memberCounts) == "table" then
+        local hadRemainingData = false
+        for role in pairs(utilityRoles) do
+            local remaining = GetResultRemainingRoleCount(result, role)
+            if remaining ~= nil then
+                hadRemainingData = true
+                if (remaining - (partyRoles[role] or 0)) > 0 then
+                    return true
+                end
+            end
+        end
+
+        if hadRemainingData then
+            return false
+        end
+    end
+
+    if maxPlayers == 5 then
+        local targets = { TANK = 1, HEALER = 1, DAMAGER = 3 }
+        local roleCounts = result.roleCounts or {}
+        for role in pairs(utilityRoles) do
+            local openAfterParty = math.max(0, (targets[role] or 0) - (roleCounts[role] or 0) - (partyRoles[role] or 0))
+            if openAfterParty > 0 then
+                return true
+            end
+        end
+        return false
+    end
+
+    return maxPlayers <= 0 or (memberTotal + partySize) < maxPlayers
+end
+
+function addonTable.ResultWillHaveUtilityAfterParty(result, runtime, utilityType)
+    if type(result) ~= "table" then
+        return false
+    end
+
+    if addonTable.DoesResultFitCurrentParty and not addonTable.DoesResultFitCurrentParty(result) then
+        return false
+    end
+
+    if utilityType == "LUST" and result.hasLust then
+        return true
+    end
+    if utilityType == "BREZ" and result.hasBrez then
+        return true
+    end
+
+    local partyHasLust = runtime and runtime.partyHasLust
+    local partyHasBrez = runtime and runtime.partyHasBrez
+    if partyHasLust == nil or partyHasBrez == nil then
+        partyHasLust, partyHasBrez = addonTable.GetPartyUtilityCoverage()
+    end
+
+    if utilityType == "LUST" then
+        return partyHasLust == true
+    end
+
+    return partyHasBrez == true
+end
+
+function addonTable.ResultCanStillSolveMissingUtility(result, runtime, utilityType)
+    if type(result) ~= "table" then
+        return false
+    end
+
+    if utilityType == "LUST" and result.hasLust then
+        return false
+    end
+    if utilityType == "BREZ" and result.hasBrez then
+        return false
+    end
+
+    if addonTable.DoesResultFitCurrentParty and not addonTable.DoesResultFitCurrentParty(result) then
+        return false
+    end
+
+    local partyHasLust = runtime and runtime.partyHasLust
+    local partyHasBrez = runtime and runtime.partyHasBrez
+    if partyHasLust == nil or partyHasBrez == nil then
+        partyHasLust, partyHasBrez = addonTable.GetPartyUtilityCoverage()
+    end
+
+    if utilityType == "LUST" and partyHasLust then
+        return true
+    end
+    if utilityType == "BREZ" and partyHasBrez then
+        return true
+    end
+
+    return addonTable.ResultHasOpenUtilityPathAfterParty(result, runtime, utilityType)
 end
 
 function addonTable.BuildBrowserRuntimeFilters()
@@ -607,6 +767,8 @@ function addonTable.BuildBrowserRuntimeFilters()
         minRating = nil,
         partyRoles = nil,
         partySize = nil,
+        partyHasLust = nil,
+        partyHasBrez = nil,
     }
 
     if type(filters.selectedActivities) == "table" then
@@ -628,6 +790,13 @@ function addonTable.BuildBrowserRuntimeFilters()
 
     if filters.partyFit then
         runtime.partyRoles, runtime.partySize = GetPartyRoleSupply()
+    end
+
+    if filters.partyFit or filters.needsLust or filters.needsBrez or filters.hasLust or filters.hasBrez then
+        if not runtime.partyRoles or not runtime.partySize then
+            runtime.partyRoles, runtime.partySize = GetPartyRoleSupply()
+        end
+        runtime.partyHasLust, runtime.partyHasBrez = addonTable.GetPartyUtilityCoverage()
     end
 
     return runtime
@@ -851,6 +1020,17 @@ local function ShowRegionToggleTooltip(owner)
     GameTooltip:Show()
 end
 
+function addonTable.ShowRegionFlagsToggleTooltip(owner)
+    GameTooltip:SetOwner(owner, "ANCHOR_TOP")
+    GameTooltip:SetText("Region Flags", 1, 1, 1)
+    if addonTable.CanShowRegionFlags and addonTable.CanShowRegionFlags() then
+        GameTooltip:AddLine("Show country-style flags instead of Oak's region tags. This uses realm lookup data provided by GroupfinderFlags when that addon is installed and enabled.", 1, 1, 1, true)
+    else
+        GameTooltip:AddLine("Requires the GroupfinderFlags addon to be installed and enabled. Oak will continue showing region tags without it.", 1, 1, 1, true)
+    end
+    GameTooltip:Show()
+end
+
 local function ShowLowLatencyToggleTooltip(owner)
     GameTooltip:SetOwner(owner, "ANCHOR_TOP")
     GameTooltip:SetText("Region Filters", 1, 1, 1)
@@ -1011,6 +1191,27 @@ local function ResetOakBrowserCategoryFilters()
         if raidRangeRows and raidRangeRows[key] and raidRangeRows[key].box then
             raidRangeRows[key].box:SetText("")
         end
+    end
+end
+
+function addonTable.ToggleSharedRegionFlagsSetting()
+    if not (addonTable.CanShowRegionFlags and addonTable.CanShowRegionFlags()) then
+        OakLFGSorterDB.showRegionFlags = false
+    else
+        OakLFGSorterDB.showRegionFlags = not (OakLFGSorterDB and OakLFGSorterDB.showRegionFlags == true)
+    end
+
+    if addonTable.RefreshOptionsPanel then
+        addonTable.RefreshOptionsPanel()
+    end
+    if addonTable.RefreshSearchOptionsPanel then
+        addonTable.RefreshSearchOptionsPanel()
+    end
+    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH.UpdateDisplay then
+        addonTable.OAK_SEARCH:UpdateDisplay()
+    end
+    if addonTable.UpdateDisplay then
+        addonTable.UpdateDisplay()
     end
 end
 
@@ -1550,6 +1751,8 @@ function BrowserFilterState()
             partyFit = false,
             needsLust = false,
             needsBrez = false,
+            hasLust = false,
+            hasBrez = false,
             hideDeclined = false,
             raidBossesMin = "ANY",
             matchMyRaidLockout = false,
@@ -1566,6 +1769,8 @@ function BrowserFilterState()
     if f.raidHealers   == nil then f.raidHealers   = "" end
     if f.raidDps       == nil then f.raidDps       = "" end
     if f.bountifulOnly == nil then f.bountifulOnly = false end
+    if f.hasLust       == nil then f.hasLust       = false end
+    if f.hasBrez       == nil then f.hasBrez       = false end
     local filters = OakLFGSorterDB.browserFilters
     filters.version = BROWSER_FILTER_VERSION
 
@@ -1938,10 +2143,34 @@ local browserToggleKeys = {
     { key = "needsDPS",    label = "Need Damage",  column = 1 },
     -- column 2 of needsDPS row = "No [class]" handled separately below
     { key = "partyFit",    label = "Party Fit",    column = 1 },
-    { key = "needsLust",   label = "Need Lust",    column = 2 },
+    { key = "hasLust",     label = "Has Lust",     column = 2 },
     { key = "needsBrez",   label = "Need BRez",    column = 1 },
+    { key = "hasBrez",     label = "Has BRez",     column = 2 },
+    { key = "needsLust",   label = "Need Lust",    column = 1 },
     { key = "hideDeclined",label = "Hide Declined",column = 2 },
     { key = "matchMyRaidLockout", label = "Match My Lockout", column = 1, span = 2, raidOnly = true },
+}
+local browserToggleTooltips = {
+    needsLust = {
+        title = "Need Lust",
+        body = "Shows groups that do not currently have Lust, but are still reasonable for your current party to join.",
+        detail = "If your current party already brings Lust, those groups still pass. If your party does not bring Lust, Oak only keeps groups that still have room for a Lust-capable class after your party joins.",
+    },
+    hasLust = {
+        title = "Has Lust",
+        body = "Shows groups that will have Lust once your current party joins.",
+        detail = "A group passes if it already has Lust or your current party brings Lust and the party can actually fit into the group.",
+    },
+    needsBrez = {
+        title = "Need BRez",
+        body = "Shows groups that do not currently have a battle resurrection, but are still reasonable for your current party to join.",
+        detail = "If your current party already brings BRez, those groups still pass. If your party does not bring BRez, Oak only keeps groups that still have room for a BRez-capable class after your party joins.",
+    },
+    hasBrez = {
+        title = "Has BRez",
+        body = "Shows groups that will have a battle resurrection once your current party joins.",
+        detail = "A group passes if it already has BRez or your current party brings BRez and the party can actually fit into the group.",
+    },
 }
 
 local browserToggleRows = {}
@@ -1951,6 +2180,34 @@ for _, toggleInfo in ipairs(browserToggleKeys) do
     browserToggleRows[toggleInfo.key] = { box = box, text = text, label = toggleInfo.label }
     text:SetPoint("LEFT", box, "RIGHT", 6, 0)
     text:SetText(toggleInfo.label)
+
+    local tooltipInfo = browserToggleTooltips[toggleInfo.key]
+    if tooltipInfo then
+        local function ShowBrowserToggleTooltip(self)
+            if self.SetBackdropBorderColor then
+                self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            end
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(tooltipInfo.title, 1, 1, 1)
+            GameTooltip:AddLine(tooltipInfo.body, 1, 1, 1, true)
+            if tooltipInfo.detail and tooltipInfo.detail ~= "" then
+                GameTooltip:AddLine(tooltipInfo.detail, 0.85, 0.85, 0.85, true)
+            end
+            GameTooltip:Show()
+        end
+
+        local function HideBrowserToggleTooltip(self)
+            if self.SetBackdropBorderColor then
+                self:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
+            end
+            GameTooltip:Hide()
+        end
+
+        box:SetScript("OnEnter", ShowBrowserToggleTooltip)
+        box:SetScript("OnLeave", HideBrowserToggleTooltip)
+        text:SetScript("OnEnter", function() ShowBrowserToggleTooltip(box) end)
+        text:SetScript("OnLeave", function() HideBrowserToggleTooltip(box) end)
+    end
 end
 
 -- Override OnClick for the 5 native-backed role toggles so they write directly to
@@ -2188,7 +2445,8 @@ browserResetBtn:SetScript("OnClick", function()
     filters.playstyle  = "ANY"
     filters.keyMin = ""; filters.keyMax = ""
     filters.partyFit = false; filters.needsLust = false
-    filters.needsBrez = false; filters.hideDeclined = false
+    filters.needsBrez = false; filters.hasLust = false
+    filters.hasBrez = false; filters.hideDeclined = false
     filters.raidBossesMin = "ANY"; filters.matchMyRaidLockout = false; filters.bountifulOnly = false
     filters.raidBossKills = ""; filters.raidTanks = ""
     filters.raidHealers = ""; filters.raidDps = ""
@@ -2895,15 +3153,27 @@ function addonTable.UpdateBrowserFilterPanel()
             y = y - ROW_H
         end
 
-        -- Row 6: Need BRez | Need Lust
+        -- Row 6: Need BRez | Has BRez
         do
             local r1 = browserToggleRows["needsBrez"]
-            local r2 = browserToggleRows["needsLust"]
+            local r2 = browserToggleRows["hasBrez"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
             r1.box:SetState(filters.needsBrez == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
 
             r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-            r2.box:SetState(filters.needsLust == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            r2.box:SetState(filters.hasBrez == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            y = y - ROW_H
+        end
+
+        -- Row 7: Need Lust | Has Lust
+        do
+            local r1 = browserToggleRows["needsLust"]
+            local r2 = browserToggleRows["hasLust"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(filters.needsLust == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+
+            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            r2.box:SetState(filters.hasLust == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
             y = y - ROW_H
         end
 
@@ -3140,10 +3410,20 @@ optionsRegionBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
+addonTable.OptionsRegionFlagsBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
+addonTable.OptionsRegionFlagsBox:SetSize(16, 16)
+addonTable.OptionsRegionFlagsBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+addonTable.OptionsRegionFlagsBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 33, -64)
+addonTable.OptionsRegionFlagsLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+addonTable.OptionsRegionFlagsLabel:SetPoint("LEFT", addonTable.OptionsRegionFlagsBox, "RIGHT", 8, 0)
+addonTable.OptionsRegionFlagsLabel:SetText("Show Flags Instead of Tags")
+addonTable.OptionsRegionFlagsBox:Hide()
+addonTable.OptionsRegionFlagsLabel:Hide()
+
 local optionsSpecBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
 optionsSpecBox:SetSize(16, 16)
 optionsSpecBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-optionsSpecBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -64)
+optionsSpecBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -86)
 local optionsSpecLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 optionsSpecLabel:SetPoint("LEFT", optionsSpecBox, "RIGHT", 8, 0)
 optionsSpecLabel:SetText(L["Show Spec Icons"])
@@ -3151,7 +3431,7 @@ optionsSpecLabel:SetText(L["Show Spec Icons"])
 local optionsMinimapBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
 optionsMinimapBox:SetSize(16, 16)
 optionsMinimapBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-optionsMinimapBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -86)
+optionsMinimapBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -108)
 local optionsMinimapLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 optionsMinimapLabel:SetPoint("LEFT", optionsMinimapBox, "RIGHT", 8, 0)
 optionsMinimapLabel:SetText(L["Show Minimap Button"])
@@ -3159,7 +3439,7 @@ optionsMinimapLabel:SetText(L["Show Minimap Button"])
 local optionsPartyKeysBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
 optionsPartyKeysBox:SetSize(16, 16)
 optionsPartyKeysBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-optionsPartyKeysBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -108)
+optionsPartyKeysBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -130)
 local optionsPartyKeysLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 optionsPartyKeysLabel:SetPoint("LEFT", optionsPartyKeysBox, "RIGHT", 8, 0)
 optionsPartyKeysLabel:SetText("Show Party Keys")
@@ -3168,7 +3448,7 @@ do
     local BROWSER_BINDING_COMMAND = "OAKLFGSORTER_TOGGLEBROWSER"
     local browserBindingCaptureActive = false
     local optionsKeybindLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    optionsKeybindLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -132)
+    optionsKeybindLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -154)
     optionsKeybindLabel:SetText("Browser Keybind")
 
     local optionsKeybindValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
@@ -3402,6 +3682,18 @@ optionsSpecBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
+addonTable.OptionsRegionFlagsBox:SetScript("OnClick", addonTable.ToggleSharedRegionFlagsSetting)
+addonTable.OptionsRegionFlagsBox:SetScript("OnEnter", function(self)
+    local isActive = OakLFGSorterDB.showRegions == true and OakLFGSorterDB.showRegionFlags == true and addonTable.CanShowRegionFlags and addonTable.CanShowRegionFlags()
+    ApplySharedRegionToggleVisual(self, addonTable.OptionsRegionFlagsLabel, isActive)
+    addonTable.ShowRegionFlagsToggleTooltip(self)
+end)
+addonTable.OptionsRegionFlagsBox:SetScript("OnLeave", function()
+    local isActive = OakLFGSorterDB.showRegions == true and OakLFGSorterDB.showRegionFlags == true and addonTable.CanShowRegionFlags and addonTable.CanShowRegionFlags()
+    ApplySharedRegionToggleVisual(addonTable.OptionsRegionFlagsBox, addonTable.OptionsRegionFlagsLabel, isActive)
+    GameTooltip:Hide()
+end)
+
 optionsMinimapBox:SetScript("OnClick", function()
     OakLFGSorterDB.hideMinimapButton = not OakLFGSorterDB.hideMinimapButton
     if addonTable.UpdateMinimapButtonVisibility then
@@ -3445,10 +3737,10 @@ optionsStyleButton, optionsStyleList = addonTable.CreateThemeStyleDropdown(optio
 optionsStyleButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -208)
 
 local optionsThemeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsThemeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -240)
+optionsThemeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -262)
 optionsThemeLabel:SetText("Accent")
 optionsThemeButton, optionsThemeList = addonTable.CreateThemeDropdown(optionsPanel, 112)
-optionsThemeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -258)
+optionsThemeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -280)
 
 optionsThemeColorButton = addonTable.CreateFlatButton(optionsPanel, "Color", 52)
 optionsThemeColorButton:SetPoint("LEFT", optionsThemeButton, "RIGHT", 6, 0)
@@ -3477,7 +3769,7 @@ optionsThemeColorButton:SetScript("OnLeave", function(self)
 end)
 
 local optionsRegionFilterLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -268)
+optionsRegionFilterLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -290)
 optionsRegionFilterLabel:SetText("Filter Regions")
 
 local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
@@ -3510,27 +3802,27 @@ local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
     regionFilterLabels[regionCode] = label
 end
 
-CreateRegionFilterOption(optionsPanel, "NA", 15, -288)
-CreateRegionFilterOption(optionsPanel, "OCE", 105, -288)
-CreateRegionFilterOption(optionsPanel, "LATAM", 15, -310)
-CreateRegionFilterOption(optionsPanel, "BR", 105, -310)
-CreateRegionFilterOption(optionsPanel, "EU", 15, -332)
-CreateRegionFilterOption(optionsPanel, "OTHER", 105, -332)
+CreateRegionFilterOption(optionsPanel, "NA", 15, -310)
+CreateRegionFilterOption(optionsPanel, "OCE", 105, -310)
+CreateRegionFilterOption(optionsPanel, "LATAM", 15, -332)
+CreateRegionFilterOption(optionsPanel, "BR", 105, -332)
+CreateRegionFilterOption(optionsPanel, "EU", 15, -354)
+CreateRegionFilterOption(optionsPanel, "OTHER", 105, -354)
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -362)
+optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -384)
 optionsFontLabel:SetText(L["Addon Font"])
 local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
-optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -380)
+optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -402)
 
 local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -412)
+optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -434)
 optionsFontSizeLabel:SetText(L["Font Size"])
 local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -412)
+optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -434)
 
 local optionsFontSizeSlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsFontSizeSlider:SetSize(170, 10)
-optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -430)
+optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -452)
 optionsFontSizeSlider:SetMinMaxValues(10, 18)
 optionsFontSizeSlider:SetValueStep(1)
 optionsFontSizeSlider:SetObeyStepOnDrag(true)
@@ -3576,14 +3868,14 @@ end)
 optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
 
 local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -462)
+optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -484)
 optionsOpacityLabel:SetText("Window Opacity")
 local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -462)
+optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -484)
 
 local optionsOpacitySlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsOpacitySlider:SetSize(170, 10)
-optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -480)
+optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -502)
 optionsOpacitySlider:SetMinMaxValues(0.35, 1.0)
 optionsOpacitySlider:SetValueStep(0.05)
 optionsOpacitySlider:SetObeyStepOnDrag(true)
@@ -3629,6 +3921,23 @@ optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWind
 
 local function RefreshOptionsPanel()
     ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
+    do
+        local canShowFlags = addonTable.CanShowRegionFlags and addonTable.CanShowRegionFlags()
+        local showFlagsToggle = OakLFGSorterDB.showRegions == true and canShowFlags
+        local isFlagsActive = showFlagsToggle and OakLFGSorterDB.showRegionFlags == true
+        ApplySharedRegionToggleVisual(addonTable.OptionsRegionFlagsBox, addonTable.OptionsRegionFlagsLabel, isFlagsActive)
+        if showFlagsToggle then
+            addonTable.OptionsRegionFlagsBox:Show()
+            addonTable.OptionsRegionFlagsLabel:Show()
+            addonTable.OptionsRegionFlagsLabel:SetAlpha(1)
+        else
+            addonTable.OptionsRegionFlagsBox:Hide()
+            addonTable.OptionsRegionFlagsLabel:Hide()
+            if not canShowFlags then
+                OakLFGSorterDB.showRegionFlags = false
+            end
+        end
+    end
     ApplySpecToggleVisual(optionsSpecBox, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
     ApplyMinimapToggleVisual(optionsMinimapBox, optionsMinimapLabel, not (OakLFGSorterDB and OakLFGSorterDB.hideMinimapButton == true))
     ApplyMinimapToggleVisual(optionsPartyKeysBox, optionsPartyKeysLabel, OakLFGSorterDB.showPartyKeys == true)
@@ -3683,9 +3992,9 @@ end
 
 addonTable.RefreshOptionsPanel = RefreshOptionsPanel
 
-local optionsBindingsEventFrame = CreateFrame("Frame")
-optionsBindingsEventFrame:RegisterEvent("UPDATE_BINDINGS")
-optionsBindingsEventFrame:SetScript("OnEvent", function()
+addonTable.OptionsBindingsEventFrame = CreateFrame("Frame")
+addonTable.OptionsBindingsEventFrame:RegisterEvent("UPDATE_BINDINGS")
+addonTable.OptionsBindingsEventFrame:SetScript("OnEvent", function()
     if addonTable.RefreshOptionsPanel then
         addonTable.RefreshOptionsPanel()
     end
