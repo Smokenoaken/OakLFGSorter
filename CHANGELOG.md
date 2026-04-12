@@ -1,3 +1,10 @@
+## v3.0.3
+
+- Added applicant isLeaver flagging with red <!> markers and tooltip detail
+- Improved applicant party row presentation, region tag alignment, and applicant column spacing
+- Adjusted multi-applicant action-button placement and prevented resize-grip click jumps
+- Released v3.0.3
+
 ## v3.0.2
 
 - Fixed Mythic+ teleport actions so dungeon portal buttons resolve correctly
