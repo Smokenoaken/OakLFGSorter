@@ -30,10 +30,17 @@ local RIO_DUNGEON_ABBREVIATIONS = {
 }
 
 local function GetTeleportSpellID(mapID)
-    if _G.QUI_DungeonData and _G.QUI_DungeonData.GetTeleportSpellID then
-        return _G.QUI_DungeonData.GetTeleportSpellID(mapID)
+    return addonTable.GetDungeonTeleportSpellID and addonTable.GetDungeonTeleportSpellID(mapID) or nil
+end
+
+local function IsTeleportKnown(spellID)
+    if not spellID then
+        return false
     end
-    return nil
+    if IsSpellKnownOrOverridesKnown then
+        return IsSpellKnownOrOverridesKnown(spellID)
+    end
+    return IsSpellKnown and IsSpellKnown(spellID) or false
 end
 
 local function GetDungeonLabel(mapID)
@@ -120,8 +127,10 @@ local function CreateRow(index)
         if self.tooltipDungeon then
             GameTooltip:SetText(self.tooltipDungeon, 1, 1, 1)
         end
-        if self.spellID and IsSpellKnown(self.spellID) then
+        if self.spellID and IsTeleportKnown(self.spellID) then
             GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
+        elseif self.spellID then
+            GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
         end
         GameTooltip:Show()
     end)
@@ -236,13 +245,15 @@ local function UpdatePartyKeysPanel()
         end
 
         local info = entry.info
-        local mapID = info.challengeMapID or info.mapID
-        local dungeonName = mapID and C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapID) or nil
-        local spellID = mapID and GetTeleportSpellID(mapID) or nil
+        local challengeMapID = tonumber(info.challengeMapID) or tonumber(info.mythicPlusMapID)
+        local instanceMapID = tonumber(info.mapID)
+        local mapInfo = challengeMapID and addonTable.GetChallengeMapInfo and addonTable.GetChallengeMapInfo(challengeMapID) or nil
+        local dungeonName = mapInfo and mapInfo.name or (challengeMapID and C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(challengeMapID)) or nil
+        local spellID = GetTeleportSpellID(instanceMapID or (mapInfo and mapInfo.instanceMapID) or challengeMapID)
         local _, classToken = UnitClass(entry.unit)
         local classColor = RAID_CLASS_COLORS[classToken or ""] or NORMAL_FONT_COLOR
-        local shortName = GetDungeonLabel(mapID)
-        local icon = mapID and select(4, C_ChallengeMode.GetMapUIInfo(mapID)) or nil
+        local shortName = GetDungeonLabel(challengeMapID or instanceMapID)
+        local icon = mapInfo and mapInfo.iconTexture or (challengeMapID and select(4, C_ChallengeMode.GetMapUIInfo(challengeMapID))) or nil
         local kr, kg, kb = GetKeyColor(info.level)
         local score, scoreColor = GetPlayerScore(entry.unit)
         local nameOnly = tostring(entry.fullName or ""):match("([^%-]+)") or tostring(entry.fullName or "")
@@ -263,7 +274,7 @@ local function UpdatePartyKeysPanel()
 
         row.dungeonButton.tooltipDungeon = dungeonName
         row.dungeonButton.spellID = spellID
-        if spellID and IsSpellKnown(spellID) then
+        if spellID and IsTeleportKnown(spellID) then
             local spellName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or GetSpellInfo(spellID)
             row.dungeonButton:SetAttribute("type", "spell")
             row.dungeonButton:SetAttribute("spell", spellName or spellID)

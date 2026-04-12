@@ -178,6 +178,77 @@ function addonTable.SetFontSize(sizeValue)
     ApplyOakFont(addonTable.ActiveFontPath or ResolveFontPath(addonTable.GetActiveFontName()))
 end
 
+local DUNGEON_TELEPORT_FALLBACKS = {
+    [658] = 1254555,   -- Pit of Saron
+    [1209] = 159898,   -- Skyreach
+    [1753] = 1254551,  -- Seat of the Triumvirate
+    [2526] = 393273,   -- Algeth'ar Academy
+    [2805] = 1254400,  -- Windrunner Spire
+    [2811] = 1254572,  -- Magisters' Terrace
+    [2874] = 1254559,  -- Maisara Caverns
+    [2915] = 1254563,  -- Nexus-Point Xenas
+}
+
+function addonTable.GetChallengeMapInfo(mapID)
+    local numericMapID = tonumber(mapID)
+    if not numericMapID or not (C_ChallengeMode and C_ChallengeMode.GetMapUIInfo) then
+        return nil
+    end
+
+    local mapName, _, _, iconTexture, _, instanceMapID = C_ChallengeMode.GetMapUIInfo(numericMapID)
+    if not mapName or mapName == "" then
+        return nil
+    end
+
+    return {
+        challengeMapID = numericMapID,
+        instanceMapID = tonumber(instanceMapID) or numericMapID,
+        name = mapName,
+        iconTexture = iconTexture,
+    }
+end
+
+function addonTable.GetDungeonTeleportSpellID(mapID)
+    local numericMapID = tonumber(mapID)
+    if not numericMapID then
+        return nil
+    end
+
+    local challengeInfo = addonTable.GetChallengeMapInfo and addonTable.GetChallengeMapInfo(numericMapID) or nil
+    local lookupIDs = {}
+    local seen = {}
+
+    local function AddLookupID(value)
+        local numericValue = tonumber(value)
+        if numericValue and not seen[numericValue] then
+            seen[numericValue] = true
+            lookupIDs[#lookupIDs + 1] = numericValue
+        end
+    end
+
+    AddLookupID(challengeInfo and challengeInfo.instanceMapID)
+    AddLookupID(challengeInfo and challengeInfo.challengeMapID)
+    AddLookupID(numericMapID)
+
+    if _G.QUI_DungeonData and _G.QUI_DungeonData.GetTeleportSpellID then
+        for _, lookupID in ipairs(lookupIDs) do
+            local spellID = _G.QUI_DungeonData.GetTeleportSpellID(lookupID)
+            if tonumber(spellID) then
+                return tonumber(spellID)
+            end
+        end
+    end
+
+    for _, lookupID in ipairs(lookupIDs) do
+        local spellID = DUNGEON_TELEPORT_FALLBACKS[lookupID]
+        if spellID then
+            return spellID
+        end
+    end
+
+    return nil
+end
+
 function addonTable.GetWindowOpacity()
     return (OakLFGSorterDB and tonumber(OakLFGSorterDB.windowOpacity)) or 0.85
 end

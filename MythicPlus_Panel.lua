@@ -6,10 +6,17 @@ if not OAK_LFG then
 end
 
 local function GetTeleportSpellID(mapID)
-    if _G.QUI_DungeonData and _G.QUI_DungeonData.GetTeleportSpellID then
-        return _G.QUI_DungeonData.GetTeleportSpellID(mapID)
+    return addonTable.GetDungeonTeleportSpellID and addonTable.GetDungeonTeleportSpellID(mapID) or nil
+end
+
+local function IsTeleportKnown(spellID)
+    if not spellID then
+        return false
     end
-    return nil
+    if IsSpellKnownOrOverridesKnown then
+        return IsSpellKnownOrOverridesKnown(spellID)
+    end
+    return IsSpellKnown and IsSpellKnown(spellID) or false
 end
 
 local VAULT_TYPE_RAID = Enum and Enum.WeeklyRewardChestThresholdType and Enum.WeeklyRewardChestThresholdType.Raid
@@ -332,6 +339,30 @@ keyValue:SetPoint("LEFT", keyLabel, "RIGHT", 8, 0)
 keyValue:SetWidth(132)
 keyValue:SetJustifyH("LEFT")
 
+local keyTeleportButton = CreateFrame("Button", nil, panel, "SecureActionButtonTemplate")
+keyTeleportButton:SetPoint("TOPLEFT", panel, "TOPLEFT", 68, -57)
+keyTeleportButton:SetSize(132, 18)
+keyTeleportButton:RegisterForClicks("AnyUp", "AnyDown")
+keyTeleportButton:SetFrameLevel(panel:GetFrameLevel() + 5)
+keyTeleportButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Your Key", 1, 1, 1)
+    if self.mapName and self.keyLevel and self.keyLevel > 0 then
+        GameTooltip:AddLine(string.format("+%d %s", self.keyLevel, self.mapName), 1, 1, 1, true)
+    elseif self.keyText and self.keyText ~= "" then
+        GameTooltip:AddLine(self.keyText, 1, 1, 1, true)
+    end
+    if self.spellID and IsTeleportKnown(self.spellID) then
+        GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
+    elseif self.spellID then
+        GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
+    end
+    GameTooltip:Show()
+end)
+keyTeleportButton:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
 local affixHeader = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
 affixHeader:SetPoint("TOPLEFT", keyLabel, "BOTTOMLEFT", 0, -8)
 affixHeader:SetText("This Week")
@@ -422,12 +453,14 @@ for i = 1, 8 do
     row.score:SetWidth(22)
     row.score:SetJustifyH("CENTER")
     row:SetScript("OnEnter", function(self)
-        if self.spellID and IsSpellKnown(self.spellID) then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(self.mapName or "Dungeon", 1, 1, 1)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(self.mapName or "Dungeon", 1, 1, 1)
+        if self.spellID and IsTeleportKnown(self.spellID) then
             GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
-            GameTooltip:Show()
+        elseif self.spellID then
+            GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
         end
+        GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function()
         GameTooltip:Hide()
@@ -494,7 +527,28 @@ local function RefreshMythicPlusPanel()
     local sr, sg, sb = GetScoreColor(score)
     scoreValue:SetText(score > 0 and tostring(score) or "--")
     scoreValue:SetTextColor(sr, sg, sb)
+
+    local ownedKeyLevel = SafeCall(C_MythicPlus and C_MythicPlus.GetOwnedKeystoneLevel)
+    local ownedChallengeMapID = SafeCall(C_MythicPlus and C_MythicPlus.GetOwnedKeystoneChallengeMapID)
+    local ownedMapInfo = ownedChallengeMapID and addonTable.GetChallengeMapInfo and addonTable.GetChallengeMapInfo(ownedChallengeMapID) or nil
+    local ownedMapName = ownedMapInfo and ownedMapInfo.name or (ownedChallengeMapID and SafeCall(C_ChallengeMode and C_ChallengeMode.GetMapUIInfo, ownedChallengeMapID))
+    local ownedSpellID = GetTeleportSpellID(ownedMapInfo and ownedMapInfo.instanceMapID or ownedChallengeMapID)
+
     keyValue:SetText(GetOwnedKeyText())
+    keyTeleportButton.keyLevel = tonumber(ownedKeyLevel) or 0
+    keyTeleportButton.mapName = ownedMapName
+    keyTeleportButton.keyText = keyValue:GetText()
+    keyTeleportButton.spellID = ownedSpellID
+    if ownedSpellID and IsTeleportKnown(ownedSpellID) then
+        local spellName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(ownedSpellID) or GetSpellInfo(ownedSpellID)
+        keyTeleportButton:SetAttribute("type", "spell")
+        keyTeleportButton:SetAttribute("spell", spellName or ownedSpellID)
+        keyValue:SetTextColor(0.55, 1, 0.55)
+    else
+        keyTeleportButton:SetAttribute("type", nil)
+        keyTeleportButton:SetAttribute("spell", nil)
+        keyValue:SetTextColor(1, 1, 1)
+    end
 
     local affixes = GetCurrentAffixData()
     for i, button in ipairs(affixButtons) do
@@ -519,8 +573,9 @@ local function RefreshMythicPlusPanel()
             local r, g, b = GetScoreColor(data.score)
             row.name:SetText(data.name or "")
             row.mapName = data.name
-            row.spellID = data.mapID and GetTeleportSpellID(data.mapID) or nil
-            if row.spellID and IsSpellKnown(row.spellID) then
+            local mapInfo = data.mapID and addonTable.GetChallengeMapInfo and addonTable.GetChallengeMapInfo(data.mapID) or nil
+            row.spellID = GetTeleportSpellID(mapInfo and mapInfo.instanceMapID or data.mapID)
+            if row.spellID and IsTeleportKnown(row.spellID) then
                 local spellName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(row.spellID) or GetSpellInfo(row.spellID)
                 row:SetAttribute("type", "spell")
                 row:SetAttribute("spell", spellName or row.spellID)
