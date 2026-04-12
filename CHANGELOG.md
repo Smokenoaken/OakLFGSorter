@@ -1,3 +1,9 @@
+## v3.0.5
+
+- Added optional GroupfinderFlags-backed region flag display and sorting
+- Synchronized Oak Quick Sign Up roles with Blizzard Dungeon Finder and Raid Finder role selectors
+- Improved Lust and Battle Resurrection filters with party-aware utility-fit logic and added explanatory tooltips
+
 ## v3.0.4
 
 - Fixed minimap open/close behavior so left-click now cleanly toggles Oak
