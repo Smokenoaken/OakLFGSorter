@@ -2385,6 +2385,8 @@ local function FetchApplicantData()
             group.leadPvpRating = lead.pvpRating
             group.leadPvpBracket = lead.pvpBracket
             group.leadRaidProgress = lead.raidProgress
+            group.leadName = lead.name
+            group.regionInfo = addonTable.GetRegionInfoFromLeaderName and addonTable.GetRegionInfoFromLeaderName(lead.name) or nil
             table.insert(addonTable.ApplicantGroups, group)
         end
     end

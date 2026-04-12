@@ -110,7 +110,32 @@ function addonTable.GroupPassesFilters(group)
         isValidClass = false
     end
 
-    return isValidClass and GroupMatchesRoleFilters(group)
+    if not isValidClass or not GroupMatchesRoleFilters(group) then
+        return false
+    end
+
+    if addonTable.ResultMatchesPlayerRegion then
+        local regionResult = group
+        if type(regionResult) ~= "table" then
+            return false
+        end
+
+        if not regionResult.regionInfo then
+            local leadMember = type(group.members) == "table" and group.members[1] or nil
+            if leadMember and addonTable.GetRegionInfoFromLeaderName then
+                regionResult = {
+                    leaderName = leadMember.name,
+                    regionInfo = addonTable.GetRegionInfoFromLeaderName(leadMember.name),
+                }
+            end
+        end
+
+        if not addonTable.ResultMatchesPlayerRegion(regionResult) then
+            return false
+        end
+    end
+
+    return true
 end
 
 local function GetPlayerRoleFromUnit(unit)
