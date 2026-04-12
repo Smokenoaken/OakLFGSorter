@@ -501,10 +501,28 @@ end)
 local resizeGrip = CreateFrame("Button", nil, OAK_LFG, "PanelResizeButtonTemplate")
 addonTable.ResizeGrip = resizeGrip
 resizeGrip:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -2, 2)
+resizeGrip:SetScript("OnUpdate", function(self)
+    if not self._oakResizePending then
+        return
+    end
+
+    local cursorX, cursorY = GetCursorPosition()
+    local startX = self._oakResizeStartX or cursorX
+    local startY = self._oakResizeStartY or cursorY
+    if math.abs(cursorX - startX) < 4 and math.abs(cursorY - startY) < 4 then
+        return
+    end
+
+    self._oakResizePending = false
+    self._oakResizeStarted = true
+    OAK_LFG.isOakResizing = true
+    OAK_LFG:StartSizing("BOTTOMRIGHT")
+end)
 resizeGrip:SetScript("OnMouseDown", function(self, button)
     if button == "LeftButton" then
-        OAK_LFG.isOakResizing = true
-        OAK_LFG:StartSizing("BOTTOMRIGHT")
+        self._oakResizeStartX, self._oakResizeStartY = GetCursorPosition()
+        self._oakResizePending = true
+        self._oakResizeStarted = false
     end
 end)
 

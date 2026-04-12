@@ -2300,7 +2300,7 @@ local function FetchApplicantData()
             }
 
             for i = 1, info.numMembers do
-                local name, class, _, _, itemLevel, _, tank, healer, damage, _, isFriend, dungeonScore, _, _, _, specID = C_LFGList.GetApplicantMemberInfo(applicantID, i)
+                local name, class, _, _, itemLevel, _, tank, healer, damage, _, isFriend, dungeonScore, _, _, _, specID, isLeaver = C_LFGList.GetApplicantMemberInfo(applicantID, i)
                 local role = NormalizeApplicantRole(tank, healer, specID)
 
                 local bestKey, mainScore = 0, 0
@@ -2368,6 +2368,7 @@ local function FetchApplicantData()
                     highestKey = bestKey,
                     rioProfile = rioProfile, 
                     isFriend = isFriend,
+                    isLeaver = isLeaver,
                     pvpRating = pvpRating,
                     pvpBracket = pvpBracket,
                     raidProgress = raidProgress,
@@ -2584,7 +2585,13 @@ end)
 
 if addonTable.ResizeGrip then
     addonTable.ResizeGrip:SetScript("OnMouseUp", function(self, button) 
-        OAK_LFG:StopMovingOrSizing() 
+        self._oakResizePending = false
+        self._oakResizeStartX = nil
+        self._oakResizeStartY = nil
+        if self._oakResizeStarted then
+            OAK_LFG:StopMovingOrSizing()
+        end
+        self._oakResizeStarted = false
         OAK_LFG.isOakResizing = false
         if addonTable.ClampFrameToScreen then
             addonTable.ClampFrameToScreen(OAK_LFG, OakLFGSorterDB, "framePos")

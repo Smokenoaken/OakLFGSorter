@@ -12,10 +12,10 @@ local REGION_COLORS = {
 local REGION_META = {
     NA = { code = "NA", shortLabel = "NA", label = "North America" },
     OCE = { code = "OCE", shortLabel = "OCE", label = "Oceanic" },
-    LATAM = { code = "LATAM", shortLabel = "LATAM", label = "Latin America" },
+    LATAM = { code = "LATAM", shortLabel = "LAT", label = "Latin America" },
     BR = { code = "BR", shortLabel = "BR", label = "Brazil" },
     EU = { code = "EU", shortLabel = "EU", label = "Europe" },
-    OTHER = { code = "OTHER", shortLabel = "OTHER", label = "Other" },
+    OTHER = { code = "OTHER", shortLabel = "Oth", label = "Other" },
 }
 
 local REGION_FILTER_ORDER = { "NA", "OCE", "LATAM", "BR", "EU", "OTHER" }
@@ -288,7 +288,7 @@ function addonTable.GetRegionBadgeMarkup(regionInfo)
 
     local color = regionInfo.color or REGION_COLORS.OTHER
     local shortLabel = tostring(regionInfo.shortLabel or regionInfo.code or "?")
-    return string.format("|cFF%02x%02x%02x[%s]|r", color[1] * 255, color[2] * 255, color[3] * 255, shortLabel)
+    return string.format("|cFF%02x%02x%02x%s|r", color[1] * 255, color[2] * 255, color[3] * 255, shortLabel)
 end
 
 function addonTable.AddRegionTooltipLine(tooltip, regionInfo)

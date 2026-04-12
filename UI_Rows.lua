@@ -795,12 +795,12 @@ end
 
 -- Master Column Coordinates
 local C_ROLE   = { x = 10,  w = 35,  align = "CENTER" }
-local C_CLASS  = { x = 45,  w = 110, align = "LEFT" }
-local C_SPEC   = { x = 155, w = 45,  align = "CENTER" }
-local C_ILVL   = { x = 200, w = 40,  align = "CENTER" }
-local C_RATING = { x = 240, w = 90,  align = "CENTER" }
-local C_KEY    = { x = 330, w = 40,  align = "CENTER" }
-local C_NOTE   = { x = 370, w = 200, align = "LEFT" }
+local C_CLASS  = { x = 45,  w = 132, align = "LEFT" }
+local C_SPEC   = { x = 177, w = 38,  align = "CENTER" }
+local C_ILVL   = { x = 215, w = 40,  align = "CENTER" }
+local C_RATING = { x = 255, w = 74,  align = "CENTER" }
+local C_KEY    = { x = 329, w = 40,  align = "CENTER" }
+local C_NOTE   = { x = 369, w = 201, align = "LEFT" }
 local B_DUNGEON = { x = 10,  w = 145, align = "LEFT" }    -- [10,  155]
 local B_COMP    = { x = 155, w = 103, align = "CENTER" }   -- [155, 258]  comp slot icons
 local B_TITLE   = { x = 258, w = 102, align = "LEFT" }     -- [258, 360]  listing title
@@ -821,7 +821,7 @@ local B_RBG_RATING   = { x = 290, w = 80,  align = "CENTER" }
 local B_RBG_AGE      = { x = 370, w = 45,  align = "CENTER" }
 local B_RBG_NOTE     = { x = 415, w = 190, align = "LEFT"   }
 local ROW_X_OFFSET = 10
-local REGION_TAG_WIDTH = 42
+local REGION_TAG_WIDTH = 24
 
 local function RowColumn(column)
     return { x = column.x - ROW_X_OFFSET, w = column.w, align = column.align }
@@ -1671,7 +1671,22 @@ end
 
 local function ConfigureApplicantRowLayout(row)
     local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
-    ConfigureTextColumnWithTrailingTag(row.nameText, row.regionText, row, R_CLASS, 5, regionMarkup)
+    if row.regionText and regionMarkup ~= "" then
+        row.regionText:ClearAllPoints()
+        row.regionText:SetPoint("RIGHT", row, "LEFT", R_SPEC.x - 1, 0)
+        row.regionText:SetJustifyH("RIGHT")
+        row.regionText:SetText(regionMarkup)
+        row.regionText:SetWidth(28)
+        row.regionText:Show()
+
+        row.nameText:ClearAllPoints()
+        row.nameText:SetPoint("LEFT", row, "LEFT", R_CLASS.x + 3, 0)
+        row.nameText:SetPoint("RIGHT", row.regionText, "LEFT", -2, 0)
+        row.nameText:SetJustifyH("LEFT")
+        row.nameText:SetWordWrap(false)
+    else
+        ConfigureTextColumnWithTrailingTag(row.nameText, row.regionText, row, R_CLASS, 5, regionMarkup)
+    end
     ConfigureTextColumn(row.specText, row, R_SPEC, 5)
     ConfigureTextColumn(row.ilvlText, row, R_ILVL)
     ConfigureTextColumn(row.ratingText, row, R_RATING)
@@ -2136,7 +2151,7 @@ local function CreateRow(index, parentOverride, prevRowOverride)
             GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
             GameTooltip:ClearLines()
 
-            local name, class, localizedClass, level, itemLevel, honorLevel, tank, healer, damage, assignedRole, relationship, dungeonScore = C_LFGList.GetApplicantMemberInfo(self.applicantID, self.memberIdx)
+            local name, class, localizedClass, level, itemLevel, honorLevel, tank, healer, damage, assignedRole, relationship, dungeonScore, _, _, _, _, isLeaver = C_LFGList.GetApplicantMemberInfo(self.applicantID, self.memberIdx)
             self._oakShiftTooltipState = IsShiftKeyDown and IsShiftKeyDown() or false
             self:SetScript("OnUpdate", function(widget)
                 local shiftDown = IsShiftKeyDown and IsShiftKeyDown() or false
@@ -2156,6 +2171,9 @@ local function CreateRow(index, parentOverride, prevRowOverride)
             if name then
                 GameTooltip:AddLine(addonTable.ApplyClassColor(name, class or ""), 1, 1, 1)
                 GameTooltip:AddLine(string.format("%s - Item Level: %d", localizedClass or "", math.floor(itemLevel or 0)), 1, 1, 1)
+                if isLeaver then
+                    GameTooltip:AddLine("|cffff4040<!>|r Recent M+ leaver flag", 1, 0.25, 0.25)
+                end
                 GameTooltip:AddLine(" ")
 
                 local listingMode = GetListingMode()
@@ -2312,7 +2330,7 @@ local function CreateRow(index, parentOverride, prevRowOverride)
     row.roleIcon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
 
     row.nameText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    row.regionText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.regionText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.regionText:SetJustifyH("RIGHT")
     row.regionText:Hide()
     row.dungeonText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
@@ -2942,6 +2960,7 @@ function addonTable.UpdateDisplay()
 
         for _, group in ipairs(activeGroups) do
             local isMulti = group.numMembers > 1
+            local actionRowIndex = isMulti and math.ceil(group.numMembers / 2) or 1
             local bgColor = { GetApplicantRowColor(group, isAltColor) }
             local applicantStatusText = GetApplicantStatusText(group)
 
@@ -3001,8 +3020,11 @@ function addonTable.UpdateDisplay()
                 if member.isFriend then
                     formattedName = "|TInterface\\ChatFrame\\UI-ChatIcon-Battlenet:14|t " .. formattedName
                 end
+                if member.isLeaver then
+                    formattedName = "|cffff4040<!>|r " .. formattedName
+                end
                 if isMulti then
-                    formattedName = (i == 1) and " " .. formattedName or "   * " .. formattedName
+                    formattedName = (i == 1) and " " .. formattedName or " > " .. formattedName
                 end
 
                 row.nameText:SetText(formattedName)
@@ -3013,10 +3035,19 @@ function addonTable.UpdateDisplay()
 
                 if i == 1 then
                     row.noteText:SetText(group.comment or "")
+                else
+                    row.noteText:SetText("")
+                end
+
+                if i == actionRowIndex then
                     -- Restore applicant-mode button positions (rows may have been used in browser mode
                     -- which repositions inviteBtn to the right edge, causing the two buttons to stack)
                     row.declineBtn:ClearAllPoints()
-                    row.declineBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+                    local buttonYOffset = 0
+                    if isMulti and group.numMembers % 2 == 0 then
+                        buttonYOffset = -math.floor(ROW_HEIGHT / 2)
+                    end
+                    row.declineBtn:SetPoint("RIGHT", row, "RIGHT", -5, buttonYOffset)
                     row.inviteBtn:ClearAllPoints()
                     row.inviteBtn:SetPoint("RIGHT", row.declineBtn, "LEFT", -10, 0)
                     if applicantStatusText then
@@ -3026,7 +3057,6 @@ function addonTable.UpdateDisplay()
                         row.statusText:SetTextColor(0.2, 1, 0.2)
                         row.statusText:Show()
                     else
-                        -- OnClick/OnEnter/OnLeave are static handlers in CreateRow; no per-update closures
                         row.statusText:Hide()
                         row.inviteBtn:Show()
                         row.declineBtn:Show()
@@ -3037,7 +3067,6 @@ function addonTable.UpdateDisplay()
                         end
                     end
                 else
-                    row.noteText:SetText("")
                     row.inviteBtn:Hide()
                     row.declineBtn:Hide()
                     row.statusText:Hide()
