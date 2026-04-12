@@ -1,3 +1,7 @@
+## v3.0.2
+
+- Fixed Mythic+ teleport actions so dungeon portal buttons resolve correctly
+
 ## v3.0.1
 
 - Fixed region filters so applicant view now respects enabled regions
