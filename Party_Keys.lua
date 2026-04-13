@@ -101,10 +101,9 @@ local function CreateRow(index)
     row.icon:SetPoint("LEFT", row, "LEFT", 0, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    row.dungeonButton = CreateFrame("Button", nil, row, "SecureActionButtonTemplate")
+    row.dungeonButton = CreateFrame("Button", nil, row)
     row.dungeonButton:SetPoint("LEFT", row, "LEFT", 14, 0)
     row.dungeonButton:SetSize(54, 12)
-    row.dungeonButton:RegisterForClicks("AnyUp", "AnyDown")
 
     row.dungeonText = row.dungeonButton:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
     row.dungeonText:SetPoint("LEFT", row.dungeonButton, "LEFT", 0, 0)
@@ -137,6 +136,25 @@ local function CreateRow(index)
     end)
     row.dungeonButton:SetScript("OnLeave", function()
         GameTooltip:Hide()
+    end)
+    row.dungeonButton:SetScript("OnClick", function(self)
+        if not self.spellID then
+            return
+        end
+        if InCombatLockdown and InCombatLockdown() then
+            UIErrorsFrame:AddMessage("Cannot use dungeon teleports in combat.", 1.0, 0.1, 0.1)
+            return
+        end
+
+        if not IsTeleportKnown(self.spellID) then
+            return
+        end
+
+        if C_Spell and C_Spell.CastSpell then
+            C_Spell.CastSpell(self.spellID)
+        else
+            CastSpellByID(self.spellID)
+        end
     end)
 
     row:Hide()
@@ -191,8 +209,6 @@ end
 local function HideRows()
     for _, row in ipairs(rows) do
         row:Hide()
-        row.dungeonButton:SetAttribute("type", nil)
-        row.dungeonButton:SetAttribute("spell", nil)
         row.dungeonButton.spellID = nil
         row.dungeonButton.tooltipDungeon = nil
     end
@@ -291,13 +307,7 @@ local function UpdatePartyKeysPanel()
         row.dungeonButton.tooltipDungeon = dungeonName
         row.dungeonButton.spellID = spellID
         if spellID and IsTeleportKnown(spellID) then
-            local spellName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or GetSpellInfo(spellID)
-            row.dungeonButton:SetAttribute("type", "spell")
-            row.dungeonButton:SetAttribute("spell", spellName or spellID)
             row.dungeonText:SetTextColor(0.55, 1, 0.55, 1)
-        else
-            row.dungeonButton:SetAttribute("type", nil)
-            row.dungeonButton:SetAttribute("spell", nil)
         end
 
         row:Show()

@@ -25,6 +25,21 @@ OAK_LFG:Hide()
 _G["OakensoulLFGSorterFrame"] = OAK_LFG
 tinsert(UISpecialFrames, "OakensoulLFGSorterFrame")
 
+local combatCloseFrame = CreateFrame("Frame")
+combatCloseFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+combatCloseFrame:SetScript("OnEvent", function(_, event)
+    if event ~= "PLAYER_REGEN_DISABLED" then
+        return
+    end
+
+    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
+        addonTable.OAK_SEARCH:Hide()
+    end
+    if OAK_LFG:IsShown() then
+        OAK_LFG:Hide()
+    end
+end)
+
 OAK_LFG:SetBackdrop({
     bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX,
     tile = false, edgeSize = 1, 
