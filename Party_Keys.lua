@@ -89,6 +89,7 @@ title:SetPoint("TOPLEFT", partyKeysPanel, "TOPLEFT", PANEL_PADDING, -2)
 title:SetText("Party Keys")
 
 local rows = {}
+local pendingUpdateAfterCombat = false
 
 local function CreateRow(index)
     local row = CreateFrame("Frame", nil, partyKeysPanel)
@@ -197,7 +198,22 @@ local function HideRows()
     end
 end
 
+local function IsCombatLocked()
+    return InCombatLockdown and InCombatLockdown()
+end
+
+local function DeferUpdateForCombat()
+    pendingUpdateAfterCombat = true
+end
+
 local function UpdatePartyKeysPanel()
+    if IsCombatLocked() then
+        DeferUpdateForCombat()
+        return
+    end
+
+    pendingUpdateAfterCombat = false
+
     if not ShouldShowPartyKeys() then
         HideRows()
         partyKeysPanel:Hide()
@@ -318,6 +334,19 @@ eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 eventFrame:RegisterEvent("LFG_LIST_ACTIVE_ENTRY_UPDATE")
 eventFrame:RegisterEvent("CHALLENGE_MODE_MAPS_UPDATE")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:SetScript("OnEvent", function()
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_REGEN_ENABLED" then
+        if pendingUpdateAfterCombat then
+            UpdatePartyKeysPanel()
+        end
+        return
+    end
+
+    if IsCombatLocked() then
+        DeferUpdateForCombat()
+        return
+    end
+
     C_Timer.After(0.1, UpdatePartyKeysPanel)
 end)
