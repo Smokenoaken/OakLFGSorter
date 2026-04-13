@@ -1,3 +1,8 @@
+## v3.0.7
+
+- Fixed Party Keys teleports so Oak can be hidden in combat without protected-frame errors.
+- Oak now closes automatically when combat starts instead of getting stuck open.
+
 ## v3.0.5
 
 - Added optional GroupfinderFlags-backed region flag display and sorting
