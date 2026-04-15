@@ -2606,7 +2606,12 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
                 if isRaidBrowser then
                     ConfigureRaidBrowserRowLayout(row)
                 elseif isCustomBrowser then
-                    ConfigureCustomBrowserRowLayout(row)
+                    local customMemberCount = row.searchResult and (tonumber(row.searchResult.numMembers) or #(row.searchResult.players or {})) or 0
+                    if customMemberCount <= 5 then
+                        ConfigureBrowserRowLayout(row)
+                    else
+                        ConfigureCustomBrowserRowLayout(row)
+                    end
                 elseif isPvpBrowser and row.searchResult and IsRatedBattlegroundResult(row.searchResult) then
                     ConfigureRbgBrowserRowLayout(row)
                 elseif isPvpBrowser then
@@ -2629,7 +2634,10 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         end
         if row.ilvlText then
             if isBrowser then
-                if isRaidBrowser or isCustomBrowser or (row.searchResult and IsRatedBattlegroundResult(row.searchResult)) then row.ilvlText:Show() else row.ilvlText:Hide() end
+                local usesSummaryComp = isRaidBrowser
+                    or (isCustomBrowser and (row.searchResult and (tonumber(row.searchResult.numMembers) or #(row.searchResult.players or {})) or 0) > 5)
+                    or (row.searchResult and IsRatedBattlegroundResult(row.searchResult))
+                if usesSummaryComp then row.ilvlText:Show() else row.ilvlText:Hide() end
             else
                 row.ilvlText:Show()
             end
@@ -2658,7 +2666,9 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         if row.compSlots then
             for _, slot in pairs(row.compSlots) do
                 -- Raid browser: comp slots hidden (ilvlText shows role counts instead)
-                if isBrowser and (isRaidBrowser or isCustomBrowser) then
+                local usesSummaryComp = isRaidBrowser
+                    or (isCustomBrowser and (row.searchResult and (tonumber(row.searchResult.numMembers) or #(row.searchResult.players or {})) or 0) > 5)
+                if isBrowser and usesSummaryComp then
                     slot:Hide()
                 elseif isBrowser then
                     slot:Show()
@@ -2768,7 +2778,11 @@ local function PopulateBrowserRow(row, result, isAltColor)
     if isRaidMode then
         ConfigureRaidBrowserRowLayout(row)
     elseif isCustomCategory then
-        ConfigureCustomBrowserRowLayout(row)
+        if (tonumber(result.numMembers) or #(result.players or {})) <= 5 then
+            ConfigureBrowserRowLayout(row)
+        else
+            ConfigureCustomBrowserRowLayout(row)
+        end
     elseif isRbgMode then
         ConfigureRbgBrowserRowLayout(row)
     elseif isPvpMode then
@@ -2778,7 +2792,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
     end
     row.dungeonText:Show()
     row.roleIcon:Hide()
-    if not isRaidMode and not isRbgMode and not isCustomCategory then row.ilvlText:Hide() end
+    if not isRaidMode and not isRbgMode and not (isCustomCategory and (tonumber(result.numMembers) or #(result.players or {})) > 5) then row.ilvlText:Hide() end
     row.keyText:Hide()
     if row.ageText then row.ageText:Show() end
 
@@ -2838,7 +2852,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
     else
         -- Non-raid browser mode: show comp slots (role icons), hide ilvlText
         local setupSummary = GetBrowserSetupSummary(result)
-        if isCustomCategory then
+        if isCustomCategory and (tonumber(result.numMembers) or #(result.players or {})) > 5 then
             for _, slot in pairs(row.compSlots) do slot:Hide() end
             local rc = result.roleCounts or {}
             local tanks   = tonumber(rc.TANK)    or 0
@@ -2849,9 +2863,38 @@ local function PopulateBrowserRow(row, result, isAltColor)
             row.ilvlText:Show()
         else
             row.ilvlText:Hide()
+            local showSpecIcons = OakLFGSorterDB and OakLFGSorterDB.showSpecIcons
+            local sortedPlayers = {}
+            local usedPlayers = {}
+            if showSpecIcons then
+                local roleOrder = { TANK = 1, HEALER = 2, DAMAGER = 3 }
+                for _, player in ipairs(result.players or {}) do
+                    table.insert(sortedPlayers, player)
+                end
+                table.sort(sortedPlayers, function(a, b)
+                    return (roleOrder[a.role] or 99) < (roleOrder[b.role] or 99)
+                end)
+            end
             for idx, slotInfo in ipairs(setupSummary) do
-                row.compSlots[idx]:Show()
-                SetBrowserCompSlot(row.compSlots[idx], slotInfo.role, slotInfo.class, slotInfo.filled)
+                local slot = row.compSlots[idx]
+                slot:Show()
+                if showSpecIcons and slotInfo.filled then
+                    local player = nil
+                    for playerIndex, candidate in ipairs(sortedPlayers) do
+                        if not usedPlayers[playerIndex] and candidate.role == slotInfo.role then
+                            player = candidate
+                            usedPlayers[playerIndex] = true
+                            break
+                        end
+                    end
+                    local specID = player.specID
+                    if (not specID or specID == 0) and player.specName and player.specName ~= "" then
+                        specID = specNameToID[strlower(player.specName)]
+                    end
+                    SetBrowserCompSlotSpec(slot, specID, player.class or slotInfo.class, true)
+                else
+                    SetBrowserCompSlot(slot, slotInfo.role, slotInfo.class, slotInfo.filled)
+                end
             end
         end
     end
@@ -2898,6 +2941,9 @@ local function PopulateBrowserRow(row, result, isAltColor)
         if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
             row.ageText:SetText("Declined")
             row.ageText:SetTextColor(1, 0.2, 0.2)
+        elseif result.applicationStatus == "invited" or result.applicationStatus == "inviteaccepted" then
+            row.ageText:SetText("Invited")
+            row.ageText:SetTextColor(0.2, 1, 0.2)
         elseif result.isRoleFilled then
             row.ageText:SetText("Filled")
             row.ageText:SetTextColor(1.0, 0.82, 0.30)
