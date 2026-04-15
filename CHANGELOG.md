@@ -149,6 +149,13 @@
 
 ## v2.0.0
 
+## v3.0.8
+
+- Added a Mythic+ playstyle filter in the browser with immediate refresh behavior to narrow results by Learning, Relaxed, Competitive, or Carry groups.
+- Updated browser comp rendering so Custom listings show 5-man role slots for groups of 5 or fewer and raid-style role counts for larger groups.
+- When Show Spec Icons is enabled, 5-man browser comp now keeps static Tank, Healer, and DPS slot ordering for faster at-a-glance group checks.
+- Browser rows now show invited applications in green for clearer status scanning.
+
 - Added a full Find Group browser with dedicated sorting, filtering, quick sign-up controls, scalable detached-window support, and a hosted Blizzard search box inside Oak's pane.
 - Added Blizzard-backed dungeon filters, mode-aware search panels for dungeons, raids, delves, PvP, custom, and legacy content, plus cleaner compact layouts across the addon.
 - Added Mythic+ Gives Score forecasting with per-dungeon key targets, estimated score gains, +/++/+++ tooltip breakdowns, and season-dungeon All/None controls.

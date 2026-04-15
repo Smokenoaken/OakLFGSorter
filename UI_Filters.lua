@@ -622,6 +622,20 @@ function addonTable.ResultPassesBrowserFilters(result)
     if not ResultMatchesMinimumRating(result) then
         return false
     end
+    local filterPlaystyle = filters.playstyle
+    if filterPlaystyle and filterPlaystyle ~= "ANY" then
+        -- generalPlaystyle is async (like PVP rating) — re-fetch fresh rather than using cached value.
+        -- Values: 1=Learning, 2=Relaxed, 3=Competitive, 4=Carry
+        local freshInfo = C_LFGList.GetSearchResultInfo and C_LFGList.GetSearchResultInfo(result.id)
+        local rawPS = freshInfo and tonumber(freshInfo.generalPlaystyle) or 0
+        local playstyleMatch = false
+        if filterPlaystyle == "COMPETITIVE" and rawPS == 3 then playstyleMatch = true
+        elseif filterPlaystyle == "RELAXED"  and rawPS == 2 then playstyleMatch = true
+        elseif filterPlaystyle == "LEARNING" and rawPS == 1 then playstyleMatch = true
+        elseif filterPlaystyle == "CARRY"    and rawPS == 4 then playstyleMatch = true
+        end
+        if not playstyleMatch then return false end
+    end
     if filters.partyFit and not ResultMatchesPartyFit(result, runtime) then
         return false
     end
@@ -926,6 +940,32 @@ local function SyncBrowserNativeDifficulty()
     -- function and can only be invoked from a hardware-event (user click) context.
 end
 
+local function SyncBrowserNativePlaystyle()
+    if not (C_LFGList and C_LFGList.GetAdvancedFilter and C_LFGList.SaveAdvancedFilter) then return end
+    local mode = GetBrowserMode()
+    if mode ~= "mythic_plus" and mode ~= "dungeon" then return end
+
+    local filters = BrowserFilterState()
+    local ps = filters.playstyle or "ANY"
+
+    local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+    if not ok or type(adv) ~= "table" then adv = {} end
+
+    if ps == "ANY" then
+        adv.generalPlaystyle1 = nil
+        adv.generalPlaystyle2 = nil
+        adv.generalPlaystyle3 = nil
+        adv.generalPlaystyle4 = nil
+    else
+        adv.generalPlaystyle1 = (ps == "LEARNING")     and true or false
+        adv.generalPlaystyle2 = (ps == "RELAXED")      and true or false
+        adv.generalPlaystyle3 = (ps == "COMPETITIVE")  and true or false
+        adv.generalPlaystyle4 = (ps == "CARRY")        and true or false
+    end
+
+    pcall(C_LFGList.SaveAdvancedFilter, adv)
+end
+
 local function SyncBrowserNativeActivities()
     if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then return end
     local filters = BrowserFilterState()
@@ -1158,6 +1198,10 @@ local function ResetNativeBrowserAdvancedFilters()
     adv.difficultyHeroic = nil
     adv.difficultyMythic = nil
     adv.difficultyMythicPlus = nil
+    adv.generalPlaystyle1 = nil
+    adv.generalPlaystyle2 = nil
+    adv.generalPlaystyle3 = nil
+    adv.generalPlaystyle4 = nil
 
     pcall(C_LFGList.SaveAdvancedFilter, adv)
 end
@@ -1914,10 +1958,21 @@ local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLa
                 filters[button.filterKey] = option.value
                 UpdateText()
                 listFrame:Hide()
-                -- Sync difficulty to Blizzard's native advanced filter when the
-                -- difficulty dropdown changes (filterKey == "difficulty").
+                -- Sync to Blizzard's native advanced filter when relevant dropdowns change.
                 if button.filterKey == "difficulty" then
                     SyncBrowserNativeDifficulty()
+                elseif button.filterKey == "playstyle" then
+                    SyncBrowserNativePlaystyle()
+                    -- Auto-refresh so results update immediately without needing a manual Refresh click.
+                    if addonTable.RunBrowserSearch then
+                        addonTable.RunBrowserSearch()
+                    end
+                    if addonTable.FetchSearchResultData then
+                        C_Timer.After(0.15, function()
+                            addonTable.FetchSearchResultData()
+                            if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+                        end)
+                    end
                 end
                 RefreshBrowserFilters()
             end)
@@ -3037,6 +3092,15 @@ function addonTable.UpdateBrowserFilterPanel()
             y = y - 28
         else
             difficultyDropdown:Hide()
+        end
+
+        -- ── 1b. Playstyle dropdown (M+ / dungeon only) ───────────────────────
+        if mode == "mythic_plus" or mode == "dungeon" then
+            playstyleDropdown:ClearAllPoints()
+            playstyleDropdown:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            playstyleDropdown.UpdateText()
+            playstyleDropdown:Show()
+            y = y - 28
         end
 
         -- ── 2. "Select Filters then Click Refresh" label + search query hint ─
