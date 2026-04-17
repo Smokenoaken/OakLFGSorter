@@ -51,6 +51,7 @@ end
 
 local quickSignupState = {
     pending = false,
+    autofillDialog = false,
     roleButtons = {},
     roleOrder = { "TANK", "HEALER", "DAMAGER" },
     persistPatchActive = false,
@@ -62,6 +63,60 @@ local EnsureQueueRoleSelectorHooks
 local SIGNUP_COOLDOWN_DURATION = 1.5  -- Blizzard server-side throttle estimate (seconds)
 local lastDirectSignupTime = 0
 local cooldownTimerRunning = false
+
+local function ConfirmSearchResultApplied(searchResultID, onConfirmed)
+    if not searchResultID then
+        return
+    end
+
+    local function checkApplied()
+        if not (C_LFGList and C_LFGList.GetApplicationInfo) then
+            return false
+        end
+
+        local ok, appA, appB = pcall(C_LFGList.GetApplicationInfo, searchResultID)
+        if not ok then
+            return false
+        end
+
+        local status
+        if type(appA) == "table" then
+            status = appA.applicationStatus or appA.status or appA.pendingStatus
+        elseif type(appB) == "string" then
+            status = appB
+        elseif type(appA) == "string" then
+            status = appA
+        end
+
+        if addonTable.NormalizeApplicationStatus then
+            status = addonTable.NormalizeApplicationStatus(status or "none")
+        else
+            status = tostring(status or "none")
+        end
+
+        if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(status) then
+            if onConfirmed then
+                onConfirmed()
+            end
+            return true
+        end
+
+        return false
+    end
+
+    if checkApplied() then
+        return
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.1, function()
+            if checkApplied() then
+                return
+            end
+            C_Timer.After(0.35, checkApplied)
+        end)
+    end
+end
 
 local SEARCH_ROLE_CAPABILITIES = {
     DEATHKNIGHT = { TANK = true, DAMAGER = true },
@@ -388,9 +443,11 @@ local function ApplyQuickSignupDirect(searchResultID)
         return false
     end
 
-    if addonTable.MarkSearchResultApplied then
-        addonTable.MarkSearchResultApplied(searchResultID)
-    end
+    ConfirmSearchResultApplied(searchResultID, function()
+        if addonTable.MarkSearchResultApplied then
+            addonTable.MarkSearchResultApplied(searchResultID)
+        end
+    end)
 
     if addonTable.UpdateDisplay and addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
         addonTable.UpdateDisplay()
@@ -514,6 +571,10 @@ end
 
 local function ApplySavedRolesToVisibleDialog()
     if not (LFGListApplicationDialog and LFGListApplicationDialog:IsShown()) then
+        return
+    end
+
+    if not quickSignupState.autofillDialog then
         return
     end
 
@@ -886,9 +947,11 @@ local function TryPanelSignup(panel, searchResultID)
 
     if panel.SignUpButton and panel.SignUpButton:IsEnabled() then
         LFGListSearchPanel_SignUp(panel)
-        if addonTable.MarkSearchResultApplied then
-            addonTable.MarkSearchResultApplied(searchResultID)
-        end
+        ConfirmSearchResultApplied(searchResultID, function()
+            if addonTable.MarkSearchResultApplied then
+                addonTable.MarkSearchResultApplied(searchResultID)
+            end
+        end)
         return true
     end
 
@@ -1016,18 +1079,21 @@ function addonTable.EnsureSearchSignupHooks()
     LFGListApplicationDialog:HookScript("OnShow", function(self)
         RaiseSignupDialogAboveOak(self)
         local shouldQuickSignup = quickSignupState.pending
+        quickSignupState.autofillDialog = shouldQuickSignup
         local hasClicked = false
-        QueueApplySavedQuickSignupRoles(self, function(dialog, expectedResultID)
-            if not hasClicked and shouldQuickSignup
-                    and dialog.SignUpButton and dialog.SignUpButton:IsEnabled()
-                    and dialog.resultID == expectedResultID then
-                hasClicked = true
-                dialog.SignUpButton:Click()
-                if addonTable.StartSignupCooldown then
-                    addonTable.StartSignupCooldown()
+        if shouldQuickSignup then
+            QueueApplySavedQuickSignupRoles(self, function(dialog, expectedResultID)
+                if not hasClicked and shouldQuickSignup
+                        and dialog.SignUpButton and dialog.SignUpButton:IsEnabled()
+                        and dialog.resultID == expectedResultID then
+                    hasClicked = true
+                    dialog.SignUpButton:Click()
+                    if addonTable.StartSignupCooldown then
+                        addonTable.StartSignupCooldown()
+                    end
                 end
-            end
-        end)
+            end)
+        end
         quickSignupState.pending = false
     end)
 
