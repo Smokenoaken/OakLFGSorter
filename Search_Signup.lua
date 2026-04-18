@@ -564,7 +564,16 @@ local function SetSignupDialogRoleState(button, shouldEnable)
 end
 
 local function RaiseFrameAboveOak(frame)
-    return
+    if not frame then
+        return
+    end
+
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetToplevel(true)
+
+    local targetLevel = math.max(1, (OAK_LFG:GetFrameLevel() or 0) + 20)
+    frame:SetFrameLevel(targetLevel)
+    frame:Raise()
 end
 
 local function RaiseSignupDialogAboveOak(dialog)
@@ -854,7 +863,7 @@ quickSignupBar:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 
 quickSignupBar:SetBackdropColor(unpack(GetQuickSignupBarColor()))
 quickSignupBar:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
 ApplyQuickSignupBarInsets()
-quickSignupBar:SetFrameStrata("MEDIUM")
+quickSignupBar:SetFrameStrata("DIALOG")
 quickSignupBar:SetFrameLevel(OAK_LFG:GetFrameLevel() + 20)
 quickSignupBar:Hide()  -- shown by SetCurrentViewMode("browser")
 addonTable.quickSignupBar = quickSignupBar

@@ -1849,6 +1849,17 @@ local function IsBrowserDropdownOpen()
 end
 addonTable.IsBrowserDropdownOpen = IsBrowserDropdownOpen
 
+function addonTable.MeasureBrowserTextWidth(text, fontObject)
+    if not addonTable._browserFilterMeasureText then
+        addonTable._browserFilterMeasureText = UIParent:CreateFontString(nil, "ARTWORK", "OakLFG_FontRegular")
+        addonTable._browserFilterMeasureText:Hide()
+    end
+
+    addonTable._browserFilterMeasureText:SetFontObject(fontObject or _G["OakLFG_FontRegular"])
+    addonTable._browserFilterMeasureText:SetText(text or "")
+    return math.ceil(addonTable._browserFilterMeasureText:GetUnboundedStringWidth() or 0)
+end
+
 function BrowserFilterState()
     local characterFilters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
     if characterFilters.version ~= BROWSER_FILTER_VERSION then
@@ -1965,6 +1976,7 @@ end
 
 local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLabel)
     local button = addonTable.CreateFlatButton(parent, "", width)
+    button.dropdownWidth = width
     button.getOptions = getOptions
     button.filterKey = filterKey
     button.anyLabel = anyLabel
@@ -2001,8 +2013,10 @@ local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLa
     end
 
     local function RefreshOptions()
+        local currentWidth = button.dropdownWidth or width
         local options = button.getOptions()
         listFrame:SetHeight((#options * 22) + 2)
+        listFrame:SetWidth(currentWidth)
 
         for _, optionButton in ipairs(button.optionButtons) do
             optionButton:Hide()
@@ -2026,7 +2040,7 @@ local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLa
 
             optionButton:ClearAllPoints()
             optionButton:SetPoint("TOPLEFT", listFrame, "TOPLEFT", 1, -((index - 1) * 22) - 1)
-            optionButton:SetSize(width - 2, 22)
+            optionButton:SetSize(currentWidth - 2, 22)
             optionButton.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
             optionButton.text:SetText(option.label)
             optionButton:SetScript("OnClick", function()
@@ -2072,6 +2086,14 @@ local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLa
     end)
 
     button.UpdateText = UpdateText
+    function button:SetDropdownWidth(newWidth)
+        local resolvedWidth = math.max(120, math.floor(tonumber(newWidth) or width))
+        self.dropdownWidth = resolvedWidth
+        self:SetWidth(resolvedWidth)
+        if self.listFrame then
+            self.listFrame:SetWidth(resolvedWidth)
+        end
+    end
     return button
 end
 
@@ -2417,6 +2439,8 @@ browserQueryLabel:Hide()
 -- Search query hint text
 local browserQueryHint = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 browserQueryHint:SetTextColor(0.60, 0.60, 0.60)
+browserQueryHint:SetJustifyH("LEFT")
+browserQueryHint:SetWordWrap(true)
 
 -- Container frame for the native Blizzard SearchBox.
 -- We reparent LFGListFrame.SearchPanel.SearchBox into this frame when the panel
@@ -2972,10 +2996,78 @@ function addonTable.UpdateBrowserFilterPanel()
     keyRangeLabel:Hide(); keyMinBox:Hide(); keyRangeTo:Hide(); keyMaxBox:Hide()
 
     -- Layout constants
-    local COL2_X  = 96   -- right column x offset
-    local BTN_W   = 88   -- Refresh / Reset button width
+    local panelPadding = 14
+    local contentInset = panelPadding * 2
+    local leftLabelWidth = 0
+    local rightLabelWidth = 0
+    local hintText = GetSearchQueryLabel(mode)
+
+    local function MeasureLeftLabel(text)
+        leftLabelWidth = math.max(leftLabelWidth, addonTable.MeasureBrowserTextWidth(text, _G["OakLFG_FontRegular"]))
+    end
+
+    local function MeasureRightLabel(text)
+        rightLabelWidth = math.max(rightLabelWidth, addonTable.MeasureBrowserTextWidth(text, _G["OakLFG_FontRegular"]))
+    end
+
+    if isRaidMode then
+        for _, key in ipairs({"raidBossKills", "raidTanks", "raidHealers", "raidDps"}) do
+            local row = raidRangeRows[key]
+            if row and row.label then
+                MeasureLeftLabel(row.label:GetText() or "")
+            end
+        end
+        MeasureLeftLabel(browserToggleRows["partyFit"].label)
+        MeasureRightLabel(browserToggleRows["needsLust"].label)
+        MeasureLeftLabel(browserToggleRows["needsBrez"].label)
+        MeasureRightLabel(browserToggleRows["matchMyRaidLockout"].label)
+    else
+        MeasureLeftLabel(browserToggleRows["needsTank"].label)
+        MeasureRightLabel(browserToggleRows["hasTank"].label)
+        MeasureLeftLabel(browserToggleRows["needsHealer"].label)
+        MeasureRightLabel(browserToggleRows["hasHealer"].label)
+        MeasureLeftLabel(browserToggleRows["needsDPS"].label)
+        MeasureRightLabel(GetNeedsMyClassLabel())
+        MeasureLeftLabel(browserMinRatingLabel:GetText() or "")
+        MeasureLeftLabel(browserToggleRows["partyFit"].label)
+        MeasureRightLabel(browserToggleRows["hideDeclined"].label)
+        MeasureLeftLabel(browserToggleRows["needsBrez"].label)
+        MeasureRightLabel(browserToggleRows["hasBrez"].label)
+        MeasureLeftLabel(browserToggleRows["needsLust"].label)
+        MeasureRightLabel(browserToggleRows["hasLust"].label)
+        if isDelveMode then
+            MeasureLeftLabel(browserToggleRows["hideDeclined"].label)
+            MeasureRightLabel(L["Bountiful Only"])
+        end
+    end
+
+    browserInRefreshBtn:RefreshAutoWidth()
+    browserResetBtn:RefreshAutoWidth()
+    local BTN_W = math.max(browserInRefreshBtn:GetWidth() or 88, browserResetBtn:GetWidth() or 88)
     local BTN_GAP = 6    -- gap between the two buttons
     local ROW_H   = 22   -- standard toggle row height
+    local COL2_X  = math.max(96, leftLabelWidth + 30)
+    local dropdownWidth = math.max(
+        188,
+        addonTable.MeasureBrowserTextWidth(L["Any Difficulty"], _G["OakLFG_FontRegular"]) + 44,
+        addonTable.MeasureBrowserTextWidth("Any Playstyle", _G["OakLFG_FontRegular"]) + 44,
+        addonTable.MeasureBrowserTextWidth("Any Boss Kills", _G["OakLFG_FontRegular"]) + 44
+    )
+    local desiredContentWidth = math.max(
+        dropdownWidth,
+        (BTN_W * 2) + BTN_GAP,
+        COL2_X + 16 + 6 + rightLabelWidth,
+        addonTable.MeasureBrowserTextWidth(browserQueryLabel:GetText() or "", _G["OakLFG_FontSmall"]),
+        addonTable.MeasureBrowserTextWidth(hintText or "", _G["OakLFG_FontSmall"])
+    )
+
+    browserFilterPanel:SetWidth(math.max(210, desiredContentWidth + contentInset))
+    local contentWidth = math.max(182, browserFilterPanel:GetWidth() - contentInset)
+    difficultyDropdown:SetDropdownWidth(contentWidth)
+    playstyleDropdown:SetDropdownWidth(contentWidth)
+    raidBossesDropdown:SetDropdownWidth(contentWidth)
+    browserQueryLabel:SetWidth(contentWidth)
+    browserQueryHint:SetWidth(contentWidth)
 
     local y = 0  -- tracks next available top (goes negative)
 
