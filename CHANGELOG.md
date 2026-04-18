@@ -1,3 +1,8 @@
+## v3.0.12
+
+- Fixed the Mythic+ Overview panel so it refreshes while open after key, score, seasonal-best, and Great Vault updates.
+- Fixed the Mythic+ Overview panel combat refresh guard so the panel no longer opens blank with Lua errors.
+
 ## v3.0.11
 
 - Saved the persisted signup note text per character so it now survives reloads and relogs
