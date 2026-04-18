@@ -1303,9 +1303,29 @@ function addonTable.GetAvailableBrowserActivities()
     if mode == "mythic_plus" or mode == "dungeon" then
         local seasonLabels = addonTable.GetLocalizedSeasonDungeonLabels and addonTable.GetLocalizedSeasonDungeonLabels() or {}
 
-        -- Build a lookup: normalizedLabel → activityInfo from current search results
-        -- so we can populate activityInfo (and thus groupID) for each dungeon entry.
+        -- Build a canonical lookup: normalizedLabel → activityInfo/activityID.
+        -- Prefer Blizzard's full available-activities list so dungeon filters still map
+        -- correctly even when a dungeon has no visible listings in the current results.
         local resultInfoByLabel = {}
+        local categoryID = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryID
+        if categoryID and C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetActivityInfoTable then
+            local availableActivities = C_LFGList.GetAvailableActivities(categoryID) or {}
+            for _, activityID in ipairs(availableActivities) do
+                local activityInfo = C_LFGList.GetActivityInfoTable(activityID)
+                if activityInfo then
+                    local aLabel = CleanActivityLabel(activityInfo.fullName or activityInfo.shortName or "")
+                    local aKey = NormalizeSearchScoreTargetLabel(aLabel)
+                    if aKey ~= "" and not resultInfoByLabel[aKey] then
+                        resultInfoByLabel[aKey] = {
+                            activityID = activityID,
+                            activityInfo = activityInfo,
+                        }
+                    end
+                end
+            end
+        end
+
+        -- Fill any missing entries from current search results as a fallback.
         for _, result in ipairs(addonTable.SearchResults or {}) do
             local rLabel = result.activityFilterLabel or result.activityName or ""
             local rKey = NormalizeSearchScoreTargetLabel(rLabel)
@@ -1330,7 +1350,10 @@ function addonTable.GetAvailableBrowserActivities()
             end
         end
 
-        -- Preserve original insertion order (C_ChallengeMode order = canonical season order)
+        table.sort(activityEntries, function(a, b)
+            return (a.label or "") < (b.label or "")
+        end)
+
         return activityEntries
     end
 

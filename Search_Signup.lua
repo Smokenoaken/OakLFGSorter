@@ -495,17 +495,7 @@ local function SetSignupDialogRoleState(button, shouldEnable)
 end
 
 local function RaiseFrameAboveOak(frame)
-    if not frame then
-        return
-    end
-
-    frame:SetFrameStrata("FULLSCREEN_DIALOG")
-    frame:SetToplevel(true)
-
-    local targetLevel = math.max(1, OAK_LFG:GetFrameLevel() + 20)
-
-    frame:SetFrameLevel(targetLevel)
-    frame:Raise()
+    return
 end
 
 local function RaiseSignupDialogAboveOak(dialog)
@@ -589,34 +579,6 @@ local function RestoreOriginalSignupDialogShow()
 end
 
 local function UpdatePersistentNotePatch()
-    if type(LFGListApplicationDialog_Show) ~= "function" then
-        return
-    end
-
-    if not quickSignupState.originalDialogShow then
-        quickSignupState.originalDialogShow = LFGListApplicationDialog_Show
-    end
-
-    if OakLFGSorterDB.searchPersistSignupNote then
-        if quickSignupState.persistPatchActive then
-            return
-        end
-
-        LFGListApplicationDialog_Show = function(self, resultID)
-            if resultID then
-                local searchResultInfo = C_LFGList.GetSearchResultInfo(resultID)
-                self.resultID = resultID
-                self.activityID = searchResultInfo and searchResultInfo.activityID or 0
-            end
-
-            LFGListApplicationDialog_UpdateRoles(self)
-            StaticPopupSpecial_Show(self)
-        end
-
-        quickSignupState.persistPatchActive = true
-        return
-    end
-
     RestoreOriginalSignupDialogShow()
 end
 
@@ -696,7 +658,7 @@ quickSignupBar:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 
 quickSignupBar:SetBackdropColor(unpack(GetQuickSignupBarColor()))
 quickSignupBar:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
 ApplyQuickSignupBarInsets()
-quickSignupBar:SetFrameStrata("DIALOG")
+quickSignupBar:SetFrameStrata("MEDIUM")
 quickSignupBar:SetFrameLevel(OAK_LFG:GetFrameLevel() + 20)
 quickSignupBar:Hide()  -- shown by SetCurrentViewMode("browser")
 addonTable.quickSignupBar = quickSignupBar
@@ -947,11 +909,9 @@ local function TryPanelSignup(panel, searchResultID)
 
     if panel.SignUpButton and panel.SignUpButton:IsEnabled() then
         LFGListSearchPanel_SignUp(panel)
-        ConfirmSearchResultApplied(searchResultID, function()
-            if addonTable.MarkSearchResultApplied then
-                addonTable.MarkSearchResultApplied(searchResultID)
-            end
-        end)
+        if addonTable.MarkSearchResultApplied then
+            addonTable.MarkSearchResultApplied(searchResultID)
+        end
         return true
     end
 
@@ -961,10 +921,7 @@ end
 local function FallbackShowSignupDialog(searchResultID)
     if type(LFGListApplicationDialog_Show) == "function" and LFGListApplicationDialog then
         local ok = pcall(LFGListApplicationDialog_Show, LFGListApplicationDialog, searchResultID)
-        if ok then
-            RaiseSignupDialogAboveOak(LFGListApplicationDialog)
-            return true
-        end
+        if ok then return true end
     end
 
     return false
@@ -1077,7 +1034,6 @@ function addonTable.EnsureSearchSignupHooks()
     end
 
     LFGListApplicationDialog:HookScript("OnShow", function(self)
-        RaiseSignupDialogAboveOak(self)
         local shouldQuickSignup = quickSignupState.pending
         quickSignupState.autofillDialog = shouldQuickSignup
         local hasClicked = false
@@ -1157,6 +1113,7 @@ function addonTable.BeginSearchSignup(searchResultID)
                     if addonTable.MarkSearchResultApplied then
                         addonTable.MarkSearchResultApplied(searchResultID)
                     end
+                    return
                 end
             end)
         end)

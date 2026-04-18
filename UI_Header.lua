@@ -16,7 +16,7 @@ OAK_LFG:SetScript("OnDragStart", function(self)
     self.isOakDragging = true
     self:StartMoving()
 end)
-OAK_LFG:SetFrameStrata("DIALOG")
+OAK_LFG:SetFrameStrata("MEDIUM")
 -- Avoid Blizzard's live drag clamp, which makes the frame feel "bouncy"
 -- near screen edges. We clamp only after drag/resize completes.
 OAK_LFG:SetClampedToScreen(false)

@@ -773,6 +773,8 @@ function addonTable.ResultCanStillSolveMissingUtility(result, runtime, utilityTy
     return addonTable.ResultHasOpenUtilityPathAfterParty(result, runtime, utilityType)
 end
 
+local SyncBrowserSelectedActivitiesFromNative
+
 function addonTable.BuildBrowserRuntimeFilters()
     local filters = BrowserFilterState()
     local runtime = {
@@ -966,6 +968,59 @@ local function SyncBrowserNativePlaystyle()
     pcall(C_LFGList.SaveAdvancedFilter, adv)
 end
 
+SyncBrowserSelectedActivitiesFromNative = function()
+    local filters = BrowserFilterState()
+    if type(filters.selectedActivities) ~= "table" then
+        filters.selectedActivities = {}
+    end
+
+    if not (C_LFGList and C_LFGList.GetAdvancedFilter) then
+        return
+    end
+
+    local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+    if not ok or type(adv) ~= "table" then
+        return
+    end
+
+    local selectedIDs = {}
+    if type(adv.activities) == "table" then
+        for _, id in ipairs(adv.activities) do
+            local numericID = tonumber(id)
+            if numericID and numericID > 0 then
+                selectedIDs[numericID] = true
+            end
+        end
+    end
+
+    if next(selectedIDs) == nil then
+        return
+    end
+
+    local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
+    local resolved = {}
+    local matchedAny = false
+    for _, entry in ipairs(activities) do
+        local groupID = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(entry.activityInfo) or nil
+        local activityID = tonumber(entry.activityID)
+        if (groupID and selectedIDs[groupID]) or (activityID and selectedIDs[activityID]) then
+            resolved[entry.filterKey] = true
+            matchedAny = true
+        end
+    end
+
+    if not matchedAny then
+        return
+    end
+
+    for key in pairs(filters.selectedActivities) do
+        filters.selectedActivities[key] = nil
+    end
+    for key in pairs(resolved) do
+        filters.selectedActivities[key] = true
+    end
+end
+
 local function SyncBrowserNativeActivities()
     if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then return end
     local filters = BrowserFilterState()
@@ -979,6 +1034,11 @@ local function SyncBrowserNativeActivities()
             local gid = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(entry.activityInfo) or nil
             if gid and gid > 0 then
                 table.insert(groupIDs, gid)
+            else
+                local activityID = tonumber(entry.activityID)
+                if activityID and activityID > 0 then
+                    table.insert(groupIDs, activityID)
+                end
             end
         end
     end
@@ -2718,6 +2778,7 @@ end
 
 local function UpdateBrowserActivityButtons(startY)
     local filters = BrowserFilterState()
+    SyncBrowserSelectedActivitiesFromNative()
     local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
     local validKeys = {}
     local mode = GetBrowserMode()
