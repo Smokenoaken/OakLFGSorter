@@ -983,6 +983,7 @@ local function FetchSearchResultData()
                 local playstyleValue, playstyleLabel, playstyleShortLabel = GetSearchResultPlaystyle(resultInfo, activityInfo)
                 local applicationStatus = GetApplicationStatusForResult(searchResultID)
                 local ratingValue = tonumber(resultInfo.leaderOverallDungeonScore) or 0
+                local mainRatingValue = 0
                 local pvpRating = 0
                 local pvpBracket = nil
                 local raidListing = nil
@@ -1024,6 +1025,21 @@ local function FetchSearchResultData()
                             raidProgress = addonTable.GetRaidProgressSummary(rioProfile, raidListing and raidListing.raidName or activityFilterLabel)
                         end
                     end
+                elseif (listingMode == "mythic_plus" or listingMode == "dungeon" or listingMode == "delve" or listingMode == "open_world")
+                    and resultInfo.leaderName and RaiderIO and RaiderIO.GetProfile then
+                    local charName, charRealm = strsplit("-", resultInfo.leaderName)
+                    if not charRealm or charRealm == "" then
+                        charRealm = GetNormalizedRealmName() or ""
+                    end
+                    local rioProfile = RaiderIO.GetProfile(charName, charRealm)
+                    if rioProfile and type(rioProfile.mythicKeystoneProfile) == "table" then
+                        local mPlusProfile = rioProfile.mythicKeystoneProfile
+                        local currentScore = tonumber(mPlusProfile.currentScore) or 0
+                        mainRatingValue = tonumber(mPlusProfile.mainCurrentScore) or 0
+                        if ratingValue <= 0 and currentScore > 0 then
+                            ratingValue = currentScore
+                        end
+                    end
                 end
 
                 local leaderClass = "UNKNOWN"
@@ -1051,6 +1067,7 @@ local function FetchSearchResultData()
                     activityFilterKey = activityFilterKey,
                     keyLevel = keyLevel,
                     rating = ratingValue,
+                    mainRating = mainRatingValue,
                     pvpRating = pvpRating,
                     pvpBracket = pvpBracket,
                     raidProgress = raidProgress,  -- non-nil only for raid/legacy_raid mode
@@ -1485,7 +1502,7 @@ function addonTable.GetAvailableBrowserActivities()
 end
 
 local function BuildSelectedActivityIDFilter()
-    local filters = OakLFGSorterDB and OakLFGSorterDB.browserFilters
+    local filters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or nil
     if type(filters) ~= "table" or type(filters.selectedActivities) ~= "table" then
         return nil
     end
@@ -2572,18 +2589,8 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             end
         end
     elseif event == "PLAYER_LOGIN" then
-        -- Clear the activity (dungeon) selection filter every login/reload so the
-        -- browser starts with all dungeons visible, not a stale saved selection.
-        if OakLFGSorterDB and OakLFGSorterDB.browserFilters then
-            OakLFGSorterDB.browserFilters.selectedActivities = {}
-        end
-        -- Also clear Blizzard's native activities filter so it matches.
-        if C_LFGList and C_LFGList.GetAdvancedFilter and C_LFGList.SaveAdvancedFilter then
-            local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
-            if ok and type(adv) == "table" then
-                adv.activities = {}
-                pcall(C_LFGList.SaveAdvancedFilter, adv)
-            end
+        if addonTable.UpdateAuxPanelAnchors then
+            addonTable.UpdateAuxPanelAnchors()
         end
     elseif event == "GROUP_ROSTER_UPDATE" then
         if OAK_LFG:IsShown() then

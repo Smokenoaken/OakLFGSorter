@@ -923,7 +923,7 @@ local KNOWN_SPEC_IDS = {
     262, 263, 264,         -- Shaman: Elemental, Enhancement, Restoration
     265, 266, 267,         -- Warlock: Affliction, Demonology, Destruction
     268, 269, 270,         -- Monk: Brewmaster, Windwalker, Mistweaver
-    577, 581,              -- Demon Hunter: Havoc, Vengeance
+    577, 581, 1480,        -- Demon Hunter: Havoc, Vengeance, Devourer
     1467, 1468, 1473,      -- Evoker: Devastation, Preservation, Augmentation
 }
 local specNameToID = {}
@@ -1607,7 +1607,13 @@ local function GetBrowserRatingDisplay(result)
     end
 
     local cR, cG, cB = GetPreferredScoreColor(ratingNum, 1, 1, 1)
-    return string.format("|cFF%02x%02x%02x%d|r", cR * 255, cG * 255, cB * 255, ratingNum)
+    local ratingText = string.format("|cFF%02x%02x%02x%d|r", cR * 255, cG * 255, cB * 255, ratingNum)
+    local mainRating = math.floor(result.mainRating or 0)
+    if mainRating > ratingNum then
+        local mcR, mcG, mcB = GetPreferredScoreColor(mainRating, 0.9, 0.9, 0.9)
+        ratingText = string.format("%s |cFF%02x%02x%02x[%d]|r", ratingText, mcR * 255, mcG * 255, mcB * 255, mainRating)
+    end
+    return ratingText
 end
 
 local function GetColoredRaidDifficultyLabel(label)
@@ -2161,12 +2167,17 @@ function addonTable.BuildBrowserGroupTooltip(result)
     if rioProfile and type(rioProfile.mythicKeystoneProfile) == "table" then
         local mPlus   = rioProfile.mythicKeystoneProfile
         local score   = math.floor(mPlus.currentScore or 0)
+        local mainScore = math.floor(mPlus.mainCurrentScore or 0)
         GameTooltip:AddLine(" ")
         if score > 0 then
             local cR, cG, cB = GetPreferredScoreColor(score, 1, 0.82, 0)
             GameTooltip:AddDoubleLine("Raider.IO M+ Score", tostring(score), 1, 0.82, 0, cR, cG, cB)
         else
             GameTooltip:AddLine("Raider.IO M+ Score", 1, 0.82, 0)
+        end
+        if mainScore > score then
+            local mcR, mcG, mcB = GetPreferredScoreColor(mainScore, 0.85, 0.85, 0.85)
+            GameTooltip:AddDoubleLine("Main/Warband Rating", tostring(mainScore), 0.75, 0.75, 0.75, mcR, mcG, mcB)
         end
         addonTable.AppendRIOMilestonesNoHeader(GameTooltip, rioProfile)
     end

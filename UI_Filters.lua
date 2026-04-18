@@ -2,9 +2,18 @@ local addonName, addonTable = ...
 local L = addonTable.L
 local OAK_LFG = addonTable.OAK_LFG
 
-addonTable.ClassFilters = {}
-for _, class in ipairs(addonTable.ValidClasses) do addonTable.ClassFilters[class] = true end
-addonTable.RoleFilters = { ["TANK"] = true, ["HEALER"] = true, ["DAMAGER"] = true }
+addonTable.ClassFilters = addonTable.GetApplicantClassFilters and addonTable.GetApplicantClassFilters() or {}
+addonTable.RoleFilters = addonTable.GetApplicantRoleFilters and addonTable.GetApplicantRoleFilters() or { ["TANK"] = true, ["HEALER"] = true, ["DAMAGER"] = true }
+for _, class in ipairs(addonTable.ValidClasses) do
+    if addonTable.ClassFilters[class] == nil then
+        addonTable.ClassFilters[class] = true
+    end
+end
+for _, role in ipairs({ "TANK", "HEALER", "DAMAGER" }) do
+    if addonTable.RoleFilters[role] == nil then
+        addonTable.RoleFilters[role] = true
+    end
+end
 local classToggleBoxes = {} 
 local quickFilterButtons = {}
 local browserFilterButtons = {}
@@ -973,6 +982,9 @@ SyncBrowserSelectedActivitiesFromNative = function()
     if type(filters.selectedActivities) ~= "table" then
         filters.selectedActivities = {}
     end
+    if next(filters.selectedActivities) ~= nil then
+        return
+    end
 
     if not (C_LFGList and C_LFGList.GetAdvancedFilter) then
         return
@@ -1540,11 +1552,12 @@ filterPanel:SetBackdrop({
 if addonTable.ApplyBackdropStyle then
     addonTable.ApplyBackdropStyle(filterPanel, "panel")
 end
+
 filterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 filterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 filterPanel:HookScript("OnShow", function()
-    if addonTable.HideMythicPlusPanel then
-        addonTable.HideMythicPlusPanel()
+    if addonTable.UpdateAuxPanelAnchors then
+        addonTable.UpdateAuxPanelAnchors()
     end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
@@ -1778,8 +1791,8 @@ end
 browserFilterPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 browserFilterPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 browserFilterPanel:HookScript("OnShow", function()
-    if addonTable.HideMythicPlusPanel then
-        addonTable.HideMythicPlusPanel()
+    if addonTable.UpdateAuxPanelAnchors then
+        addonTable.UpdateAuxPanelAnchors()
     end
     -- Populate/refresh the panel contents every time it becomes visible.
     -- This is the single authoritative place that calls UpdateBrowserFilterPanel on open
@@ -1837,9 +1850,9 @@ end
 addonTable.IsBrowserDropdownOpen = IsBrowserDropdownOpen
 
 function BrowserFilterState()
-    OakLFGSorterDB.browserFilters = OakLFGSorterDB.browserFilters or {}
-    if OakLFGSorterDB.browserFilters.version ~= BROWSER_FILTER_VERSION then
-        OakLFGSorterDB.browserFilters = {
+    local characterFilters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
+    if characterFilters.version ~= BROWSER_FILTER_VERSION then
+        characterFilters = {
             version = BROWSER_FILTER_VERSION,
             difficulty = "ANY",
             playstyle = "ANY",
@@ -1865,7 +1878,7 @@ function BrowserFilterState()
         }
     end
     -- Ensure new fields exist for upgrades
-    local f = OakLFGSorterDB.browserFilters
+    local f = characterFilters
     if f.needsMyClass == nil then f.needsMyClass = false end
     if f.minRating == nil then f.minRating = "" end
     if f.raidBossKills == nil then f.raidBossKills = "" end
@@ -1875,7 +1888,7 @@ function BrowserFilterState()
     if f.bountifulOnly == nil then f.bountifulOnly = false end
     if f.hasLust       == nil then f.hasLust       = false end
     if f.hasBrez       == nil then f.hasBrez       = false end
-    local filters = OakLFGSorterDB.browserFilters
+    local filters = characterFilters
     filters.version = BROWSER_FILTER_VERSION
 
     local validDifficulty = {
@@ -1898,18 +1911,21 @@ function BrowserFilterState()
         filters.raidBossesMin = tostring(filters.raidBossesMin)
     end
 
-    if type(OakLFGSorterDB.browserFilters.selectedActivities) ~= "table" then
-        OakLFGSorterDB.browserFilters.selectedActivities = {}
+    if type(filters.selectedActivities) ~= "table" then
+        filters.selectedActivities = {}
     else
         local normalized = {}
-        for key, value in pairs(OakLFGSorterDB.browserFilters.selectedActivities) do
+        for key, value in pairs(filters.selectedActivities) do
             if type(key) == "string" and value then
                 normalized[key] = true
             end
         end
-        OakLFGSorterDB.browserFilters.selectedActivities = normalized
+        filters.selectedActivities = normalized
     end
-    return OakLFGSorterDB.browserFilters
+    if addonTable.GetCharacterDB then
+        addonTable.GetCharacterDB().browserFilters = filters
+    end
+    return filters
 end
 
 local function CreateBrowserToggleBox(parent, key)
@@ -3463,8 +3479,8 @@ end
 supportersPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 supportersPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 supportersPanel:HookScript("OnShow", function()
-    if addonTable.HideMythicPlusPanel then
-        addonTable.HideMythicPlusPanel()
+    if addonTable.UpdateAuxPanelAnchors then
+        addonTable.UpdateAuxPanelAnchors()
     end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
@@ -3482,7 +3498,7 @@ end)
 
 local optionsPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.OptionsPanel = optionsPanel
-optionsPanel:SetSize(205, 540)
+optionsPanel:SetSize(205, 640)
 optionsPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
 optionsPanel:Hide()
 optionsPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1)
@@ -3496,8 +3512,8 @@ end
 optionsPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
 optionsPanel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
 optionsPanel:HookScript("OnShow", function()
-    if addonTable.HideMythicPlusPanel then
-        addonTable.HideMythicPlusPanel()
+    if addonTable.UpdateAuxPanelAnchors then
+        addonTable.UpdateAuxPanelAnchors()
     end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
@@ -3927,27 +3943,33 @@ local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
     regionFilterLabels[regionCode] = label
 end
 
-CreateRegionFilterOption(optionsPanel, "NA", 15, -310)
-CreateRegionFilterOption(optionsPanel, "OCE", 105, -310)
-CreateRegionFilterOption(optionsPanel, "LATAM", 15, -332)
-CreateRegionFilterOption(optionsPanel, "BR", 105, -332)
-CreateRegionFilterOption(optionsPanel, "EU", 15, -354)
-CreateRegionFilterOption(optionsPanel, "OTHER", 105, -354)
+do
+    local regionOrder = addonTable.GetVisibleRegionFilterOrder and addonTable.GetVisibleRegionFilterOrder()
+        or addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder()
+        or {}
+    for index, regionCode in ipairs(regionOrder) do
+        local column = (index - 1) % 2
+        local row = math.floor((index - 1) / 2)
+        local xOffset = column == 0 and 15 or 105
+        local yOffset = -310 - (row * 22)
+        CreateRegionFilterOption(optionsPanel, regionCode, xOffset, yOffset)
+    end
+end
 local optionsFontLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -384)
+optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -470)
 optionsFontLabel:SetText(L["Addon Font"])
 local optionsFontButton, optionsFontList = addonTable.CreateFontDropdown(optionsPanel, 170)
-optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -402)
+optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -488)
 
 local optionsFontSizeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -434)
+optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -520)
 optionsFontSizeLabel:SetText(L["Font Size"])
 local optionsFontSizeValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -434)
+optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -520)
 
 local optionsFontSizeSlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsFontSizeSlider:SetSize(170, 10)
-optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -452)
+optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -538)
 optionsFontSizeSlider:SetMinMaxValues(10, 18)
 optionsFontSizeSlider:SetValueStep(1)
 optionsFontSizeSlider:SetObeyStepOnDrag(true)
@@ -3993,14 +4015,14 @@ end)
 optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize() or 12)
 
 local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -484)
+optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -570)
 optionsOpacityLabel:SetText("Window Opacity")
 local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -484)
+optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, -570)
 
 local optionsOpacitySlider = CreateFrame("Slider", nil, optionsPanel, "BackdropTemplate")
 optionsOpacitySlider:SetSize(170, 10)
-optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -502)
+optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -588)
 optionsOpacitySlider:SetMinMaxValues(0.35, 1.0)
 optionsOpacitySlider:SetValueStep(0.05)
 optionsOpacitySlider:SetObeyStepOnDrag(true)
@@ -4044,7 +4066,77 @@ optionsOpacitySlider:SetScript("OnLeave", function()
 end)
 optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWindowOpacity() or 0.85)
 
+function addonTable.UpdateOptionsRegionLayout()
+    local regionOrder = addonTable.GetVisibleRegionFilterOrder and addonTable.GetVisibleRegionFilterOrder()
+        or addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder()
+        or {}
+    local regionRows = math.max(1, math.ceil(#regionOrder / 2))
+    local regionStartY = -310
+    local rowSpacing = 22
+    local regionBottomY = regionStartY - ((regionRows - 1) * rowSpacing)
+
+    for index, regionCode in ipairs(regionOrder) do
+        local box = regionFilterButtons[regionCode]
+        local label = regionFilterLabels[regionCode]
+        if box and label then
+            local column = (index - 1) % 2
+            local row = math.floor((index - 1) / 2)
+            local xOffset = column == 0 and 15 or 105
+            local yOffset = regionStartY - (row * rowSpacing)
+            box:ClearAllPoints()
+            box:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", xOffset, yOffset)
+            label:ClearAllPoints()
+            label:SetPoint("LEFT", box, "RIGHT", 6, 0)
+            box:Show()
+            label:Show()
+        end
+    end
+
+    for regionCode, box in pairs(regionFilterButtons) do
+        local isVisible = false
+        for _, visibleCode in ipairs(regionOrder) do
+            if visibleCode == regionCode then
+                isVisible = true
+                break
+            end
+        end
+        local label = regionFilterLabels[regionCode]
+        if not isVisible then
+            box:Hide()
+            if label then
+                label:Hide()
+            end
+        end
+    end
+
+    local fontTop = regionBottomY - 28
+    optionsFontLabel:ClearAllPoints()
+    optionsFontLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, fontTop)
+    optionsFontButton:ClearAllPoints()
+    optionsFontButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, fontTop - 18)
+
+    local fontSizeTop = fontTop - 50
+    optionsFontSizeLabel:ClearAllPoints()
+    optionsFontSizeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, fontSizeTop)
+    optionsFontSizeValue:ClearAllPoints()
+    optionsFontSizeValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, fontSizeTop)
+    optionsFontSizeSlider:ClearAllPoints()
+    optionsFontSizeSlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, fontSizeTop - 18)
+
+    local opacityTop = fontSizeTop - 50
+    optionsOpacityLabel:ClearAllPoints()
+    optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, opacityTop)
+    optionsOpacityValue:ClearAllPoints()
+    optionsOpacityValue:SetPoint("RIGHT", optionsPanel, "TOPRIGHT", -15, opacityTop)
+    optionsOpacitySlider:ClearAllPoints()
+    optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, opacityTop - 18)
+
+    local panelHeight = math.max(540, math.abs(opacityTop - 18) + 70)
+    optionsPanel:SetHeight(panelHeight)
+end
+
 local function RefreshOptionsPanel()
+    addonTable.UpdateOptionsRegionLayout()
     ApplySharedRegionToggleVisual(optionsRegionBox, optionsRegionLabel, OakLFGSorterDB.showRegions == true)
     do
         local canShowFlags = addonTable.CanShowRegionFlags and addonTable.CanShowRegionFlags()
@@ -4084,7 +4176,9 @@ local function RefreshOptionsPanel()
         local color = addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil)
         optionsThemeColorButton.swatch:SetColorTexture(color.r, color.g, color.b, 1)
     end
-    for _, regionCode in ipairs(addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder() or {}) do
+    for _, regionCode in ipairs(addonTable.GetVisibleRegionFilterOrder and addonTable.GetVisibleRegionFilterOrder()
+        or addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder()
+        or {}) do
         ApplySharedRegionToggleVisual(regionFilterButtons[regionCode], regionFilterLabels[regionCode], addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
     end
     if optionsFontButton and optionsFontButton.RefreshSelection then

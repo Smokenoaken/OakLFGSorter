@@ -1,3 +1,13 @@
+## v3.0.11
+
+- Saved the persisted signup note text per character so it now survives reloads and relogs
+- Sanitized restored signup notes to remove Blizzard-invalid line breaks before the popup uses them
+
+## v3.0.10
+
+- Sanitized persisted signup notes so pasted multiline notes are flattened into a single Blizzard-valid line before signup
+- Added a defensive fallback that clears blocked signup notes for the current application when Blizzard disables the Sign Up button with note text present
+
 ## v3.0.9
 
 - Streamlined Quick Sign Up behavior and browser signup flow

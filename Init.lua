@@ -47,6 +47,7 @@ BINDING_NAME_OAKLFGSORTER_TOGGLEBROWSER = "Toggle Browser Window"
 
 -- Global Database
 OakLFGSorterDB = OakLFGSorterDB or {}
+OakLFGSorterCharDB = OakLFGSorterCharDB or {}
 if OakLFGSorterDB.autoOpen == nil then OakLFGSorterDB.autoOpen = true end
 if OakLFGSorterDB.scale == nil then OakLFGSorterDB.scale = 1.0 end
 if OakLFGSorterDB.muteApplicantPing == nil then OakLFGSorterDB.muteApplicantPing = true end
@@ -68,7 +69,93 @@ if type(OakLFGSorterDB.themeCustomColor) ~= "table" then OakLFGSorterDB.themeCus
 if type(OakLFGSorterDB.regionFilters) ~= "table" then OakLFGSorterDB.regionFilters = {} end
 OakLFGSorterDB.browserFilters = OakLFGSorterDB.browserFilters or {}
 
-local browserFilters = OakLFGSorterDB.browserFilters
+local function CopyBooleanMap(source)
+    local copy = {}
+    if type(source) ~= "table" then
+        return copy
+    end
+
+    for key, value in pairs(source) do
+        if value ~= nil then
+            copy[key] = value and true or false
+        end
+    end
+
+    return copy
+end
+
+local function CopyTable(source)
+    local copy = {}
+    if type(source) ~= "table" then
+        return copy
+    end
+
+    for key, value in pairs(source) do
+        if type(value) == "table" then
+            copy[key] = CopyTable(value)
+        else
+            copy[key] = value
+        end
+    end
+
+    return copy
+end
+
+local charDB = OakLFGSorterCharDB
+if type(charDB.browserFilters) ~= "table" then
+    charDB.browserFilters = CopyTable(OakLFGSorterDB.browserFilters)
+end
+if type(charDB.regionFilters) ~= "table" then
+    charDB.regionFilters = CopyBooleanMap(OakLFGSorterDB.regionFilters)
+end
+if type(charDB.applicantClassFilters) ~= "table" then
+    charDB.applicantClassFilters = {}
+end
+if type(charDB.applicantRoleFilters) ~= "table" then
+    charDB.applicantRoleFilters = {}
+end
+
+for _, classToken in ipairs(addonTable.ValidClasses or {}) do
+    if charDB.applicantClassFilters[classToken] == nil then
+        charDB.applicantClassFilters[classToken] = true
+    end
+end
+for _, roleToken in ipairs({ "TANK", "HEALER", "DAMAGER" }) do
+    if charDB.applicantRoleFilters[roleToken] == nil then
+        charDB.applicantRoleFilters[roleToken] = true
+    end
+end
+
+function addonTable.GetCharacterDB()
+    OakLFGSorterCharDB = OakLFGSorterCharDB or charDB or {}
+    return OakLFGSorterCharDB
+end
+
+function addonTable.GetCharacterBrowserFilters()
+    local db = addonTable.GetCharacterDB()
+    db.browserFilters = db.browserFilters or {}
+    return db.browserFilters
+end
+
+function addonTable.GetCharacterRegionFilters()
+    local db = addonTable.GetCharacterDB()
+    db.regionFilters = db.regionFilters or {}
+    return db.regionFilters
+end
+
+function addonTable.GetApplicantClassFilters()
+    local db = addonTable.GetCharacterDB()
+    db.applicantClassFilters = db.applicantClassFilters or {}
+    return db.applicantClassFilters
+end
+
+function addonTable.GetApplicantRoleFilters()
+    local db = addonTable.GetCharacterDB()
+    db.applicantRoleFilters = db.applicantRoleFilters or {}
+    return db.applicantRoleFilters
+end
+
+local browserFilters = addonTable.GetCharacterBrowserFilters()
 if browserFilters.difficulty == nil then browserFilters.difficulty = "ANY" end
 if browserFilters.playstyle == nil then browserFilters.playstyle = "ANY" end
 if browserFilters.keyMin == nil then browserFilters.keyMin = "" end
@@ -282,6 +369,29 @@ function addonTable.SetWindowOpacity(value)
     alpha = math.max(0.35, math.min(1.0, alpha))
     OakLFGSorterDB.windowOpacity = alpha
     addonTable.ApplyWindowOpacity()
+end
+
+local function AnchorOakSidePanel(panel)
+    if not panel then
+        return
+    end
+
+    local anchorTarget = addonTable.OAK_LFG
+    local anchorOffset = -2
+    if addonTable.MythicPlusPanel and addonTable.MythicPlusPanel:IsShown() then
+        anchorTarget = addonTable.MythicPlusPanel
+        anchorOffset = 2
+    end
+
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", anchorTarget, "TOPRIGHT", anchorOffset, 0)
+end
+
+function addonTable.UpdateAuxPanelAnchors()
+    AnchorOakSidePanel(addonTable.FilterPanel)
+    AnchorOakSidePanel(addonTable.BrowserFilterPanel)
+    AnchorOakSidePanel(addonTable.SupportersPanel)
+    AnchorOakSidePanel(addonTable.OptionsPanel)
 end
 
 local ROLE_REMAINING_KEYS = {

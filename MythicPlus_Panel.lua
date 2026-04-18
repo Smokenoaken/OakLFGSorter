@@ -516,10 +516,16 @@ end
 local function PositionPanel()
     panel:ClearAllPoints()
     panel:SetPoint("TOPLEFT", GetAnchorTarget(), "TOPRIGHT", 2, 0)
+    if addonTable.UpdateAuxPanelAnchors then
+        addonTable.UpdateAuxPanelAnchors()
+    end
 end
 
 function addonTable.HideMythicPlusPanel()
     panel:Hide()
+    if addonTable.UpdateAuxPanelAnchors then
+        addonTable.UpdateAuxPanelAnchors()
+    end
 end
 
 local function RefreshMythicPlusPanel()
@@ -622,18 +628,20 @@ end
 function addonTable.ToggleMythicPlusPanel()
     if panel:IsShown() then
         panel:Hide()
+        if addonTable.UpdateAuxPanelAnchors then
+            addonTable.UpdateAuxPanelAnchors()
+        end
         if addonTable.UpdatePartyKeysPanel then
             addonTable.UpdatePartyKeysPanel()
         end
         return
     end
-    if addonTable.SupportersPanel then addonTable.SupportersPanel:Hide() end
-    if addonTable.OptionsPanel then addonTable.OptionsPanel:Hide() end
-    if addonTable.BrowserFilterPanel then addonTable.BrowserFilterPanel:Hide() end
-    if addonTable.FilterPanel then addonTable.FilterPanel:Hide() end
     PositionPanel()
     RefreshMythicPlusPanel()
     panel:Show()
+    if addonTable.UpdateAuxPanelAnchors then
+        addonTable.UpdateAuxPanelAnchors()
+    end
     if addonTable.UpdatePartyKeysPanel then
         addonTable.UpdatePartyKeysPanel()
     end

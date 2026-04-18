@@ -11,6 +11,71 @@ OakLFGSorterDB = OakLFGSorterDB or {}
 if OakLFGSorterDB.searchQuickSignup == nil then OakLFGSorterDB.searchQuickSignup = false end
 if OakLFGSorterDB.searchPersistSignupNote == nil then OakLFGSorterDB.searchPersistSignupNote = false end
 
+local function GetSearchSignupCharacterDB()
+    local db = addonTable.GetCharacterDB and addonTable.GetCharacterDB() or OakLFGSorterCharDB or {}
+    db.searchSignup = db.searchSignup or {}
+    return db.searchSignup
+end
+
+local function IsQuickSignupEnabled()
+    local charDB = GetSearchSignupCharacterDB()
+    if charDB.quickSignupEnabled == nil then
+        charDB.quickSignupEnabled = OakLFGSorterDB.searchQuickSignup == true
+    end
+    return charDB.quickSignupEnabled == true
+end
+
+local function SetQuickSignupEnabled(isEnabled)
+    local enabled = isEnabled == true
+    local charDB = GetSearchSignupCharacterDB()
+    charDB.quickSignupEnabled = enabled
+    OakLFGSorterDB.searchQuickSignup = enabled
+end
+
+local function IsPersistSignupNoteEnabled()
+    local charDB = GetSearchSignupCharacterDB()
+    if charDB.persistSignupNote == nil then
+        charDB.persistSignupNote = OakLFGSorterDB.searchPersistSignupNote == true
+    end
+    return charDB.persistSignupNote == true
+end
+
+local function SetPersistSignupNoteEnabled(isEnabled)
+    local enabled = isEnabled == true
+    local charDB = GetSearchSignupCharacterDB()
+    charDB.persistSignupNote = enabled
+    OakLFGSorterDB.searchPersistSignupNote = enabled
+end
+
+local function NormalizeSignupNoteText(noteText)
+    local value = tostring(noteText or "")
+    local normalized = value:gsub("\r\n", " "):gsub("[\r\n]+", " "):gsub("%s+", " ")
+    normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+    return normalized
+end
+
+local function GetSavedSignupNoteText()
+    return NormalizeSignupNoteText(GetSearchSignupCharacterDB().signupNoteText or "")
+end
+
+local function SetSavedSignupNoteText(noteText)
+    GetSearchSignupCharacterDB().signupNoteText = NormalizeSignupNoteText(noteText)
+end
+
+local function SaveBlockedSignupNoteText(noteText)
+    local value = tostring(noteText or "")
+    if value == "" then
+        return
+    end
+    GetSearchSignupCharacterDB().blockedSignupNoteText = value
+end
+
+local function NotifySignupNoteBlocked()
+    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff9CD6DEOak|r cleared your signup note for this application because Blizzard disabled the Sign Up button while note text was present.")
+    end
+end
+
 local FLAT_TEX = "Interface\\Buttons\\WHITE8X8"
 local OAK_COLOR_BORDER = {0, 0, 0, 1}
 
@@ -57,8 +122,12 @@ local quickSignupState = {
     persistPatchActive = false,
     queueButtonsHooked = false,
     originalDialogShow = nil,
+    suppressNoteFallback = false,
+    noteFallbackWarnedForDialog = false,
 }
 local EnsureQueueRoleSelectorHooks
+local GetSignupNoteEditBox
+local RestoreSavedSignupNote
 
 local SIGNUP_COOLDOWN_DURATION = 1.5  -- Blizzard server-side throttle estimate (seconds)
 local lastDirectSignupTime = 0
@@ -579,7 +648,134 @@ local function RestoreOriginalSignupDialogShow()
 end
 
 local function UpdatePersistentNotePatch()
+    if type(LFGListApplicationDialog_Show) ~= "function" then
+        return
+    end
+
+    if not quickSignupState.originalDialogShow then
+        quickSignupState.originalDialogShow = LFGListApplicationDialog_Show
+    end
+
+    if IsPersistSignupNoteEnabled() then
+        if quickSignupState.persistPatchActive then
+            return
+        end
+
+        LFGListApplicationDialog_Show = function(self, resultID)
+            if resultID then
+                local searchResultInfo = C_LFGList.GetSearchResultInfo(resultID)
+                self.resultID = resultID
+                self.activityID = searchResultInfo and ((searchResultInfo.activityIDs and searchResultInfo.activityIDs[1]) or 0) or 0
+            end
+
+            if LFGListApplicationDialog_UpdateRoles then
+                LFGListApplicationDialog_UpdateRoles(self)
+            end
+            StaticPopupSpecial_Show(self)
+        end
+
+        quickSignupState.persistPatchActive = true
+        return
+    end
+
     RestoreOriginalSignupDialogShow()
+end
+
+GetSignupNoteEditBox = function()
+    local descriptionFrame = _G.LFGListApplicationDialogDescription
+    local editBox = descriptionFrame and descriptionFrame.EditBox or nil
+    if editBox and type(editBox.GetText) == "function" and type(editBox.SetText) == "function" then
+        return editBox
+    end
+    return nil
+end
+
+RestoreSavedSignupNote = function(editBox)
+    return
+end
+
+local function SaveSignupNoteFromEditBox(editBox)
+    editBox = editBox or GetSignupNoteEditBox()
+    if not editBox then
+        return
+    end
+
+    SetSavedSignupNoteText(editBox:GetText())
+end
+
+local function EvaluateSignupNoteFallback(editBox, expectedText)
+    if quickSignupState.suppressNoteFallback then
+        return
+    end
+
+    if not IsPersistSignupNoteEnabled() then
+        return
+    end
+
+    if not (LFGListApplicationDialog and LFGListApplicationDialog:IsShown()) then
+        return
+    end
+
+    if not (editBox and editBox:IsShown()) then
+        return
+    end
+
+    local currentText = NormalizeSignupNoteText(editBox:GetText())
+    if currentText == "" or currentText ~= tostring(expectedText or "") then
+        return
+    end
+
+    local signUpButton = LFGListApplicationDialog.SignUpButton
+    if signUpButton and signUpButton:IsEnabled() then
+        return
+    end
+
+    SaveBlockedSignupNoteText(currentText)
+    quickSignupState.suppressNoteFallback = true
+    editBox:SetText("")
+    quickSignupState.suppressNoteFallback = false
+
+    if not quickSignupState.noteFallbackWarnedForDialog then
+        quickSignupState.noteFallbackWarnedForDialog = true
+        NotifySignupNoteBlocked()
+    end
+end
+
+local function HookSignupNoteFallback()
+    local editBox = GetSignupNoteEditBox()
+    if not editBox or editBox.OakSignupNoteFallbackHooked then
+        return
+    end
+
+    editBox:HookScript("OnTextChanged", function(self)
+        if quickSignupState.suppressNoteFallback then
+            return
+        end
+
+        local rawText = tostring(self:GetText() or "")
+        local noteText = NormalizeSignupNoteText(rawText)
+        if noteText ~= rawText then
+            quickSignupState.suppressNoteFallback = true
+            self:SetText(noteText)
+            quickSignupState.suppressNoteFallback = false
+        end
+
+        SetSavedSignupNoteText(noteText)
+
+        if noteText == "" then
+            return
+        end
+
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.15, function()
+                EvaluateSignupNoteFallback(self, noteText)
+            end)
+        else
+            EvaluateSignupNoteFallback(self, noteText)
+        end
+    end)
+
+    editBox.OakSignupNoteFallbackHooked = true
 end
 
 local function CreateQuickSignupToggle(parent)
@@ -743,8 +939,8 @@ function addonTable.UpdateSearchQuickSignupControls()
     local roleSettings = GetSavedQuickSignupRoles()
     local availableRoles = GetPlayerQuickSignupCapabilities()
 
-    quickSignupToggleBox:SetState(OakLFGSorterDB.searchQuickSignup == true)
-    persistNoteToggleBox:SetState(OakLFGSorterDB.searchPersistSignupNote == true)
+    quickSignupToggleBox:SetState(IsQuickSignupEnabled())
+    persistNoteToggleBox:SetState(IsPersistSignupNoteEnabled())
 
     for index, roleKey in ipairs(quickSignupState.roleOrder) do
         local button = quickSignupState.roleButtons[roleKey]
@@ -965,8 +1161,8 @@ EnsureQueueRoleSelectorHooks = function()
 end
 
 quickSignupToggleBox:SetScript("OnClick", function(self)
-    OakLFGSorterDB.searchQuickSignup = not OakLFGSorterDB.searchQuickSignup
-    self:SetState(OakLFGSorterDB.searchQuickSignup)
+    SetQuickSignupEnabled(not IsQuickSignupEnabled())
+    self:SetState(IsQuickSignupEnabled())
     addonTable.UpdateSearchQuickSignupControls()
 end)
 quickSignupToggleBox:SetScript("OnEnter", function(self)
@@ -981,8 +1177,8 @@ quickSignupToggleBox:SetScript("OnLeave", function()
 end)
 
 persistNoteToggleBox:SetScript("OnClick", function(self)
-    OakLFGSorterDB.searchPersistSignupNote = not OakLFGSorterDB.searchPersistSignupNote
-    self:SetState(OakLFGSorterDB.searchPersistSignupNote)
+    SetPersistSignupNoteEnabled(not IsPersistSignupNoteEnabled())
+    self:SetState(IsPersistSignupNoteEnabled())
     UpdatePersistentNotePatch()
 end)
 
@@ -1016,6 +1212,7 @@ end
 function addonTable.EnsureSearchSignupHooks()
     UpdatePersistentNotePatch()
     EnsureQueueRoleSelectorHooks()
+    HookSignupNoteFallback()
 
     if not LFGListApplicationDialog or LFGListApplicationDialog.OakQuickSignupHooked then
         if LFGListFrame and LFGListFrame.ApplicationViewer and not LFGListFrame.ApplicationViewer.OakRaiseAboveHooked then
@@ -1034,8 +1231,10 @@ function addonTable.EnsureSearchSignupHooks()
     end
 
     LFGListApplicationDialog:HookScript("OnShow", function(self)
+        RaiseSignupDialogAboveOak(self)
+        quickSignupState.noteFallbackWarnedForDialog = false
+        HookSignupNoteFallback()
         local shouldQuickSignup = quickSignupState.pending
-        quickSignupState.autofillDialog = shouldQuickSignup
         local hasClicked = false
         if shouldQuickSignup then
             QueueApplySavedQuickSignupRoles(self, function(dialog, expectedResultID)
@@ -1049,8 +1248,14 @@ function addonTable.EnsureSearchSignupHooks()
                     end
                 end
             end)
+        else
+            ApplySavedQuickSignupRoles(self)
         end
         quickSignupState.pending = false
+    end)
+
+    LFGListApplicationDialog:HookScript("OnHide", function()
+        SaveSignupNoteFromEditBox(GetSignupNoteEditBox())
     end)
 
     LFGListApplicationDialog.OakQuickSignupHooked = true
@@ -1076,7 +1281,7 @@ function addonTable.BeginSearchSignup(searchResultID)
 
     addonTable.EnsureSearchSignupHooks()
     local panel = LFGListFrame.SearchPanel
-    local shouldQuickSignup = OakLFGSorterDB.searchQuickSignup and not IsShiftKeyDown() or false
+    local shouldQuickSignup = IsQuickSignupEnabled() and not IsShiftKeyDown() or false
     quickSignupState.pending = shouldQuickSignup
 
     if shouldQuickSignup and ApplyQuickSignupDirect(searchResultID) then
