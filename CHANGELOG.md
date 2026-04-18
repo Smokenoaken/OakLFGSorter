@@ -1,3 +1,8 @@
+## v3.0.9
+
+- Streamlined Quick Sign Up behavior and browser signup flow
+- Added patch 12.0.5 interface compatibility
+
 ## v3.0.7
 
 - Fixed Party Keys teleports so Oak can be hidden in combat without protected-frame errors.
