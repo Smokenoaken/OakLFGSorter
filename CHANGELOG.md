@@ -1,3 +1,9 @@
+## v3.0.13
+
+- Raised Oak's browser stack so the main window clears action bars and similar UI overlays again.
+- Kept Blizzard's application popup explicitly above Oak while the browser is raised.
+- Made the browser filter panel widen itself for larger localized fonts and longer translated labels so filter text fits better across locales.
+
 ## v3.0.12
 
 - Fixed the Mythic+ Overview panel so it refreshes while open after key, score, seasonal-best, and Great Vault updates.
