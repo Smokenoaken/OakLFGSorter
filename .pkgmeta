@@ -1,6 +1,9 @@
 package-as: OakLFGSorter
 manual-changelog: CHANGELOG.md
 
+tools-used:
+    - libdatabroker-1-1
+
 ignore:
   - dist
   - package-release.ps1

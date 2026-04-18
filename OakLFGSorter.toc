@@ -29,3 +29,5 @@ MythicPlus_Panel.lua
 MinimapButton.lua
 Search_Signup.lua
 Search_Integration.lua
+LibStub.lua
+DataBroker.lua

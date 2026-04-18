@@ -149,6 +149,22 @@ local function OpenOakOptions()
 end
 addonTable.OpenOakOptions = OpenOakOptions
 
+addonTable.ClickMinimapButton = function(_, mouseButton)
+    if mouseButton == "RightButton" then
+        OpenOakOptions()
+    else
+        if addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
+            addonTable.userExplicitlyClosed = true
+            if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
+                addonTable.OAK_SEARCH:Hide()
+            end
+            addonTable.OAK_LFG:Hide()
+        else
+            OpenOakBrowser()
+        end
+    end
+end
+
 function addonTable.UpdateMinimapButtonVisibility()
     if not minimapButton then
         return
@@ -213,21 +229,7 @@ local function CreateMinimapButton()
     highlight:SetSize(52, 52)
     highlight:SetPoint("CENTER", button, "CENTER", 0, 1)
 
-    button:SetScript("OnClick", function(_, mouseButton)
-        if mouseButton == "RightButton" then
-            OpenOakOptions()
-        else
-            if addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
-                addonTable.userExplicitlyClosed = true
-                if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
-                    addonTable.OAK_SEARCH:Hide()
-                end
-                addonTable.OAK_LFG:Hide()
-            else
-                OpenOakBrowser()
-            end
-        end
-    end)
+    button:SetScript("OnClick", addonTable.ClickMinimapButton)
 
     button:SetScript("OnDragStart", function(self)
         self:SetScript("OnUpdate", UpdateDragPosition)
