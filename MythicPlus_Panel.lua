@@ -625,6 +625,73 @@ local function RefreshMythicPlusPanel()
     end
 end
 
+local mythicPlusRefreshPending = false
+local mythicPlusRefreshAfterCombat = false
+
+local function IsCombatLocked()
+    return InCombatLockdown and InCombatLockdown()
+end
+
+local function RunMythicPlusRefresh()
+    mythicPlusRefreshPending = false
+
+    if not panel:IsShown() then
+        return
+    end
+
+    if IsCombatLocked() then
+        mythicPlusRefreshAfterCombat = true
+        return
+    end
+
+    mythicPlusRefreshAfterCombat = false
+    RefreshMythicPlusPanel()
+end
+
+local function ScheduleMythicPlusRefresh(delay)
+    if not panel:IsShown() then
+        return
+    end
+
+    if IsCombatLocked() then
+        mythicPlusRefreshAfterCombat = true
+        return
+    end
+
+    if mythicPlusRefreshPending then
+        return
+    end
+
+    mythicPlusRefreshPending = true
+    C_Timer.After(delay or 0.1, RunMythicPlusRefresh)
+end
+
+local function ScheduleFollowupMythicPlusRefresh(delay)
+    C_Timer.After(delay or 0.1, function()
+        if panel:IsShown() then
+            addonTable.RefreshMythicPlusPanel()
+        end
+    end)
+end
+
+addonTable.RefreshMythicPlusPanel = function(immediate)
+    if immediate then
+        if not panel:IsShown() then
+            return
+        end
+        if IsCombatLocked() then
+            mythicPlusRefreshAfterCombat = true
+            return
+        end
+        mythicPlusRefreshPending = false
+        mythicPlusRefreshAfterCombat = false
+        RefreshMythicPlusPanel()
+        return
+    end
+
+    ScheduleMythicPlusRefresh(0.05)
+end
+
 function addonTable.ToggleMythicPlusPanel()
     if panel:IsShown() then
         panel:Hide()
@@ -637,8 +704,8 @@ function addonTable.ToggleMythicPlusPanel()
         return
     end
     PositionPanel()
-    RefreshMythicPlusPanel()
     panel:Show()
+    addonTable.RefreshMythicPlusPanel(true)
     if addonTable.UpdateAuxPanelAnchors then
         addonTable.UpdateAuxPanelAnchors()
     end
@@ -658,4 +725,32 @@ addonTable.RegisterThemeRefresh("mythic_plus_panel_theme", function()
     header:Show()
     header:SetColorTexture(unpack(addonTable.OAK_COLOR_TITLEBAR or addonTable.OAK_COLOR_PANE))
     divider:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
+end)
+
+panel:HookScript("OnShow", function()
+    ScheduleMythicPlusRefresh(0.05)
+    ScheduleFollowupMythicPlusRefresh(0.75)
+end)
+
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:RegisterEvent("CHALLENGE_MODE_MAPS_UPDATE")
+eventFrame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
+eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
+eventFrame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
+eventFrame:RegisterEvent("WEEKLY_REWARDS_ITEM_CHANGED")
+eventFrame:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_REGEN_ENABLED" then
+        if mythicPlusRefreshAfterCombat then
+            ScheduleMythicPlusRefresh(0.1)
+        end
+        return
+    end
+
+    ScheduleMythicPlusRefresh(0.1)
+    if event == "CHALLENGE_MODE_COMPLETED" or event == "CHALLENGE_MODE_MAPS_UPDATE" then
+        ScheduleFollowupMythicPlusRefresh(1.0)
+        ScheduleFollowupMythicPlusRefresh(2.0)
+    end
 end)
