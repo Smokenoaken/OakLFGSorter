@@ -1,3 +1,7 @@
+## v3.0.14
+
+- Fixed Magisters' Terrace dungeon filter sync so Oak now resolves the current-season Blizzard activity group instead of the legacy dungeon group
+
 ## v3.0.13
 
 - Raised Oak's browser stack so the main window clears action bars and similar UI overlays again.
