@@ -251,6 +251,21 @@ local function ResultMatchesSelectedActivities(result, filters, runtime)
 
     -- For raid/world-boss results the filterKey is the activity label with the difficulty
     -- prefix stripped (e.g. "Heroic The Voidspire" → "the voidspire").
+    local normalizeLabel = addonTable.NormalizeSearchScoreTargetLabel
+    local function IsSelectedActivityKey(filterKey)
+        if type(filterKey) ~= "string" or filterKey == "" then
+            return false
+        end
+        if filters.selectedActivities[filterKey] == true then
+            return true
+        end
+        local normalizedKey = normalizeLabel and normalizeLabel(filterKey) or nil
+        if normalizedKey and normalizedKey ~= filterKey and filters.selectedActivities[normalizedKey] == true then
+            return true
+        end
+        return false
+    end
+
     local isRaidResult = (result.mode == "raid" or result.mode == "legacy_raid" or result.mode == "open_world")
     if isRaidResult and result.raidListing then
         local rawLabel = result.activityFilterLabel or result.activityName or ""
@@ -266,9 +281,9 @@ local function ResultMatchesSelectedActivities(result, filters, runtime)
             end
         end
         local filterKey = strlower(label)
-        return filterKey ~= "" and filters.selectedActivities[filterKey] == true
+        return filterKey ~= "" and IsSelectedActivityKey(filterKey)
     end
-    return result.activityFilterKey and filters.selectedActivities[result.activityFilterKey] == true
+    return IsSelectedActivityKey(result.activityFilterKey)
 end
 
 local function ResultMatchesDifficulty(result, difficulty)
@@ -887,9 +902,6 @@ local function RefreshFilters()
 end
 
 local function RefreshBrowserFilters()
-    -- Do NOT call UpdateBrowserFilterPanel here — that rebuilds the entire panel
-    -- (including HideAllBrowserDropdowns) and would close any open dropdown mid-selection.
-    -- Panel layout rebuilds are driven by OnShow (mode change) only.
     if addonTable.UpdateDisplay then
         addonTable.UpdateDisplay()
     end

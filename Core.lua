@@ -1203,6 +1203,7 @@ local function NormalizeSearchScoreTargetLabel(label)
 end
 addonTable.NormalizeSearchScoreTargetLabel = NormalizeSearchScoreTargetLabel
 
+
 addonTable.GetMythicPlusScoreTargets = function()
     if not (C_ChallengeMode and C_ChallengeMode.GetMapTable and C_ChallengeMode.GetMapUIInfo and C_MythicPlus and C_MythicPlus.GetSeasonBestAffixScoreInfoForMap) then
         return {}
@@ -1332,11 +1333,21 @@ function addonTable.GetAvailableBrowserActivities()
                 if activityInfo then
                     local aLabel = CleanActivityLabel(activityInfo.fullName or activityInfo.shortName or "")
                     local aKey = NormalizeSearchScoreTargetLabel(aLabel)
-                    if aKey ~= "" and not resultInfoByLabel[aKey] then
-                        resultInfoByLabel[aKey] = {
-                            activityID = activityID,
-                            activityInfo = activityInfo,
-                        }
+                    if aKey ~= "" then
+                        -- Prefer the activity with the highest groupFinderActivityGroupID.
+                        -- Legacy dungeons reused for current M+ (e.g. Magisters' Terrace) have
+                        -- both old BC activities (low groupID) and current-season M+ activities
+                        -- (high groupID) under the same normalized label. Blizzard's native
+                        -- filter needs the current-season groupID, not the legacy one.
+                        local newGroupID = tonumber(activityInfo.groupFinderActivityGroupID) or 0
+                        local existing = resultInfoByLabel[aKey]
+                        local existingGroupID = existing and (tonumber((existing.activityInfo or {}).groupFinderActivityGroupID) or 0) or -1
+                        if not existing or newGroupID > existingGroupID then
+                            resultInfoByLabel[aKey] = {
+                                activityID = activityID,
+                                activityInfo = activityInfo,
+                            }
+                        end
                     end
                 end
             end
@@ -2688,7 +2699,6 @@ function OakLFGSorter_ToggleBrowserWindow()
     end
 end
 
--- Debug: dump raw leaderPvpRatingInfo fields from first PVP result
 SLASH_OAKPVPDEBUG1 = "/oakpvpdebug"
 SlashCmdList["OAKPVPDEBUG"] = function()
     local results = addonTable.SearchResults
