@@ -1,3 +1,10 @@
+## v3.0.15
+
+- Fixed browser spec-icon fallback so ambiguous spec names like Frost
+- Protection
+- Holy
+- and Restoration now resolve by class instead of showing the wrong icon
+
 ## v3.0.14
 
 - Fixed Magisters' Terrace dungeon filter sync so Oak now resolves the current-season Blizzard activity group instead of the legacy dungeon group
