@@ -385,6 +385,7 @@ OAK_LFG:SetScript("OnSizeChanged", function(self, width, height)
     end
 end)
 
+do
 local footer = CreateFrame("Frame", nil, OAK_LFG)
 footer:SetHeight(20)
 addonTable.Footer = footer
@@ -716,6 +717,7 @@ function addonTable.UpdateGroupBuffs()
     else lustText:SetText("|cFFFF5555|TInterface\\Icons\\spell_nature_bloodlust:13|t Need Lust|r") end
     if hasBrez then brezText:SetText("|cFF55FF55|TInterface\\Icons\\spell_holy_resurrection:13|t B-Rez Covered|r")
     else brezText:SetText("|cFFFF5555|TInterface\\Icons\\spell_holy_resurrection:13|t Need B-Rez|r") end
+end
 end
 
 local function SortGroups(grpA, grpB, sortBy, isAscending)

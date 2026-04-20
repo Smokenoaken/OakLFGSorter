@@ -21,6 +21,7 @@ Search_Config.lua
 Search_FilterModes.lua
 UI_Header.lua
 UI_Filters.lua
+UI_SidePanels.lua
 UI_Rows.lua
 Core.lua
 Party_Keys.lua

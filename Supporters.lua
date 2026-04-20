@@ -9,6 +9,7 @@ addonTable.Socials = {
 }
 
 addonTable.Patreons = {
+    "Mandos",
     "Thomas Valhøj - Ko-Fi",
     "Justin Komosky",
     "psykotedy",
@@ -16,10 +17,15 @@ addonTable.Patreons = {
     "mglass",
     "Vincent Murcia",
     "Shawn Snyder",
-	"Borja Santos",
-	"Emil Sundström",
-	"Tony",
-	"Mills Guild",
-	"Tony (2)",
-	"Inuyasha"
+    "Borja Santos",
+    "Emil Sundström",
+    "Tony",
+    "Mills Guild",
+    "Tony (2)",
+    "Inuyasha",
+    "Charles Saylor",
+    "Emmanuel leroy",
+    "Casey",
+    "Mike Saul",
+    "Michael j",
 }
