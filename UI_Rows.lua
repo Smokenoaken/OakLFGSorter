@@ -911,6 +911,8 @@ local COMP_SLOT_SPACING_PVP = 26
 
 -- Spec name → specID lookup built from all known TWW spec IDs.
 -- Used as fallback when GetSearchResultPlayerInfo returns specName but not specID.
+-- Some localized spec names are shared across classes (for example Frost),
+-- so keep both a class-aware lookup and a unique-name fallback.
 local KNOWN_SPEC_IDS = {
     62, 63, 64,            -- Mage: Arcane, Fire, Frost
     65, 66, 70,            -- Paladin: Holy, Protection, Retribution
@@ -927,13 +929,48 @@ local KNOWN_SPEC_IDS = {
     1467, 1468, 1473,      -- Evoker: Devastation, Preservation, Augmentation
 }
 local specNameToID = {}
+local specNameClassToID = {}
 if GetSpecializationInfoByID then
     for _, id in ipairs(KNOWN_SPEC_IDS) do
-        local _, specName = GetSpecializationInfoByID(id)
+        local _, specName, _, _, _, classFile = GetSpecializationInfoByID(id)
         if specName and specName ~= "" then
-            specNameToID[strlower(specName)] = id
+            local specKey = strlower(specName)
+            local classKey = classFile and strlower(classFile)
+            if classKey and classKey ~= "" then
+                specNameClassToID[specKey .. ":" .. classKey] = id
+            end
+            if specNameToID[specKey] == nil then
+                specNameToID[specKey] = id
+            elseif specNameToID[specKey] ~= id then
+                specNameToID[specKey] = false
+            end
         end
     end
+end
+
+local function ResolveSpecID(specID, specName, className)
+    if specID and specID > 0 then
+        return specID
+    end
+    if not specName or specName == "" then
+        return nil
+    end
+
+    local specKey = strlower(specName)
+    if className and className ~= "" then
+        local classKey = strlower(className)
+        local classResolved = specNameClassToID[specKey .. ":" .. classKey]
+        if classResolved then
+            return classResolved
+        end
+    end
+
+    local resolved = specNameToID[specKey]
+    if resolved and resolved ~= false then
+        return resolved
+    end
+
+    return nil
 end
 
 local headers = {}
@@ -2851,11 +2888,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
                 slot:Hide()
             else
                 local player = players[idx]
-                local specID = player and player.specID
-                -- If specID missing, resolve from specName via lookup table
-                if (not specID or specID == 0) and player and player.specName and player.specName ~= "" then
-                    specID = specNameToID[strlower(player.specName)]
-                end
+                local specID = ResolveSpecID(player and player.specID, player and player.specName, player and player.class)
                 slot:Show()
                 SetBrowserCompSlotSpec(slot, specID, player and player.class, player ~= nil)
             end
@@ -2898,10 +2931,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
                             break
                         end
                     end
-                    local specID = player.specID
-                    if (not specID or specID == 0) and player.specName and player.specName ~= "" then
-                        specID = specNameToID[strlower(player.specName)]
-                    end
+                    local specID = ResolveSpecID(player.specID, player.specName, player.class or slotInfo.class)
                     SetBrowserCompSlotSpec(slot, specID, player.class or slotInfo.class, true)
                 else
                     SetBrowserCompSlot(slot, slotInfo.role, slotInfo.class, slotInfo.filled)
