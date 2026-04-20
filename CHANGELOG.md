@@ -1,3 +1,7 @@
+## v3.0.17
+
+- Updated supporters list.
+
 ## v3.0.16
 
 - Updated supporters list.
