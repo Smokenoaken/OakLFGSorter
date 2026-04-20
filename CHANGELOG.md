@@ -1,3 +1,7 @@
+## v3.0.16
+
+- Updated supporters list.
+
 ## v3.0.15
 
 - Fixed browser spec-icon fallback so ambiguous spec names like Frost
