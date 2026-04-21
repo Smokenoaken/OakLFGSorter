@@ -1,3 +1,7 @@
+## v3.0.18
+
+- Fixed browser filter issues.
+
 ## v3.0.17
 
 - Updated supporters list.
