@@ -28,5 +28,8 @@ addonTable.Patreons = {
     "Casey",
     "Mike Saul",
     "Michael j",
+    "Michael Irving",
     "Rob Richardson",
+    "Topcat357",
+    "Zacharias Kouvaras",
 }

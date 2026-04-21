@@ -7,7 +7,7 @@ OAK_LFG:SetSize(660, 444)
 OAK_LFG:SetPoint("CENTER")
 OAK_LFG:SetMovable(true)
 OAK_LFG:SetResizable(true)
-OAK_LFG:SetResizeBounds(660, 444, 660, 800) 
+OAK_LFG:SetResizeBounds(460, 444, 1100, 800) 
 OAK_LFG:EnableMouse(true)
 OAK_LFG:RegisterForDrag("LeftButton")
 OAK_LFG:SetScript("OnDragStart", function(self)
@@ -456,6 +456,10 @@ OAK_LFG:HookScript("OnSizeChanged", function(self)
     if self:IsShown() and not self.isOakDragging and not self.isOakResizing and addonTable.ClampFrameToScreen then
         addonTable.ClampFrameToScreen(self, OakLFGSorterDB, "framePos")
     end
+    if OakLFGSorterDB then
+        OakLFGSorterDB.windowWidth = math.floor((self:GetWidth() or 0) + 0.5)
+        OakLFGSorterDB.windowHeight = math.floor((self:GetHeight() or 0) + 0.5)
+    end
 end)
 
 scaleReset:SetScript("OnClick", function()
@@ -494,7 +498,7 @@ addonTable.CloseButton = closeBtn
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
-VersionText:SetText("|cff888888v3.0.18|r")
+VersionText:SetText("|cff888888v3.0.19|r")
 VersionText:Hide()
 
 addonTable.RegisterThemeRefresh("ui_header_theme", function()
@@ -538,6 +542,14 @@ resizeGrip:SetScript("OnMouseDown", function(self, button)
         self._oakResizeStartX, self._oakResizeStartY = GetCursorPosition()
         self._oakResizePending = true
         self._oakResizeStarted = false
+    end
+end)
+resizeGrip:SetScript("OnMouseUp", function(self, button)
+    if button == "LeftButton" then
+        self._oakResizePending = false
+        self._oakResizeStarted = false
+        OAK_LFG:StopMovingOrSizing()
+        OAK_LFG.isOakResizing = false
     end
 end)
 

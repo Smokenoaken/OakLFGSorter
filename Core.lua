@@ -1,6 +1,7 @@
 local addonName, addonTable = ...
 local OAK_LFG = addonTable.OAK_LFG
 local L = addonTable.L
+local NormalizeSearchScoreTargetLabel
 
 local function ShouldMuteApplicantPing()
     if not OakLFGSorterDB or not OakLFGSorterDB.muteApplicantPing then
@@ -975,7 +976,7 @@ local function FetchSearchResultData()
                 local keyLevel = ParseResultKeyLevel(resultInfo, activityInfo)
                 local displayName = BuildResultDisplayName(resultInfo, activityInfo, keyLevel)
                 local activityFilterLabel = GetSearchResultActivityFilterLabel(activityInfo, listingMode)
-                local activityFilterKey = strlower(activityFilterLabel or "")
+                local activityFilterKey = NormalizeSearchScoreTargetLabel(activityFilterLabel or "")
                 local players = GetSearchResultPlayers(searchResultID, resultInfo.numMembers or 0)
                 local memberCounts = GetSearchResultMemberCounts(searchResultID)
                 local roleCounts = GetSearchResultRoleCounts(searchResultID, memberCounts)
@@ -1194,8 +1195,32 @@ local function GetSearchRaidFilterLabel(activityInfo)
 end
 addonTable.GetSearchRaidFilterLabel = GetSearchRaidFilterLabel
 
-local function NormalizeSearchScoreTargetLabel(label)
+NormalizeSearchScoreTargetLabel = function(label)
     local normalized = strlower(GetSearchRaidFilterLabel({ fullName = tostring(label or "") }))
+    local replacements = {
+        ["ä"] = "ae", ["ö"] = "oe", ["ü"] = "ue", ["ß"] = "ss",
+        ["à"] = "a", ["á"] = "a", ["â"] = "a", ["ã"] = "a", ["å"] = "a",
+        ["ç"] = "c",
+        ["è"] = "e", ["é"] = "e", ["ê"] = "e", ["ë"] = "e",
+        ["ì"] = "i", ["í"] = "i", ["î"] = "i", ["ï"] = "i",
+        ["ñ"] = "n",
+        ["ò"] = "o", ["ó"] = "o", ["ô"] = "o", ["õ"] = "o",
+        ["ù"] = "u", ["ú"] = "u", ["û"] = "u",
+        ["ý"] = "y", ["ÿ"] = "y",
+    }
+    for source, target in pairs(replacements) do
+        normalized = normalized:gsub(source, target)
+    end
+    normalized = normalized:gsub("^the%s+", "")
+    normalized = normalized:gsub("^der%s+", "")
+    normalized = normalized:gsub("^die%s+", "")
+    normalized = normalized:gsub("^das%s+", "")
+    normalized = normalized:gsub("^le%s+", "")
+    normalized = normalized:gsub("^la%s+", "")
+    normalized = normalized:gsub("^les%s+", "")
+    normalized = normalized:gsub("^el%s+", "")
+    normalized = normalized:gsub("^los%s+", "")
+    normalized = normalized:gsub("^las%s+", "")
     normalized = normalized:gsub("[^%w%s]", " ")
     normalized = normalized:gsub("%s+", " ")
     normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
@@ -1372,7 +1397,7 @@ function addonTable.GetAvailableBrowserActivities()
         end
 
         for _, label in ipairs(seasonLabels) do
-            local filterKey = strlower(label)
+            local filterKey = NormalizeSearchScoreTargetLabel(label)
             if filterKey ~= "" and not seen[filterKey] then
                 seen[filterKey] = true
                 local normalizedKey = NormalizeSearchScoreTargetLabel(label)
@@ -1414,7 +1439,7 @@ function addonTable.GetAvailableBrowserActivities()
 
         for _, label in ipairs(configuredDelves) do
             local filterKeyBuilder = addonTable.GetPendingNativeActivityKey
-            local filterKey = filterKeyBuilder and filterKeyBuilder(label) or strlower(label)
+            local filterKey = filterKeyBuilder and filterKeyBuilder(label) or NormalizeSearchScoreTargetLabel(label)
             if filterKey ~= "" and not seen[filterKey] then
                 seen[filterKey] = true
                 local normalizedKey = NormalizeSearchScoreTargetLabel(label)
@@ -2655,14 +2680,19 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             end
             
             if OakLFGSorterDB.frameSize then 
+                local savedWidth = tonumber(OakLFGSorterDB.frameSize[1]) or 660
+                OakLFGSorterDB.windowWidth = savedWidth
                 local minWidth = addonTable.GetTargetFrameWidth and addonTable.GetTargetFrameWidth() or 660
-                local w = math.max(minWidth, OakLFGSorterDB.frameSize[1])
+                local w = math.max(minWidth, savedWidth)
                 local h = math.max(444, OakLFGSorterDB.frameSize[2])
                 OAK_LFG:SetSize(w, h) 
             end
 
             if addonTable.ApplyHideNotesLayout then
                 addonTable.ApplyHideNotesLayout()
+            end
+            if addonTable.UpdateDisplay then
+                addonTable.UpdateDisplay()
             end
             
             if addonTable.SetupBlizzardLFGHook then

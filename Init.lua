@@ -254,6 +254,11 @@ function addonTable.SetActiveFont(fontName)
     ApplyOakFont(fontPath)
     if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
     if addonTable.RefreshSearchOptionsPanel then addonTable.RefreshSearchOptionsPanel() end
+    if addonTable.UpdateTopBarLayout then addonTable.UpdateTopBarLayout() end
+    if addonTable.RefreshFooterButtonWidths then addonTable.RefreshFooterButtonWidths() end
+    if addonTable.UpdateBrowserFilterPanel then addonTable.UpdateBrowserFilterPanel() end
+    if addonTable.RefreshBrowserResponsiveLayout then addonTable.RefreshBrowserResponsiveLayout() end
+    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
 end
 
 function addonTable.GetFontSize()
@@ -264,6 +269,11 @@ function addonTable.SetFontSize(sizeValue)
     local baseSize = math.max(10, math.min(18, tonumber(sizeValue) or 12))
     OakLFGSorterDB.fontSize = baseSize
     ApplyOakFont(addonTable.ActiveFontPath or ResolveFontPath(addonTable.GetActiveFontName()))
+    if addonTable.UpdateTopBarLayout then addonTable.UpdateTopBarLayout() end
+    if addonTable.RefreshFooterButtonWidths then addonTable.RefreshFooterButtonWidths() end
+    if addonTable.UpdateBrowserFilterPanel then addonTable.UpdateBrowserFilterPanel() end
+    if addonTable.RefreshBrowserResponsiveLayout then addonTable.RefreshBrowserResponsiveLayout() end
+    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
 end
 
 local DUNGEON_TELEPORT_FALLBACKS = {

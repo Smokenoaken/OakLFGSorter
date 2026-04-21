@@ -1,3 +1,11 @@
+## v3.0.19
+
+- Added horizontal browser width adjustment with responsive browser column sizing.
+- Fixed locale-sensitive browser dungeon filtering and seasonal teleport resolution, including German article/name mismatches like Die Himmelsnadel.
+- Fixed browser reload layout issues so collapsed-note headers restore cleanly without manual resizing.
+- Updated the Supporters panel layout and supporter list.
+- If you find a locale-specific browser filter or teleport issue, please report it on Discord: https://discord.gg/FRGUFaEEVd
+
 ## v3.0.18
 
 - Fixed browser filter issues.

@@ -9,6 +9,8 @@ local ROW_HEIGHT = 22
 local FULL_FRAME_WIDTH = 660
 local COLLAPSED_FRAME_WIDTH = 460
 local BROWSER_COLLAPSED_WIDTH = 535
+local BROWSER_DEFAULT_WIDTH = 660
+local MAX_FRAME_WIDTH = 1100
 local BASE_HEADER_TOP_OFFSET = -43
 local BASE_SCROLL_TOP_OFFSET = -70
 local APPLICANT_CONTEXT_BAR_HEIGHT = 24
@@ -18,6 +20,7 @@ local roleWeights = { ["TANK"] = 1, ["HEALER"] = 2, ["DAMAGER"] = 3 }
 local GetBrowserApplicationPriority
 local IsRaidBrowserMode  -- forward declaration (defined below IsBrowserMode)
 local IsPvpBrowserMode
+local RefreshBrowserResponsiveLayout
 local MODE_CONFIGS = {
     mythic_plus = { ratingLabel = "M+ Rating", keyLabel = "Key" },
     rated_pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
@@ -367,11 +370,22 @@ local function UpdateApplicantContextBar()
 end
 
 local function GetTargetFrameWidth()
-    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
-        if IsBrowserMode() then
-            return BROWSER_COLLAPSED_WIDTH
+    local savedWidth = OakLFGSorterDB and tonumber(OakLFGSorterDB.windowWidth)
+    if IsBrowserMode() then
+        local minWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and BROWSER_COLLAPSED_WIDTH or FULL_FRAME_WIDTH
+        if savedWidth and savedWidth > minWidth then
+            return math.min(MAX_FRAME_WIDTH, savedWidth)
         end
-        return COLLAPSED_FRAME_WIDTH
+        return math.max(minWidth, BROWSER_DEFAULT_WIDTH)
+    end
+
+    if savedWidth and savedWidth > 0 then
+        local minWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and COLLAPSED_FRAME_WIDTH or FULL_FRAME_WIDTH
+        return math.max(minWidth, math.min(MAX_FRAME_WIDTH, savedWidth))
+    end
+
+    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        return math.max(COLLAPSED_FRAME_WIDTH, BROWSER_DEFAULT_WIDTH)
     end
     return FULL_FRAME_WIDTH
 end
@@ -380,8 +394,16 @@ addonTable.GetTargetFrameWidth = GetTargetFrameWidth
 OAK_LFG:SetScript("OnSizeChanged", function(self, width, height)
     scrollChild:SetWidth(scrollFrame:GetWidth())
     local targetWidth = GetTargetFrameWidth()
-    if math.abs(width - targetWidth) > 0.5 then
+    if not IsBrowserMode() and math.abs(width - targetWidth) > 0.5 then
         self:SetWidth(targetWidth)
+        return
+    end
+
+    if IsBrowserMode() then
+        if OakLFGSorterDB then
+            OakLFGSorterDB.windowWidth = math.floor((width or 0) + 0.5)
+        end
+        RefreshBrowserResponsiveLayout()
     end
 end)
 
@@ -655,6 +677,16 @@ mythicPanelBtn:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 
+local function RefreshFooterButtonWidths()
+    if lfgBtn.RefreshAutoWidth then lfgBtn:RefreshAutoWidth() end
+    if lfrBtn.RefreshAutoWidth then lfrBtn:RefreshAutoWidth() end
+    if suppBtn.RefreshAutoWidth then suppBtn:RefreshAutoWidth() end
+    if listBtn.RefreshAutoWidth then listBtn:RefreshAutoWidth() end
+    if pvpBtn.RefreshAutoWidth then pvpBtn:RefreshAutoWidth() end
+    if mythicPanelBtn.RefreshAutoWidth then mythicPanelBtn:RefreshAutoWidth() end
+end
+addonTable.RefreshFooterButtonWidths = RefreshFooterButtonWidths
+
 local function UpdateFooterActionVisibility()
     local isBrowser = IsBrowserMode()
     local hasActiveListing = C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()
@@ -677,6 +709,7 @@ local function UpdateFooterActionVisibility()
 end
 addonTable.UpdateFooterActionVisibility = UpdateFooterActionVisibility
 UpdateFooterActionVisibility()
+RefreshFooterButtonWidths()
 
 function addonTable.UpdateGroupBuffs()
     local isBrowser = IsBrowserMode()
@@ -901,6 +934,209 @@ local BR_RAID_KILLS_COLLAPSED = RowColumn(B_RAID_KILLS_COLLAPSED)
 local BR_RAID_AGE_COLLAPSED   = RowColumn(B_RAID_AGE_COLLAPSED)
 local BR_RAID_NOTE_COLLAPSED  = RowColumn(B_RAID_NOTE_COLLAPSED)
 
+local function CopyColumn(column)
+    return { x = column.x, w = column.w, align = column.align }
+end
+
+local function GetBrowserWidthDelta()
+    if not IsBrowserMode() then
+        return 0
+    end
+
+    local minWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and BROWSER_COLLAPSED_WIDTH or FULL_FRAME_WIDTH
+    local currentWidth = tonumber(OAK_LFG and OAK_LFG:GetWidth()) or minWidth
+    return math.max(0, math.floor(currentWidth - minWidth + 0.5))
+end
+
+local function MeasureDungeonColumnWidth()
+    if not IsBrowserMode() or not addonTable.MeasureBrowserTextWidth then
+        return B_DUNGEON.w
+    end
+
+    local widest = B_DUNGEON.w
+    local fontObject = _G["OakLFG_FontSmall"]
+    local labels = {}
+
+    for _, entry in ipairs(addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}) do
+        local label = tostring(entry and entry.label or "")
+        if label ~= "" then
+            labels[label] = true
+        end
+    end
+
+    for _, result in ipairs(addonTable.SearchResults or {}) do
+        local label = tostring(result and (result.dungeonName or result.activityFilterLabel or result.activityName) or "")
+        if label ~= "" then
+            labels[label] = true
+        end
+    end
+
+    for label in pairs(labels) do
+        widest = math.max(widest, addonTable.MeasureBrowserTextWidth(label, fontObject) + 14)
+    end
+
+    if addonTable.ShouldShowRegions and addonTable.ShouldShowRegions() then
+        widest = widest + REGION_TAG_WIDTH + 6
+    end
+
+    return math.min(260, widest)
+end
+
+local function GetExpandedBrowserColumns()
+    local extra = GetBrowserWidthDelta()
+    local cols = {
+        dungeon = CopyColumn(B_DUNGEON),
+        dungeonRegionSplit = CopyColumn(B_DUNGEON_REGION_SPLIT),
+        comp = CopyColumn(B_COMP),
+        title = CopyColumn(B_TITLE),
+        rating = CopyColumn(B_RATING),
+        age = CopyColumn(B_AGE),
+        note = CopyColumn(B_NOTE),
+        pvpArena = CopyColumn(B_PVP_ARENA),
+        pvpArenaRegionSplit = CopyColumn(B_PVP_ARENA_REGION_SPLIT),
+        pvpComp = CopyColumn(B_PVP_COMP),
+        pvpTitle = CopyColumn(B_PVP_TITLE),
+        pvpRating = CopyColumn(B_PVP_RATING),
+        pvpAge = CopyColumn(B_PVP_AGE),
+        pvpNote = CopyColumn(B_PVP_NOTE),
+        rbgActivity = CopyColumn(B_RBG_ACTIVITY),
+        rbgActivityRegionSplit = CopyColumn(B_RBG_ACTIVITY_REGION_SPLIT),
+        rbgComp = CopyColumn(B_RBG_COMP),
+        rbgTitle = CopyColumn(B_RBG_TITLE),
+        rbgRating = CopyColumn(B_RBG_RATING),
+        rbgAge = CopyColumn(B_RBG_AGE),
+        rbgNote = CopyColumn(B_RBG_NOTE),
+        raidName = CopyColumn(B_RAID_NAME),
+        raidNameRegionSplit = CopyColumn(B_RAID_NAME_REGION_SPLIT),
+        raidDiff = CopyColumn(B_RAID_DIFF),
+        raidComp = CopyColumn(B_RAID_COMP),
+        raidTitle = CopyColumn(B_RAID_TITLE),
+        raidKills = CopyColumn(B_RAID_KILLS),
+        raidAge = CopyColumn(B_RAID_AGE),
+        raidNote = CopyColumn(B_RAID_NOTE),
+        raidTitleCollapsed = CopyColumn(B_RAID_TITLE_COLLAPSED),
+        raidKillsCollapsed = CopyColumn(B_RAID_KILLS_COLLAPSED),
+        raidAgeCollapsed = CopyColumn(B_RAID_AGE_COLLAPSED),
+        raidNoteCollapsed = CopyColumn(B_RAID_NOTE_COLLAPSED),
+    }
+
+    if extra <= 0 then
+        return cols
+    end
+
+    local dungeonGrow = 0
+    local desiredDungeonWidth = MeasureDungeonColumnWidth()
+    if desiredDungeonWidth > cols.dungeon.w then
+        dungeonGrow = math.min(extra, desiredDungeonWidth - cols.dungeon.w)
+        cols.dungeon.w = cols.dungeon.w + dungeonGrow
+        cols.dungeonRegionSplit.w = cols.dungeonRegionSplit.w + dungeonGrow
+        cols.comp.x = cols.comp.x + dungeonGrow
+        cols.title.x = cols.title.x + dungeonGrow
+        cols.rating.x = cols.rating.x + dungeonGrow
+        cols.age.x = cols.age.x + dungeonGrow
+        cols.note.x = cols.note.x + dungeonGrow
+
+        cols.pvpArena.w = cols.pvpArena.w + dungeonGrow
+        cols.pvpArenaRegionSplit.w = cols.pvpArenaRegionSplit.w + dungeonGrow
+        cols.pvpComp.x = cols.pvpComp.x + dungeonGrow
+        cols.pvpTitle.x = cols.pvpTitle.x + dungeonGrow
+        cols.pvpRating.x = cols.pvpRating.x + dungeonGrow
+        cols.pvpAge.x = cols.pvpAge.x + dungeonGrow
+        cols.pvpNote.x = cols.pvpNote.x + dungeonGrow
+
+        cols.rbgActivity.w = cols.rbgActivity.w + dungeonGrow
+        cols.rbgActivityRegionSplit.w = cols.rbgActivityRegionSplit.w + dungeonGrow
+        cols.rbgComp.x = cols.rbgComp.x + dungeonGrow
+        cols.rbgTitle.x = cols.rbgTitle.x + dungeonGrow
+        cols.rbgRating.x = cols.rbgRating.x + dungeonGrow
+        cols.rbgAge.x = cols.rbgAge.x + dungeonGrow
+        cols.rbgNote.x = cols.rbgNote.x + dungeonGrow
+
+        cols.raidName.w = cols.raidName.w + dungeonGrow
+        cols.raidNameRegionSplit.w = cols.raidNameRegionSplit.w + dungeonGrow
+        cols.raidDiff.x = cols.raidDiff.x + dungeonGrow
+        cols.raidComp.x = cols.raidComp.x + dungeonGrow
+        cols.raidTitle.x = cols.raidTitle.x + dungeonGrow
+        cols.raidKills.x = cols.raidKills.x + dungeonGrow
+        cols.raidAge.x = cols.raidAge.x + dungeonGrow
+        cols.raidNote.x = cols.raidNote.x + dungeonGrow
+        cols.raidTitleCollapsed.x = cols.raidTitleCollapsed.x + dungeonGrow
+        cols.raidKillsCollapsed.x = cols.raidKillsCollapsed.x + dungeonGrow
+        cols.raidAgeCollapsed.x = cols.raidAgeCollapsed.x + dungeonGrow
+        cols.raidNoteCollapsed.x = cols.raidNoteCollapsed.x + dungeonGrow
+    end
+
+    extra = extra - dungeonGrow
+
+    local function apply(baseTitle, titleShare)
+        local titleGrow = math.floor(extra * titleShare + 0.5)
+        local noteGrow = extra - titleGrow
+        local afterTitleX = baseTitle.x + baseTitle.w + titleGrow
+        return titleGrow, noteGrow, afterTitleX
+    end
+
+    do
+        local titleGrow, noteGrow, afterTitleX = apply(B_TITLE, (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and 1.0 or 0.4)
+        cols.title.w = cols.title.w + titleGrow
+        cols.rating.x = afterTitleX
+        cols.age.x = cols.rating.x + cols.rating.w
+        cols.note.x = cols.age.x + cols.age.w
+        if not (OakLFGSorterDB and OakLFGSorterDB.hideNotes) then
+            cols.note.w = cols.note.w + noteGrow
+        end
+    end
+
+    do
+        local titleGrow, noteGrow, afterTitleX = apply(B_PVP_TITLE, (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and 1.0 or 0.45)
+        cols.pvpTitle.w = cols.pvpTitle.w + titleGrow
+        cols.pvpRating.x = afterTitleX
+        cols.pvpAge.x = cols.pvpRating.x + cols.pvpRating.w
+        cols.pvpNote.x = cols.pvpAge.x + cols.pvpAge.w
+        if not (OakLFGSorterDB and OakLFGSorterDB.hideNotes) then
+            cols.pvpNote.w = cols.pvpNote.w + noteGrow
+        end
+    end
+
+    do
+        local titleGrow, noteGrow, afterTitleX = apply(B_RBG_TITLE, (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and 1.0 or 0.45)
+        cols.rbgTitle.w = cols.rbgTitle.w + titleGrow
+        cols.rbgRating.x = afterTitleX
+        cols.rbgAge.x = cols.rbgRating.x + cols.rbgRating.w
+        cols.rbgNote.x = cols.rbgAge.x + cols.rbgAge.w
+        if not (OakLFGSorterDB and OakLFGSorterDB.hideNotes) then
+            cols.rbgNote.w = cols.rbgNote.w + noteGrow
+        end
+    end
+
+    do
+        local titleGrow, noteGrow, afterTitleX = apply(B_RAID_TITLE, (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and 1.0 or 0.45)
+        cols.raidTitle.w = cols.raidTitle.w + titleGrow
+        cols.raidKills.x = afterTitleX
+        cols.raidAge.x = cols.raidKills.x + cols.raidKills.w
+        cols.raidNote.x = cols.raidAge.x + cols.raidAge.w
+        if not (OakLFGSorterDB and OakLFGSorterDB.hideNotes) then
+            cols.raidNote.w = cols.raidNote.w + noteGrow
+        end
+    end
+
+    do
+        local titleGrow, noteGrow, afterTitleX = apply(B_RAID_TITLE_COLLAPSED, 1.0)
+        cols.raidTitleCollapsed.w = cols.raidTitleCollapsed.w + titleGrow
+        cols.raidKillsCollapsed.x = afterTitleX
+        cols.raidAgeCollapsed.x = cols.raidKillsCollapsed.x + cols.raidKillsCollapsed.w
+        cols.raidNoteCollapsed.x = cols.raidAgeCollapsed.x + cols.raidAgeCollapsed.w
+        if not (OakLFGSorterDB and OakLFGSorterDB.hideNotes) then
+            cols.raidNoteCollapsed.w = cols.raidNoteCollapsed.w + noteGrow
+        end
+    end
+
+    return cols
+end
+
+local function GetCurrentBrowserColumns()
+    return GetExpandedBrowserColumns()
+end
+
 -- File-scope comp slot sizing (also used in CreateRow and RepositionCompSlots)
 local COMP_SLOT_SIZE    = 18
 local COMP_SLOT_ICON    = 13
@@ -991,41 +1227,46 @@ function addonTable.UpdateHeaderVisuals()
         addonTable.CurrentIsAscending = false
     end
 
+    local browserCols = GetCurrentBrowserColumns()
+    local browserRegionColumn = { x = browserCols.dungeonRegionSplit.x + browserCols.dungeonRegionSplit.w, w = REGION_TAG_WIDTH, align = "CENTER" }
+    local pvpRegionColumn = { x = browserCols.pvpArenaRegionSplit.x + browserCols.pvpArenaRegionSplit.w, w = REGION_TAG_WIDTH, align = "CENTER" }
+    local rbgRegionColumn = { x = browserCols.rbgActivityRegionSplit.x + browserCols.rbgActivityRegionSplit.w, w = REGION_TAG_WIDTH, align = "CENTER" }
+    local raidRegionColumn = { x = browserCols.raidNameRegionSplit.x + browserCols.raidNameRegionSplit.w, w = REGION_TAG_WIDTH, align = "CENTER" }
     local browserColumns = {
-        role   = showRegions and B_DUNGEON_REGION_SPLIT or B_DUNGEON,
-        region = REGION_COLUMNS.browser,
-        class  = B_TITLE,
+        role   = showRegions and browserCols.dungeonRegionSplit or browserCols.dungeon,
+        region = browserRegionColumn,
+        class  = browserCols.title,
         spec   = nil,       -- hidden in non-raid browser
-        ilvl   = B_COMP,    -- "Comp" in browser
-        rating = B_RATING,
-        key    = B_AGE,     -- "Age" in browser
+        ilvl   = browserCols.comp,    -- "Comp" in browser
+        rating = browserCols.rating,
+        key    = browserCols.age,     -- "Age" in browser
     }
     local pvpBrowserColumns = {
-        role   = showRegions and B_PVP_ARENA_REGION_SPLIT or B_PVP_ARENA,
-        region = REGION_COLUMNS.pvp,
-        class  = B_PVP_TITLE,
+        role   = showRegions and browserCols.pvpArenaRegionSplit or browserCols.pvpArena,
+        region = pvpRegionColumn,
+        class  = browserCols.pvpTitle,
         spec   = nil,
-        ilvl   = B_PVP_COMP,
-        rating = B_PVP_RATING,
-        key    = B_PVP_AGE,
+        ilvl   = browserCols.pvpComp,
+        rating = browserCols.pvpRating,
+        key    = browserCols.pvpAge,
     }
     local rbgBrowserColumns = {
-        role   = showRegions and B_RBG_ACTIVITY_REGION_SPLIT or B_RBG_ACTIVITY,
-        region = REGION_COLUMNS.rbg,
-        class  = B_RBG_TITLE,
+        role   = showRegions and browserCols.rbgActivityRegionSplit or browserCols.rbgActivity,
+        region = rbgRegionColumn,
+        class  = browserCols.rbgTitle,
         spec   = nil,
-        ilvl   = B_RBG_COMP,
-        rating = B_RBG_RATING,
-        key    = B_RBG_AGE,
+        ilvl   = browserCols.rbgComp,
+        rating = browserCols.rbgRating,
+        key    = browserCols.rbgAge,
     }
     local raidBrowserColumns = {
-        role   = showRegions and B_RAID_NAME_REGION_SPLIT or B_RAID_NAME,
-        region = REGION_COLUMNS.raid,
-        class  = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and B_RAID_TITLE_COLLAPSED or B_RAID_TITLE,
-        spec   = B_RAID_DIFF,   -- "Difficulty" in raid browser
-        ilvl   = B_RAID_COMP,
-        rating = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and B_RAID_KILLS_COLLAPSED or B_RAID_KILLS,
-        key    = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and B_RAID_AGE_COLLAPSED or B_RAID_AGE,
+        role   = showRegions and browserCols.raidNameRegionSplit or browserCols.raidName,
+        region = raidRegionColumn,
+        class  = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and browserCols.raidTitleCollapsed or browserCols.raidTitle,
+        spec   = browserCols.raidDiff,   -- "Difficulty" in raid browser
+        ilvl   = browserCols.raidComp,
+        rating = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and browserCols.raidKillsCollapsed or browserCols.raidKills,
+        key    = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and browserCols.raidAgeCollapsed or browserCols.raidAge,
     }
     local defaultColumns = {
         role = C_ROLE,
@@ -1037,6 +1278,8 @@ function addonTable.UpdateHeaderVisuals()
         key = C_KEY,
     }
     local pad = addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
+    local currentWidth = tonumber(OAK_LFG and OAK_LFG:GetWidth()) or FULL_FRAME_WIDTH
+    local headerRightLimit = currentWidth - 14 - pad
 
     for _, header in ipairs(headers) do
         local column
@@ -1053,9 +1296,10 @@ function addonTable.UpdateHeaderVisuals()
         end
 
         if column then
+            local headerWidth = math.max(20, math.min(column.w, headerRightLimit - column.x))
             header:ClearAllPoints()
             header:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", column.x + pad, HEADER_TOP_OFFSET)
-            header:SetSize(column.w, 22)
+            header:SetSize(headerWidth, 22)
             local leftPadding = (column.align == "LEFT") and 6 or 2
             local rightPadding = (column.align == "LEFT") and 12 or 2
             header.text:ClearAllPoints()
@@ -1204,14 +1448,17 @@ end
 
 local function GetCurrentNoteColumn()
     if IsBrowserMode() then
+        local browserCols = GetCurrentBrowserColumns()
         if IsRaidBrowserMode() then
             if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
-                return B_RAID_NOTE_COLLAPSED
+                return browserCols.raidNoteCollapsed
             end
-            return B_RAID_NOTE
+            return browserCols.raidNote
         end
-        if IsPvpBrowserMode() then return B_PVP_NOTE end
-        return B_NOTE
+        if IsPvpBrowserMode() then
+            return IsRatedBattlegroundBrowserMode() and browserCols.rbgNote or browserCols.pvpNote
+        end
+        return browserCols.note
     end
 
     if UsesSecondaryMetricColumn() then
@@ -1226,26 +1473,27 @@ local function GetCurrentRowNoteColumn()
 end
 
 local function GetCurrentRaidBrowserColumns()
+    local browserCols = GetCurrentBrowserColumns()
     if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
         return {
-            name = BR_RAID_NAME,
-            diff = BR_RAID_DIFF,
-            comp = BR_RAID_COMP,
-            title = BR_RAID_TITLE_COLLAPSED,
-            kills = BR_RAID_KILLS_COLLAPSED,
-            age = BR_RAID_AGE_COLLAPSED,
-            note = BR_RAID_NOTE_COLLAPSED,
+            name = RowColumn(browserCols.raidName),
+            diff = RowColumn(browserCols.raidDiff),
+            comp = RowColumn(browserCols.raidComp),
+            title = RowColumn(browserCols.raidTitleCollapsed),
+            kills = RowColumn(browserCols.raidKillsCollapsed),
+            age = RowColumn(browserCols.raidAgeCollapsed),
+            note = RowColumn(browserCols.raidNoteCollapsed),
         }
     end
 
     return {
-        name = BR_RAID_NAME,
-        diff = BR_RAID_DIFF,
-        comp = BR_RAID_COMP,
-        title = BR_RAID_TITLE,
-        kills = BR_RAID_KILLS,
-        age = BR_RAID_AGE,
-        note = BR_RAID_NOTE,
+        name = RowColumn(browserCols.raidName),
+        diff = RowColumn(browserCols.raidDiff),
+        comp = RowColumn(browserCols.raidComp),
+        title = RowColumn(browserCols.raidTitle),
+        kills = RowColumn(browserCols.raidKills),
+        age = RowColumn(browserCols.raidAge),
+        note = RowColumn(browserCols.raidNote),
     }
 end
 
@@ -1369,7 +1617,8 @@ local function UpdateNotesToggleLayout()
         -- Clamp width so the button never overflows past the frame's right edge.
         -- In raid-browser collapsed mode the note column starts at x=500 inside a
         -- 535px frame, leaving only 33px — the old hard-coded 55 caused overflow.
-        local maxW = GetTargetFrameWidth() - xOffset - 2
+        local currentWidth = tonumber(OAK_LFG and OAK_LFG:GetWidth()) or GetTargetFrameWidth()
+        local maxW = currentWidth - xOffset - 2
         notesToggleBtn:SetWidth(math.min(55, math.max(20, maxW)))
         -- Left-justify the "Notes" label in collapsed state
         notesToggleBtn.text:ClearAllPoints()
@@ -1434,6 +1683,9 @@ addonTable.RegisterThemeRefresh("ui_rows_theme", function()
     listBtn:SetPoint("LEFT", optionsBtn, "RIGHT", 3, 0)
     pvpBtn:ClearAllPoints()
     pvpBtn:SetPoint("LEFT", listBtn, "RIGHT", 2, 0)
+    if addonTable.RefreshFooterButtonWidths then
+        addonTable.RefreshFooterButtonWidths()
+    end
     stickyPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_STICKY or {0.05, 0.10, 0.05, 0.95}))
     applicantContextBar:SetBackdropColor(unpack(addonTable.OAK_COLOR_CONTEXT or {0.08, 0.08, 0.10, 0.75}))
     _ssLineTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[1] or 0.9), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[2] or 0.9), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[3] or 0.9), addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[4] or 1.0)
@@ -1448,6 +1700,9 @@ addonTable.RegisterThemeRefresh("ui_rows_theme", function()
     end
     _bsepTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[1] or 0.7), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[2] or 0.7), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[3] or 0.7), addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[4] or 0.9)
     UpdateNotesToggleVisual()
+    if addonTable.RefreshBrowserResponsiveLayout then
+        addonTable.RefreshBrowserResponsiveLayout()
+    end
     if addonTable.UpdateDisplay then
         addonTable.UpdateDisplay()
     end
@@ -1484,12 +1739,20 @@ end)
 local rows = {}
 
 local function SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
-    OAK_LFG:SetResizeBounds(targetWidth, 444, targetWidth, 800)
+    local minWidth = targetWidth
+    local maxWidth = targetWidth
+    if IsBrowserMode() then
+        minWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and BROWSER_COLLAPSED_WIDTH or FULL_FRAME_WIDTH
+        maxWidth = MAX_FRAME_WIDTH
+    end
+    OAK_LFG:SetResizeBounds(minWidth, 444, maxWidth, 800)
     if preserveLeftEdge then
         local oldLeft = OAK_LFG:GetLeft()
         local oldBottom = OAK_LFG:GetBottom()
 
-        OAK_LFG:SetWidth(targetWidth)
+        if not IsBrowserMode() or (OAK_LFG:GetWidth() or 0) < minWidth then
+            OAK_LFG:SetWidth(targetWidth)
+        end
         if oldLeft and oldBottom then
             OAK_LFG:ClearAllPoints()
             OAK_LFG:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", oldLeft, oldBottom)
@@ -1497,7 +1760,7 @@ local function SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
                 OakLFGSorterDB.framePos = { "BOTTOMLEFT", "BOTTOMLEFT", oldLeft, oldBottom }
             end
         end
-    elseif math.abs(OAK_LFG:GetWidth() - targetWidth) > 0.5 then
+    elseif (not IsBrowserMode()) and math.abs(OAK_LFG:GetWidth() - targetWidth) > 0.5 then
         OAK_LFG:SetWidth(targetWidth)
     end
 
@@ -1702,44 +1965,48 @@ local function RepositionCompSlots(row, col, numSlots, isPvp)
 end
 
 local function ConfigureBrowserRowLayout(row)
+    local browserCols = GetCurrentBrowserColumns()
     local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
-    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_DUNGEON, 5, regionMarkup)
-    RepositionCompSlots(row, BR_COMP)
-    ConfigureTextColumn(row.nameText, row, BR_TITLE, 5)
-    ConfigureTextColumn(row.ratingText, row, BR_RATING)
-    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_AGE) end
-    ConfigureTextColumn(row.noteText, row, BR_NOTE, 5)
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, RowColumn(browserCols.dungeon), 5, regionMarkup)
+    RepositionCompSlots(row, RowColumn(browserCols.comp))
+    ConfigureTextColumn(row.nameText, row, RowColumn(browserCols.title), 5)
+    ConfigureTextColumn(row.ratingText, row, RowColumn(browserCols.rating))
+    if row.ageText then ConfigureTextColumn(row.ageText, row, RowColumn(browserCols.age)) end
+    ConfigureTextColumn(row.noteText, row, RowColumn(browserCols.note), 5)
 end
 
 local function ConfigureCustomBrowserRowLayout(row)
+    local browserCols = GetCurrentBrowserColumns()
     local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
-    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_DUNGEON, 5, regionMarkup)
-    ConfigureTextColumn(row.ilvlText, row, BR_COMP)
-    ConfigureTextColumn(row.nameText, row, BR_TITLE, 5)
-    ConfigureTextColumn(row.ratingText, row, BR_RATING)
-    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_AGE) end
-    ConfigureTextColumn(row.noteText, row, BR_NOTE, 5)
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, RowColumn(browserCols.dungeon), 5, regionMarkup)
+    ConfigureTextColumn(row.ilvlText, row, RowColumn(browserCols.comp))
+    ConfigureTextColumn(row.nameText, row, RowColumn(browserCols.title), 5)
+    ConfigureTextColumn(row.ratingText, row, RowColumn(browserCols.rating))
+    if row.ageText then ConfigureTextColumn(row.ageText, row, RowColumn(browserCols.age)) end
+    ConfigureTextColumn(row.noteText, row, RowColumn(browserCols.note), 5)
 end
 
 -- PVP/Arena layout: narrow "Arena" column + 3-slot spec comp (larger icons) + wider title
 local function ConfigurePvpBrowserRowLayout(row)
+    local browserCols = GetCurrentBrowserColumns()
     local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
-    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_PVP_ARENA, 5, regionMarkup)
-    RepositionCompSlots(row, BR_PVP_COMP, 3, true)  -- true = PVP large-slot mode
-    ConfigureTextColumn(row.nameText, row, BR_PVP_TITLE, 5)
-    ConfigureTextColumn(row.ratingText, row, BR_PVP_RATING)
-    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_PVP_AGE) end
-    ConfigureTextColumn(row.noteText, row, BR_PVP_NOTE, 5)
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, RowColumn(browserCols.pvpArena), 5, regionMarkup)
+    RepositionCompSlots(row, RowColumn(browserCols.pvpComp), 3, true)  -- true = PVP large-slot mode
+    ConfigureTextColumn(row.nameText, row, RowColumn(browserCols.pvpTitle), 5)
+    ConfigureTextColumn(row.ratingText, row, RowColumn(browserCols.pvpRating))
+    if row.ageText then ConfigureTextColumn(row.ageText, row, RowColumn(browserCols.pvpAge)) end
+    ConfigureTextColumn(row.noteText, row, RowColumn(browserCols.pvpNote), 5)
 end
 
 local function ConfigureRbgBrowserRowLayout(row)
+    local browserCols = GetCurrentBrowserColumns()
     local regionMarkup = addonTable.GetRegionBadgeMarkup and addonTable.GetRegionBadgeMarkup(row.regionInfo) or ""
-    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, BR_RBG_ACTIVITY, 5, regionMarkup)
-    ConfigureTextColumn(row.ilvlText, row, BR_RBG_COMP)
-    ConfigureTextColumn(row.nameText, row, BR_RBG_TITLE, 5)
-    ConfigureTextColumn(row.ratingText, row, BR_RBG_RATING)
-    if row.ageText then ConfigureTextColumn(row.ageText, row, BR_RBG_AGE) end
-    ConfigureTextColumn(row.noteText, row, BR_RBG_NOTE, 5)
+    ConfigureTextColumnWithTrailingTag(row.dungeonText, row.regionText, row, RowColumn(browserCols.rbgActivity), 5, regionMarkup)
+    ConfigureTextColumn(row.ilvlText, row, RowColumn(browserCols.rbgComp))
+    ConfigureTextColumn(row.nameText, row, RowColumn(browserCols.rbgTitle), 5)
+    ConfigureTextColumn(row.ratingText, row, RowColumn(browserCols.rbgRating))
+    if row.ageText then ConfigureTextColumn(row.ageText, row, RowColumn(browserCols.rbgAge)) end
+    ConfigureTextColumn(row.noteText, row, RowColumn(browserCols.rbgNote), 5)
 end
 
 local function ConfigureRaidBrowserRowLayout(row)
@@ -1784,6 +2051,21 @@ end
 local function GetBrowserInviteRightInset()
     return -5
 end
+
+RefreshBrowserResponsiveLayout = function()
+    if addonTable.UpdateHeaderVisuals then
+        addonTable.UpdateHeaderVisuals()
+    end
+    UpdateNotesToggleLayout()
+    UpdateNotesToggleVisual()
+    if addonTable.UpdateTopBarLayout then
+        addonTable.UpdateTopBarLayout()
+    end
+    if addonTable.UpdateBrowserFilterPanel and addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() then
+        addonTable.UpdateBrowserFilterPanel()
+    end
+end
+addonTable.RefreshBrowserResponsiveLayout = RefreshBrowserResponsiveLayout
 
 local function SetBrowserCompSlot(slotFrame, role, className, filled)
     local coords = addonTable.RoleTexCoords[role]
@@ -3039,6 +3321,9 @@ local function PopulateBrowserRow(row, result, isAltColor)
 end
 
 function addonTable.UpdateDisplay()
+    if addonTable.RefreshBrowserResponsiveLayout and IsBrowserMode() then
+        addonTable.RefreshBrowserResponsiveLayout()
+    end
     addonTable.UpdateGroupBuffs()
     if addonTable.UpdateTopBarActions then
         addonTable.UpdateTopBarActions()

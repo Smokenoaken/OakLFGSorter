@@ -280,7 +280,7 @@ local function ResultMatchesSelectedActivities(result, filters, runtime)
                 if rawLabel:sub(1, #prefix) == prefix then label = rawLabel:sub(#prefix + 1); break end
             end
         end
-        local filterKey = strlower(label)
+        local filterKey = normalizeLabel and normalizeLabel(label) or strlower(label)
         return filterKey ~= "" and IsSelectedActivityKey(filterKey)
     end
     return IsSelectedActivityKey(result.activityFilterKey)
@@ -341,6 +341,10 @@ local function GetSavedRaidDifficultyToken(difficultyID, difficultyName)
 end
 
 local function NormalizeInstanceKey(name)
+    local normalizeLabel = addonTable.NormalizeSearchScoreTargetLabel
+    if normalizeLabel then
+        return normalizeLabel(name)
+    end
     local text = strlower(tostring(name or ""))
     text = text:gsub("%s*%b()", "")
     text = text:gsub("[^%w%s]", "")
@@ -2582,6 +2586,20 @@ local function RestoreBrowserNativeSearchBox()
     browserNativeSearchOriginalState = nil
 end
 
+local function BrowserKnowsSpell(spellID)
+    local numericSpellID = tonumber(spellID)
+    if not numericSpellID then
+        return false
+    end
+    if IsSpellKnownOrOverridesKnown then
+        return IsSpellKnownOrOverridesKnown(numericSpellID)
+    end
+    if IsPlayerSpell and IsPlayerSpell(numericSpellID) then
+        return true
+    end
+    return IsSpellKnown and IsSpellKnown(numericSpellID) or false
+end
+
 -- Hook filter panel hide to restore the search box to Blizzard's panel
 browserFilterPanel:HookScript("OnHide", function() RestoreBrowserNativeSearchBox() end)
 
@@ -2865,7 +2883,10 @@ local function UpdateBrowserActivityButtons(startY)
             button.text = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
             button.text:SetJustifyH("LEFT")
             button.teleportButton = CreateFrame("Button", nil, browserContent, "SecureActionButtonTemplate")
+            button.teleportButton:EnableMouse(true)
             button.teleportButton:RegisterForClicks("AnyUp", "AnyDown")
+            button.teleportButton:SetFrameStrata(browserContent:GetFrameStrata())
+            button.teleportButton:SetFrameLevel(browserContent:GetFrameLevel() + 20)
             button.scoreText = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
             button.scoreText:SetWidth(60)
             button.scoreText:SetJustifyH("RIGHT")
@@ -2906,27 +2927,35 @@ local function UpdateBrowserActivityButtons(startY)
         button:Show()
 
         if showScoreColumn and entry.mapID then
-            local spellID = addonTable.GetDungeonTeleportSpellID and addonTable.GetDungeonTeleportSpellID(entry.mapID) or nil
+            local mapInfo = entry.mapID and addonTable.GetChallengeMapInfo and addonTable.GetChallengeMapInfo(entry.mapID) or nil
+            local spellID = addonTable.GetDungeonTeleportSpellID and addonTable.GetDungeonTeleportSpellID(mapInfo and mapInfo.instanceMapID or entry.mapID) or nil
+            local spellName = spellID and ((C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)) or GetSpellInfo(spellID)) or nil
+            local knowsTeleport = BrowserKnowsSpell(spellID)
+            button.teleportButton:SetFrameLevel(browserContent:GetFrameLevel() + 20)
             button.teleportButton:ClearAllPoints()
             button.teleportButton:SetPoint("TOPLEFT", button, "TOPLEFT", 22, 0)
             button.teleportButton:SetSize(132, 16)
             button.teleportButton:Show()
             if not (InCombatLockdown and InCombatLockdown()) then
-                if spellID and IsSpellKnown and IsSpellKnown(spellID) then
+                if spellID then
                     button.teleportButton:SetAttribute("type", "spell")
-                    button.teleportButton:SetAttribute("spell", spellID)
+                    button.teleportButton:SetAttribute("type1", "spell")
+                    button.teleportButton:SetAttribute("spell", spellName or spellID)
+                    button.teleportButton:SetAttribute("spell1", spellName or spellID)
                 else
                     button.teleportButton:SetAttribute("type", nil)
+                    button.teleportButton:SetAttribute("type1", nil)
                     button.teleportButton:SetAttribute("spell", nil)
+                    button.teleportButton:SetAttribute("spell1", nil)
                 end
             end
             button.teleportButton:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_LEFT")
                 GameTooltip:SetText(entry.label or "", 1, 1, 1)
-                if spellID and IsSpellKnown and IsSpellKnown(spellID) then
+                if spellID and BrowserKnowsSpell(spellID) then
                     GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
                 elseif spellID then
-                    GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
+                    GameTooltip:AddLine("Teleport spell detected; click to try", 1, 0.82, 0.30)
                 end
                 GameTooltip:Show()
             end)
@@ -2937,7 +2966,9 @@ local function UpdateBrowserActivityButtons(startY)
             button.teleportButton:Hide()
             if not (InCombatLockdown and InCombatLockdown()) then
                 button.teleportButton:SetAttribute("type", nil)
+                button.teleportButton:SetAttribute("type1", nil)
                 button.teleportButton:SetAttribute("spell", nil)
+                button.teleportButton:SetAttribute("spell1", nil)
             end
             button.teleportButton:SetScript("OnEnter", nil)
             button.teleportButton:SetScript("OnLeave", nil)
@@ -3615,7 +3646,7 @@ function addonTable.BuildSidePanels()
 -- Supporters Flyout Panel
 local supportersPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.SupportersPanel = supportersPanel
-supportersPanel:SetSize(270, 390) 
+supportersPanel:SetSize(360, 390) 
 supportersPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -2, 0)
 supportersPanel:Hide()
 supportersPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1) 
@@ -4519,7 +4550,7 @@ fontPickerLabel:Hide()
 
 local suppScroll = CreateFrame("ScrollFrame", "OakLFGSupportersScroll", supportersPanel, "UIPanelScrollFrameTemplate")
 suppScroll:SetPoint("TOPLEFT", supportersPanel, "TOPLEFT", 10, -12)
-suppScroll:SetPoint("BOTTOMRIGHT", supportersPanel, "BOTTOMRIGHT", -25, 118) 
+suppScroll:SetPoint("BOTTOMRIGHT", supportersPanel, "BOTTOMRIGHT", -10, 118) 
 
 local suppScrollBar = _G[suppScroll:GetName() .. "ScrollBar"]
 if suppScrollBar then
@@ -4608,8 +4639,9 @@ supportersLabel:SetTextColor(0.84, 0.84, 0.84)
 
 local listStartY = topYOffset - 24
 local supporterCount = #generalSupporters
-local supporterRows = math.max(1, math.ceil(supporterCount / 2))
-local columnWidth = 112
+local supporterColumns = 3
+local supporterRows = math.max(1, math.ceil(supporterCount / supporterColumns))
+local columnWidth = 108
 local rowHeight = 18
 
 for index, name in ipairs(generalSupporters) do
