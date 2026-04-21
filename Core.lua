@@ -1203,7 +1203,6 @@ local function NormalizeSearchScoreTargetLabel(label)
 end
 addonTable.NormalizeSearchScoreTargetLabel = NormalizeSearchScoreTargetLabel
 
-
 addonTable.GetMythicPlusScoreTargets = function()
     if not (C_ChallengeMode and C_ChallengeMode.GetMapTable and C_ChallengeMode.GetMapUIInfo and C_MythicPlus and C_MythicPlus.GetSeasonBestAffixScoreInfoForMap) then
         return {}
@@ -1320,6 +1319,16 @@ function addonTable.GetAvailableBrowserActivities()
     -- always the correct full list of current-season M+ dungeons.
     if mode == "mythic_plus" or mode == "dungeon" then
         local seasonLabels = addonTable.GetLocalizedSeasonDungeonLabels and addonTable.GetLocalizedSeasonDungeonLabels() or {}
+        local mapIDByLabel = {}
+        if C_ChallengeMode and C_ChallengeMode.GetMapTable and C_ChallengeMode.GetMapUIInfo then
+            for _, mapID in ipairs(C_ChallengeMode.GetMapTable() or {}) do
+                local mapName = C_ChallengeMode.GetMapUIInfo(mapID)
+                local mapKey = NormalizeSearchScoreTargetLabel(mapName)
+                if mapKey and mapKey ~= "" and not mapIDByLabel[mapKey] then
+                    mapIDByLabel[mapKey] = tonumber(mapID)
+                end
+            end
+        end
 
         -- Build a canonical lookup: normalizedLabel → activityInfo/activityID.
         -- Prefer Blizzard's full available-activities list so dungeon filters still map
@@ -1373,6 +1382,7 @@ function addonTable.GetAvailableBrowserActivities()
                     label       = label,
                     filterKey   = filterKey,
                     activityInfo = resultMatch.activityInfo,
+                    mapID       = mapIDByLabel[normalizedKey],
                     scoreTarget = scoreTargets[normalizedKey] or nil,
                 })
             end
@@ -1424,6 +1434,8 @@ function addonTable.GetAvailableBrowserActivities()
 
     -- ── All other modes (raid, generic): build from search results ─────────
     local isRaidContext = (mode == "raid" or mode == "legacy_raid")
+    local selectedCategoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
+    addonTable.BrowserActivityCache = addonTable.BrowserActivityCache or {}
 
     -- Helper: strip difficulty prefix from a raid activity label.
     -- WoW stores raid difficulties as activity shortNames, so activityFilterLabel is
@@ -1441,6 +1453,42 @@ function addonTable.GetAvailableBrowserActivities()
             if rawLabel:sub(1, #prefix) == prefix then return rawLabel:sub(#prefix + 1) end
         end
         return rawLabel
+    end
+
+    local resultInfoByFilterKey = {}
+    local shouldPrepopulateFullRaidList = (selectedCategoryKey == "RAIDS_LEGACY")
+    if isRaidContext and shouldPrepopulateFullRaidList and C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetActivityInfoTable then
+        local categoryID = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryID
+        if categoryID then
+            for _, actID in ipairs(C_LFGList.GetAvailableActivities(categoryID) or {}) do
+                local actInfo = C_LFGList.GetActivityInfoTable(actID)
+                if actInfo then
+                    local actMode = GetListingMode(actInfo)
+                    if actMode == "raid" or actMode == "legacy_raid" or actMode == "open_world" then
+                        local rawLabel = CleanActivityLabel(actInfo.fullName or actInfo.shortName or "")
+                        local label = rawLabel
+                        if actMode ~= "open_world" then
+                            local inferredDiff = actInfo.shortName or ""
+                            label = StripRaidDifficultyPrefix(rawLabel, inferredDiff)
+                        end
+                        local filterKey = NormalizeSearchScoreTargetLabel(label)
+                        if label ~= "" and filterKey ~= "" and not seen[filterKey] then
+                            seen[filterKey] = true
+                            resultInfoByFilterKey[filterKey] = {
+                                activityID = actID,
+                                activityInfo = actInfo,
+                            }
+                            table.insert(activityEntries, {
+                                activityID = actID,
+                                label = label,
+                                filterKey = filterKey,
+                                activityInfo = actInfo,
+                            })
+                        end
+                    end
+                end
+            end
+        end
     end
 
     for _, result in ipairs(addonTable.SearchResults or {}) do
@@ -1461,7 +1509,7 @@ function addonTable.GetAvailableBrowserActivities()
             else
                 label = rawLabel
             end
-            local filterKey = strlower(label)
+            local filterKey = NormalizeSearchScoreTargetLabel(label)
             if label ~= "" and filterKey ~= "" and not seen[filterKey] then
                 seen[filterKey] = true
                 local normalizedKey = NormalizeSearchScoreTargetLabel(label)
@@ -1472,35 +1520,49 @@ function addonTable.GetAvailableBrowserActivities()
                     activityInfo = result.activityInfo,
                     scoreTarget  = scoreTargets[normalizedKey] or nil,
                 })
+            elseif isRaidContext and resultInfoByFilterKey[filterKey] and not resultInfoByFilterKey[filterKey].activityInfo then
+                resultInfoByFilterKey[filterKey] = {
+                    activityID = result.activityID,
+                    activityInfo = result.activityInfo,
+                }
             end
         end
     end
 
-    -- In raid context, also pre-populate world boss activities even when no groups
-    -- are currently advertised. C_LFGList.GetAvailableActivities returns every
-    -- activity in the selected category, including world bosses with zero listings.
-    if isRaidContext and C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetActivityInfoTable then
+    if isRaidContext and not shouldPrepopulateFullRaidList and C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetActivityInfoTable then
         local categoryID = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryID
         if categoryID then
-            local avail = C_LFGList.GetAvailableActivities(categoryID) or {}
-            for _, actID in ipairs(avail) do
+            for _, actID in ipairs(C_LFGList.GetAvailableActivities(categoryID) or {}) do
                 local actInfo = C_LFGList.GetActivityInfoTable(actID)
-                if actInfo then
-                    local actMode = GetListingMode(actInfo)
-                    if actMode == "open_world" then
-                        local rawLabel = CleanActivityLabel(actInfo.fullName or actInfo.shortName or "")
-                        local filterKey = strlower(rawLabel)
-                        if rawLabel ~= "" and filterKey ~= "" and not seen[filterKey] then
-                            seen[filterKey] = true
-                            table.insert(activityEntries, {
-                                activityID   = actID,
-                                label        = rawLabel,
-                                filterKey    = filterKey,
-                                activityInfo = actInfo,
-                            })
-                        end
+                if actInfo and GetListingMode(actInfo) == "open_world" then
+                    local rawLabel = CleanActivityLabel(actInfo.fullName or actInfo.shortName or "")
+                    local filterKey = NormalizeSearchScoreTargetLabel(rawLabel)
+                    if rawLabel ~= "" and filterKey ~= "" and not seen[filterKey] then
+                        seen[filterKey] = true
+                        table.insert(activityEntries, {
+                            activityID = actID,
+                            label = rawLabel,
+                            filterKey = filterKey,
+                            activityInfo = actInfo,
+                        })
                     end
                 end
+            end
+        end
+    end
+
+    if isRaidContext and selectedCategoryKey and selectedCategoryKey ~= "RAIDS_LEGACY" then
+        local cachedEntries = addonTable.BrowserActivityCache[selectedCategoryKey] or {}
+        for _, cachedEntry in ipairs(cachedEntries) do
+            local filterKey = cachedEntry and cachedEntry.filterKey or nil
+            if filterKey and filterKey ~= "" and not seen[filterKey] then
+                seen[filterKey] = true
+                table.insert(activityEntries, {
+                    activityID = cachedEntry.activityID,
+                    label = cachedEntry.label,
+                    filterKey = filterKey,
+                    activityInfo = cachedEntry.activityInfo,
+                })
             end
         end
     end
@@ -1508,6 +1570,19 @@ function addonTable.GetAvailableBrowserActivities()
     table.sort(activityEntries, function(a, b)
         return (a.label or "") < (b.label or "")
     end)
+
+    if isRaidContext and selectedCategoryKey and selectedCategoryKey ~= "RAIDS_LEGACY" then
+        local cacheEntries = {}
+        for _, entry in ipairs(activityEntries) do
+            cacheEntries[#cacheEntries + 1] = {
+                activityID = entry.activityID,
+                label = entry.label,
+                filterKey = entry.filterKey,
+                activityInfo = entry.activityInfo,
+            }
+        end
+        addonTable.BrowserActivityCache[selectedCategoryKey] = cacheEntries
+    end
 
     return activityEntries
 end

@@ -2864,6 +2864,8 @@ local function UpdateBrowserActivityButtons(startY)
             button = CreateBrowserToggleBox(browserContent, "")
             button.text = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
             button.text:SetJustifyH("LEFT")
+            button.teleportButton = CreateFrame("Button", nil, browserContent, "SecureActionButtonTemplate")
+            button.teleportButton:RegisterForClicks("AnyUp", "AnyDown")
             button.scoreText = browserContent:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
             button.scoreText:SetWidth(60)
             button.scoreText:SetJustifyH("RIGHT")
@@ -2886,6 +2888,7 @@ local function UpdateBrowserActivityButtons(startY)
         button:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
         button.activityID = entry.activityID
         button.filterKey = entry.filterKey
+        button.mapID = entry.mapID
         button.text:SetText(entry.label)
         if mode == "delve" and addonTable.IsCurrentBountifulDelve and addonTable.IsCurrentBountifulDelve(entry.label) then
             button.text:SetTextColor(1.0, 0.82, 0.20)
@@ -2901,6 +2904,44 @@ local function UpdateBrowserActivityButtons(startY)
         end)
         button.text:Show()
         button:Show()
+
+        if showScoreColumn and entry.mapID then
+            local spellID = addonTable.GetDungeonTeleportSpellID and addonTable.GetDungeonTeleportSpellID(entry.mapID) or nil
+            button.teleportButton:ClearAllPoints()
+            button.teleportButton:SetPoint("TOPLEFT", button, "TOPLEFT", 22, 0)
+            button.teleportButton:SetSize(132, 16)
+            button.teleportButton:Show()
+            if not (InCombatLockdown and InCombatLockdown()) then
+                if spellID and IsSpellKnown and IsSpellKnown(spellID) then
+                    button.teleportButton:SetAttribute("type", "spell")
+                    button.teleportButton:SetAttribute("spell", spellID)
+                else
+                    button.teleportButton:SetAttribute("type", nil)
+                    button.teleportButton:SetAttribute("spell", nil)
+                end
+            end
+            button.teleportButton:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                GameTooltip:SetText(entry.label or "", 1, 1, 1)
+                if spellID and IsSpellKnown and IsSpellKnown(spellID) then
+                    GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
+                elseif spellID then
+                    GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
+                end
+                GameTooltip:Show()
+            end)
+            button.teleportButton:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+            end)
+        else
+            button.teleportButton:Hide()
+            if not (InCombatLockdown and InCombatLockdown()) then
+                button.teleportButton:SetAttribute("type", nil)
+                button.teleportButton:SetAttribute("spell", nil)
+            end
+            button.teleportButton:SetScript("OnEnter", nil)
+            button.teleportButton:SetScript("OnLeave", nil)
+        end
 
         -- Score column
         if showScoreColumn and entry.scoreTarget then
@@ -3101,6 +3142,8 @@ function addonTable.UpdateBrowserFilterPanel()
         browserToggleRows["needsHealer"].box:Hide(); browserToggleRows["needsHealer"].text:Hide()
         browserToggleRows["hasHealer"].box:Hide();   browserToggleRows["hasHealer"].text:Hide()
         browserToggleRows["needsDPS"].box:Hide();    browserToggleRows["needsDPS"].text:Hide()
+        browserToggleRows["hasBrez"].box:Hide();     browserToggleRows["hasBrez"].text:Hide()
+        browserToggleRows["hasLust"].box:Hide();     browserToggleRows["hasLust"].text:Hide()
         browserNoClassBox:Hide(); browserNoClassText:Hide()
         browserMinRatingLabel:Hide(); browserMinRatingBox:Hide()
         browserToggleRows["hideDeclined"].box:Hide(); browserToggleRows["hideDeclined"].text:Hide()
