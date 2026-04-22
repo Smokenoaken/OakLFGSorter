@@ -964,6 +964,12 @@ local function FetchSearchResultData()
     end
 
     local firstContextResult = nil
+    local browserFilters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
+    local needsBrowserUtilityScan = browserFilters.needsLust
+        or browserFilters.needsBrez
+        or browserFilters.hasLust
+        or browserFilters.hasBrez
+    local needsBrowserDetailedPlayers = (OakLFGSorterDB and OakLFGSorterDB.showSpecIcons) or needsBrowserUtilityScan
 
     for _, searchResultID in ipairs(resultIDs) do
         local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
@@ -977,10 +983,19 @@ local function FetchSearchResultData()
                 local displayName = BuildResultDisplayName(resultInfo, activityInfo, keyLevel)
                 local activityFilterLabel = GetSearchResultActivityFilterLabel(activityInfo, listingMode)
                 local activityFilterKey = NormalizeSearchScoreTargetLabel(activityFilterLabel or "")
-                local players = GetSearchResultPlayers(searchResultID, resultInfo.numMembers or 0)
                 local memberCounts = GetSearchResultMemberCounts(searchResultID)
                 local roleCounts = GetSearchResultRoleCounts(searchResultID, memberCounts)
-                local _, hasLust, hasBrez, highestItemLevel = SummarizeSearchResultPlayers(players)
+                local needsPlayers = needsBrowserDetailedPlayers
+                    or listingMode == "raid"
+                    or listingMode == "legacy_raid"
+                    or listingMode == "pvp"
+                    or listingMode == "rated_pvp"
+                local players = needsPlayers and GetSearchResultPlayers(searchResultID, resultInfo.numMembers or 0) or {}
+                local hasLust, hasBrez, highestItemLevel = false, false, 0
+                if needsPlayers then
+                    local _
+                    _, hasLust, hasBrez, highestItemLevel = SummarizeSearchResultPlayers(players)
+                end
                 local playstyleValue, playstyleLabel, playstyleShortLabel = GetSearchResultPlaystyle(resultInfo, activityInfo)
                 local applicationStatus = GetApplicationStatusForResult(searchResultID)
                 local ratingValue = tonumber(resultInfo.leaderOverallDungeonScore) or 0
@@ -1024,21 +1039,6 @@ local function FetchSearchResultData()
                         local rioProfile = RaiderIO.GetProfile(charName, charRealm)
                         if rioProfile and addonTable.GetRaidProgressSummary then
                             raidProgress = addonTable.GetRaidProgressSummary(rioProfile, raidListing and raidListing.raidName or activityFilterLabel)
-                        end
-                    end
-                elseif (listingMode == "mythic_plus" or listingMode == "dungeon" or listingMode == "delve" or listingMode == "open_world")
-                    and resultInfo.leaderName and RaiderIO and RaiderIO.GetProfile then
-                    local charName, charRealm = strsplit("-", resultInfo.leaderName)
-                    if not charRealm or charRealm == "" then
-                        charRealm = GetNormalizedRealmName() or ""
-                    end
-                    local rioProfile = RaiderIO.GetProfile(charName, charRealm)
-                    if rioProfile and type(rioProfile.mythicKeystoneProfile) == "table" then
-                        local mPlusProfile = rioProfile.mythicKeystoneProfile
-                        local currentScore = tonumber(mPlusProfile.currentScore) or 0
-                        mainRatingValue = tonumber(mPlusProfile.mainCurrentScore) or 0
-                        if ratingValue <= 0 and currentScore > 0 then
-                            ratingValue = currentScore
                         end
                     end
                 end
@@ -2574,7 +2574,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
             end)
         end
         return
-    elseif event == "LFG_LIST_SEARCH_RESULTS_RECEIVED" or event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
+    elseif event == "LFG_LIST_SEARCH_RESULTS_RECEIVED" then
         -- Auto-open when the Blizzard search panel is visible and autoOpenSearch is on.
         -- This handles category switches where SearchPanel:OnShow doesn't re-fire.
         if OakLFGSorterDB and OakLFGSorterDB.autoOpenSearch and not OAK_LFG:IsShown()
@@ -2584,11 +2584,15 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
             OAK_LFG:Show()  -- OnShow triggers FetchSearchResultData + UpdateDisplay
             return
         end
-        -- LFG_LIST_SEARCH_RESULT_UPDATED fires once per result row, so debounce to
-        -- avoid running FetchSearchResultData + UpdateDisplay hundreds of times per frame.
         if currentViewMode == "browser" and isShown then
             ScheduleSearchRefresh()
         end
+        return
+    elseif event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
+        -- Blizzard fires this once per individual result row, often in dense bursts while
+        -- the browser is open. Rebuilding Oak's entire result list for each burst causes
+        -- large frame spikes when many rows are visible, so ignore the incremental row
+        -- updates and wait for the batched SEARCH_RESULTS_RECEIVED refresh instead.
         return
     elseif event == "LFG_LIST_ACTIVE_ENTRY_UPDATE" then
         if C_LFGList.HasActiveEntryInfo() then
@@ -2709,7 +2713,7 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             addonTable.UpdateAuxPanelAnchors()
         end
     elseif event == "GROUP_ROSTER_UPDATE" then
-        if OAK_LFG:IsShown() then
+        if OAK_LFG:IsShown() and C_LFGList.HasActiveEntryInfo() then
             addonTable.UpdateDisplay()
         end
     end
@@ -2847,7 +2851,4 @@ SlashCmdList["OAKPVPDEBUG"] = function()
         print("|cffff9900OAK PVP Debug:|r No PVP results found in cache.")
     end
 end
-
-
-
 
