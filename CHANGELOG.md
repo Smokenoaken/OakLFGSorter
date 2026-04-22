@@ -1,3 +1,9 @@
+## v3.0.20
+
+- Fixed the browser loading stutter when opening Oak for the first time
+- Reduced refresh hitching while browsing groups
+- Kept apply-to-group interactions responsive during browser updates
+
 ## v3.0.19
 
 - Added horizontal browser width adjustment with responsive browser column sizing.
