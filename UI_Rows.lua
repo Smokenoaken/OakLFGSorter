@@ -1520,37 +1520,58 @@ local function GetBrowserSetupSummary(result)
     end
 
     local expectedRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
-    local sortedPlayers = {}
-    local roleOrder = { TANK = 1, HEALER = 2, DAMAGER = 3 }
-
-    for _, player in ipairs(result.players or {}) do
-        table.insert(sortedPlayers, player)
-    end
-
-    table.sort(sortedPlayers, function(a, b)
-        return (roleOrder[a.role] or 99) < (roleOrder[b.role] or 99)
-    end)
-
-    local usedPlayers = {}
     local setup = {}
-    for index, expectedRole in ipairs(expectedRoles) do
-        local filled = false
-        local className = nil
+    local players = result.players or {}
 
-        for playerIndex, player in ipairs(sortedPlayers) do
-            if not usedPlayers[playerIndex] and player.role == expectedRole then
-                filled = true
-                className = player.class
-                usedPlayers[playerIndex] = true
-                break
-            end
+    if #players > 0 then
+        local sortedPlayers = {}
+        local roleOrder = { TANK = 1, HEALER = 2, DAMAGER = 3 }
+
+        for _, player in ipairs(players) do
+            table.insert(sortedPlayers, player)
         end
 
-        setup[index] = {
-            role = expectedRole,
-            filled = filled,
-            class = className,
+        table.sort(sortedPlayers, function(a, b)
+            return (roleOrder[a.role] or 99) < (roleOrder[b.role] or 99)
+        end)
+
+        local usedPlayers = {}
+        for index, expectedRole in ipairs(expectedRoles) do
+            local filled = false
+            local className = nil
+
+            for playerIndex, player in ipairs(sortedPlayers) do
+                if not usedPlayers[playerIndex] and player.role == expectedRole then
+                    filled = true
+                    className = player.class
+                    usedPlayers[playerIndex] = true
+                    break
+                end
+            end
+
+            setup[index] = {
+                role = expectedRole,
+                filled = filled,
+                class = className,
+            }
+        end
+    else
+        local remaining = {
+            TANK = tonumber(result.roleCounts and result.roleCounts.TANK) or 0,
+            HEALER = tonumber(result.roleCounts and result.roleCounts.HEALER) or 0,
+            DAMAGER = tonumber(result.roleCounts and result.roleCounts.DAMAGER) or 0,
         }
+        for index, expectedRole in ipairs(expectedRoles) do
+            local filled = (remaining[expectedRole] or 0) > 0
+            if filled then
+                remaining[expectedRole] = remaining[expectedRole] - 1
+            end
+            setup[index] = {
+                role = expectedRole,
+                filled = filled,
+                class = nil,
+            }
+        end
     end
 
     result._oakSetupSummary = setup
@@ -1736,7 +1757,35 @@ noteVisibilityBtn:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 
+local CreateRow
+local PopulateBrowserRow
 local rows = {}
+local browserRenderGeneration = 0
+local BROWSER_RENDER_BATCH_SIZE = 18
+
+local function QueueBrowserRowRender(normalResults, startIndex, generation)
+    if browserRenderGeneration ~= generation or not OAK_LFG:IsShown() or not IsBrowserMode() then
+        return
+    end
+
+    local displayIndex = startIndex
+    local batchEnd = math.min(#normalResults, startIndex + BROWSER_RENDER_BATCH_SIZE - 1)
+    for resultIndex = startIndex, batchEnd do
+        if not rows[displayIndex] then
+            rows[displayIndex] = CreateRow(displayIndex)
+        end
+        local row = rows[displayIndex]
+        PopulateBrowserRow(row, normalResults[resultIndex], (displayIndex % 2) == 0)
+        row:Show()
+        displayIndex = displayIndex + 1
+    end
+
+    if batchEnd < #normalResults then
+        C_Timer.After(0, function()
+            QueueBrowserRowRender(normalResults, batchEnd + 1, generation)
+        end)
+    end
+end
 
 local function SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
     local minWidth = targetWidth
@@ -2549,7 +2598,7 @@ function addonTable.BuildBrowserGroupTooltip(result)
     end
 end
 
-local function CreateRow(index, parentOverride, prevRowOverride)
+CreateRow = function(index, parentOverride, prevRowOverride)
     local parent = parentOverride or scrollChild
     local row = CreateFrame("Button", nil, parent)
     row:SetHeight(ROW_HEIGHT)
@@ -3081,7 +3130,7 @@ UpdateNotesToggleVisual()
 addonTable.ApplyHideNotesLayout()
 
 -- Shared helper: populate a browser-mode row (used for both sticky and scroll rows)
-local function PopulateBrowserRow(row, result, isAltColor)
+PopulateBrowserRow = function(row, result, isAltColor)
     row.searchResultID = result.id
     row.searchResult = result
     row.groupID = nil
@@ -3321,6 +3370,7 @@ local function PopulateBrowserRow(row, result, isAltColor)
 end
 
 function addonTable.UpdateDisplay()
+    browserRenderGeneration = browserRenderGeneration + 1
     if addonTable.RefreshBrowserResponsiveLayout and IsBrowserMode() then
         addonTable.RefreshBrowserResponsiveLayout()
     end
@@ -3427,14 +3477,9 @@ function addonTable.UpdateDisplay()
         stickyPanelHeight = #appliedResults * ROW_HEIGHT
         UpdateApplicantContextLayout()
 
-        -- Render non-applied groups in the scroll area
-        for _, result in ipairs(normalResults) do
-            if not rows[displayIndex] then rows[displayIndex] = CreateRow(displayIndex) end
-            local row = rows[displayIndex]
-            PopulateBrowserRow(row, result, isAltColor)
-            row:Show()
-            displayIndex = displayIndex + 1
-            isAltColor = not isAltColor
+        scrollChild:SetHeight(math.max(1, #normalResults * ROW_HEIGHT))
+        if #normalResults > 0 then
+            QueueBrowserRowRender(normalResults, 1, browserRenderGeneration)
         end
 
         local categoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
@@ -3443,6 +3488,7 @@ function addonTable.UpdateDisplay()
             emptyStateText:Show()
         end
         addonTable._browserRuntimeFilters = nil
+        return
     else
         local activeGroups = {}
         for _, group in ipairs(addonTable.ApplicantGroups) do
