@@ -964,13 +964,6 @@ local function FetchSearchResultData()
     end
 
     local firstContextResult = nil
-    local browserFilters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
-    local needsBrowserUtilityScan = browserFilters.needsLust
-        or browserFilters.needsBrez
-        or browserFilters.hasLust
-        or browserFilters.hasBrez
-    local needsBrowserDetailedPlayers = (OakLFGSorterDB and OakLFGSorterDB.showSpecIcons) or needsBrowserUtilityScan
-
     for _, searchResultID in ipairs(resultIDs) do
         local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
         if resultInfo then
@@ -985,17 +978,13 @@ local function FetchSearchResultData()
                 local activityFilterKey = NormalizeSearchScoreTargetLabel(activityFilterLabel or "")
                 local memberCounts = GetSearchResultMemberCounts(searchResultID)
                 local roleCounts = GetSearchResultRoleCounts(searchResultID, memberCounts)
-                local needsPlayers = needsBrowserDetailedPlayers
-                    or listingMode == "raid"
-                    or listingMode == "legacy_raid"
-                    or listingMode == "pvp"
-                    or listingMode == "rated_pvp"
-                local players = needsPlayers and GetSearchResultPlayers(searchResultID, resultInfo.numMembers or 0) or {}
-                local hasLust, hasBrez, highestItemLevel = false, false, 0
-                if needsPlayers then
-                    local _
-                    _, hasLust, hasBrez, highestItemLevel = SummarizeSearchResultPlayers(players)
-                end
+                -- Browser comp rendering always depends on per-member class data, even when
+                -- "Show Spec Icons" is off, because the fixed role slots are tinted by class.
+                -- v3.0.20 tried to skip roster fetches unless spec icons or utility filters
+                -- were enabled, which left players empty and caused every filled slot to fall
+                -- back to the theme accent color until a later refresh repopulated players.
+                local players = GetSearchResultPlayers(searchResultID, resultInfo.numMembers or 0)
+                local _, hasLust, hasBrez, highestItemLevel = SummarizeSearchResultPlayers(players)
                 local playstyleValue, playstyleLabel, playstyleShortLabel = GetSearchResultPlaystyle(resultInfo, activityInfo)
                 local applicationStatus = GetApplicationStatusForResult(searchResultID)
                 local ratingValue = tonumber(resultInfo.leaderOverallDungeonScore) or 0
