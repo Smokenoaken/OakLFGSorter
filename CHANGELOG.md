@@ -1,3 +1,7 @@
+## v3.0.21
+
+- Fixed browser group comp class colors when Show Spec Icons is disabled.
+
 ## v3.0.20
 
 - Fixed the browser loading stutter when opening Oak for the first time
