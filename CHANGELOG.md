@@ -1,3 +1,8 @@
+## v4.0.2
+
+- Fixed the browser Reset button so it also restores the shared region filters instead of leaving users stuck with no regions selected and no results.
+- Fixed category-change resets so they also restore all region filters to an enabled state.
+
 ## v4.0.1
 
 - Fixed a browser-width regression where switching from a listed group into browsing could leave the Oak window too narrow when notes were collapsed.

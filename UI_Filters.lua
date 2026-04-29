@@ -46,6 +46,7 @@ local optionsThemeList
 local optionsThemeColorButton
 local categoryDropdownButton
 local categoryDropdownList
+local ResetSharedRegionFilters
 
 local function GetBrowserMode()
     local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode
@@ -1352,6 +1353,25 @@ local function ResetOakBrowserCategoryFilters()
             raidRangeRows[key].box:SetText("")
         end
     end
+
+    ResetSharedRegionFilters()
+end
+
+ResetSharedRegionFilters = function()
+    local regionFilters = addonTable.GetCharacterRegionFilters and addonTable.GetCharacterRegionFilters()
+    local regionOrder = addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder() or nil
+    if type(regionFilters) ~= "table" or type(regionOrder) ~= "table" then
+        return
+    end
+
+    for _, regionCode in ipairs(regionOrder) do
+        regionFilters[regionCode] = true
+    end
+
+    regionFilters.NA = nil
+    regionFilters.EU = nil
+    regionFilters.LATAM = nil
+    regionFilters.BR = nil
 end
 
 function addonTable.ToggleSharedRegionFlagsSetting()
@@ -2588,6 +2608,7 @@ browserResetBtn:SetScript("OnClick", function()
     filters.raidBossKills = ""; filters.raidTanks = ""
     filters.raidHealers = ""; filters.raidDps = ""
     filters.selectedActivities = {}
+    ResetSharedRegionFilters()
     -- Clear raid range input boxes
     for _, key in ipairs({"raidBossKills", "raidTanks", "raidHealers", "raidDps"}) do
         if raidRangeRows[key] then raidRangeRows[key].box:SetText("") end
@@ -2607,6 +2628,12 @@ browserResetBtn:SetScript("OnClick", function()
     -- The native SearchBox is owned by Blizzard; calling SetText on it causes taint.
     -- The user can clear it themselves, or it will be reset on the next search context change.
     RefreshBrowserFilters()
+    if addonTable.RefreshSearchOptionsPanel then
+        addonTable.RefreshSearchOptionsPanel()
+    end
+    if addonTable.UpdateBrowserFilterPanel then
+        addonTable.UpdateBrowserFilterPanel()
+    end
     if addonTable.RunBrowserSearch then
         addonTable.RunBrowserSearch()
     end
