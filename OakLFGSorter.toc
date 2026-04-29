@@ -3,7 +3,7 @@
 ## Notes: Unified OAK LFG Sorter with Classic and Modern themes.
 ## Author: OAK
 ## IconTexture: Interface\AddOns\OakLFGSorter\Media\icon.png
-## Version: 3.0.0
+## Version: 4.0.0
 ## X-Wago-ID: 96d2nXGO
 ## SavedVariables: OakLFGSorterDB
 ## SavedVariablesPerCharacter: OakLFGSorterCharDB
