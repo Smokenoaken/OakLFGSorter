@@ -709,6 +709,22 @@ local function GetDifficultyDisplayInfo(difficultyToken)
     return labels[difficultyToken] or { full = "Any", short = "" }
 end
 
+local function GetRaidDifficultyCount(data, difficultyToken)
+    if type(data) ~= "table" then
+        return 0
+    end
+
+    if difficultyToken == "MYTHIC" then
+        return tonumber(data.mythic) or 0
+    elseif difficultyToken == "HEROIC" then
+        return tonumber(data.heroic) or 0
+    elseif difficultyToken == "NORMAL" then
+        return tonumber(data.normal) or 0
+    end
+
+    return 0
+end
+
 local function BuildEncounterNameData(encounterInfo)
     local defeatedBosses = {}
     local defeatedBossList = {}
@@ -1062,7 +1078,11 @@ local function FetchSearchResultData()
                         end
                         local rioProfile = RaiderIO.GetProfile(charName, charRealm)
                         if rioProfile and addonTable.GetRaidProgressSummary then
-                            raidProgress = addonTable.GetRaidProgressSummary(rioProfile, raidListing and raidListing.raidName or activityFilterLabel)
+                            raidProgress = addonTable.GetRaidProgressSummary(
+                                rioProfile,
+                                raidListing and raidListing.raidName or activityFilterLabel,
+                                raidListing and raidListing.difficultyToken or nil
+                            )
                         end
                     end
                 end
@@ -2436,7 +2456,7 @@ local function CollectRaidProgress(rioProfile)
     return raidDataFound
 end
 
-function addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName)
+function addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName, preferredDifficultyToken)
     local raidDataFound = CollectRaidProgress(rioProfile)
     if not raidDataFound then
         return nil
@@ -2447,7 +2467,25 @@ function addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName)
     local bestScore = -1
 
     for raidName, data in pairs(raidDataFound) do
-        local score = (data.mythic * 10000) + (data.heroic * 100) + data.normal
+        local selectedDifficultyToken = preferredDifficultyToken
+        local selectedCount = GetRaidDifficultyCount(data, selectedDifficultyToken)
+        local score
+
+        if selectedDifficultyToken == "NORMAL" or selectedDifficultyToken == "HEROIC" or selectedDifficultyToken == "MYTHIC" then
+            score = selectedCount
+        else
+            score = (data.mythic * 10000) + (data.heroic * 100) + data.normal
+            if data.mythic > 0 then
+                selectedDifficultyToken = "MYTHIC"
+            elseif data.heroic > 0 then
+                selectedDifficultyToken = "HEROIC"
+            elseif data.normal > 0 then
+                selectedDifficultyToken = "NORMAL"
+            else
+                selectedDifficultyToken = "ANY"
+            end
+            selectedCount = GetRaidDifficultyCount(data, selectedDifficultyToken)
+        end
         local matchesPreferred = preferred and strlower(raidName):find(preferred, 1, true)
 
         if matchesPreferred then
@@ -2458,12 +2496,11 @@ function addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName)
             bestScore = score
 
             local displayText = "--"
-            if data.mythic > 0 then
-                displayText = string.format("M %d/%d", data.mythic, data.bosses)
-            elseif data.heroic > 0 then
-                displayText = string.format("H %d/%d", data.heroic, data.bosses)
-            elseif data.normal > 0 then
-                displayText = string.format("N %d/%d", data.normal, data.bosses)
+            local selectedDifficultyInfo = GetDifficultyDisplayInfo(selectedDifficultyToken)
+            if (selectedDifficultyToken == "NORMAL" or selectedDifficultyToken == "HEROIC" or selectedDifficultyToken == "MYTHIC")
+                and (selectedCount > 0 or (tonumber(data.bosses) or 0) > 0)
+            then
+                displayText = string.format("%s %d/%d", selectedDifficultyInfo.short, selectedCount, tonumber(data.bosses) or 0)
             end
 
             local longParts = {}
@@ -2476,6 +2513,10 @@ function addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName)
                 displayText = displayText,
                 longText = (#longParts > 0) and table.concat(longParts, "  ") or "--",
                 sortValue = score,
+                selectedDifficultyToken = selectedDifficultyToken,
+                selectedDifficultyShort = selectedDifficultyInfo.short,
+                selectedCount = selectedCount,
+                bossCount = tonumber(data.bosses) or 0,
             }
         end
     end
@@ -2510,7 +2551,9 @@ local function FetchApplicantData()
     local listingMode = listingContext and listingContext.mode or "generic"
     local activityID = listingContext and listingContext.activityID or nil
     local activityInfo = listingContext and listingContext.activityInfo or nil
+    local entryInfo = listingContext and listingContext.entryInfo or nil
     local preferredRaidName = activityInfo and (activityInfo.shortName or activityInfo.fullName) or nil
+    local preferredRaidDifficultyToken = ((listingMode == "raid" or listingMode == "legacy_raid") and GetSearchResultDifficultyToken(entryInfo, activityInfo)) or nil
 
     wipe(addonTable.ApplicantGroups)
     local applicants = C_LFGList.GetApplicants()
@@ -2580,7 +2623,7 @@ local function FetchApplicantData()
                 end
 
                 if (listingMode == "raid" or listingMode == "legacy_raid") and rioProfile then
-                    raidProgress = addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName)
+                    raidProgress = addonTable.GetRaidProgressSummary(rioProfile, preferredRaidName, preferredRaidDifficultyToken)
                 end
 
                 local finalRating = dungeonScore

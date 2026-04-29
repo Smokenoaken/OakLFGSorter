@@ -1913,7 +1913,7 @@ local function SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
                 OakLFGSorterDB.framePos = { "BOTTOMLEFT", "BOTTOMLEFT", oldLeft, oldBottom }
             end
         end
-    elseif (not IsBrowserMode()) and math.abs(OAK_LFG:GetWidth() - targetWidth) > 0.5 then
+    elseif math.abs((OAK_LFG:GetWidth() or 0) - targetWidth) > 0.5 then
         OAK_LFG:SetWidth(targetWidth)
     end
 
@@ -2043,7 +2043,7 @@ local function GetMemberSecondaryDisplay(member)
     if listingMode == "rated_pvp" or listingMode == "pvp" then
         return member.pvpBracket or "--"
     elseif listingMode == "raid" or listingMode == "legacy_raid" then
-        return GetRaidProgressFraction(member.raidProgress)
+        return (member.raidProgress and member.raidProgress.displayText) or "--"
     end
 
     return member.highestKey > 0 and "+" .. member.highestKey or "--"

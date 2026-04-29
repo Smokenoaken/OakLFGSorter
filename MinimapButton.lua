@@ -149,6 +149,22 @@ local function OpenOakOptions()
 end
 addonTable.OpenOakOptions = OpenOakOptions
 
+addonTable.ClickMinimapButton = function(_, mouseButton)
+    if mouseButton == "RightButton" then
+        OpenOakOptions()
+    else
+        if addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
+            addonTable.userExplicitlyClosed = true
+            if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
+                addonTable.OAK_SEARCH:Hide()
+            end
+            addonTable.OAK_LFG:Hide()
+        else
+            OpenOakBrowser()
+        end
+    end
+end
+
 function addonTable.UpdateMinimapButtonVisibility()
     if not minimapButton then
         return
@@ -185,7 +201,7 @@ local function CreateMinimapButton()
         return
     end
 
-    local button = CreateFrame("Button", "SorterClassicMinimapButton", Minimap)
+    local button = CreateFrame("Button", "OakLFGSorterMinimapButton", Minimap)
     minimapButton = button
     addonTable.MinimapButton = button
 
@@ -213,21 +229,7 @@ local function CreateMinimapButton()
     highlight:SetSize(52, 52)
     highlight:SetPoint("CENTER", button, "CENTER", 0, 1)
 
-    button:SetScript("OnClick", function(_, mouseButton)
-        if mouseButton == "RightButton" then
-            OpenOakOptions()
-        else
-            if addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
-                addonTable.userExplicitlyClosed = true
-                if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
-                    addonTable.OAK_SEARCH:Hide()
-                end
-                addonTable.OAK_LFG:Hide()
-            else
-                OpenOakBrowser()
-            end
-        end
-    end)
+    button:SetScript("OnClick", addonTable.ClickMinimapButton)
 
     button:SetScript("OnDragStart", function(self)
         self:SetScript("OnUpdate", UpdateDragPosition)
@@ -240,7 +242,7 @@ local function CreateMinimapButton()
 
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:SetText("OAK LFG Sorter", 1, 1, 1)
+        GameTooltip:SetText("Oakensoul LFG Sorter", 1, 1, 1)
         GameTooltip:AddLine("Left-click to open Oak's browser.", 1, 1, 1, true)
         GameTooltip:AddLine("Right-click to open Oak's options.", 1, 1, 1, true)
         GameTooltip:AddLine("Drag to move this button around the minimap.", 0.8, 0.8, 0.8, true)

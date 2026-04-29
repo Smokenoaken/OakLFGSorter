@@ -1,3 +1,9 @@
+## v4.0.1
+
+- Fixed a browser-width regression where switching from a listed group into browsing could leave the Oak window too narrow when notes were collapsed.
+- Fixed raid applicant progress so the Prog column now shows difficulty-prefixed progress such as `N 5/9`, `H 5/9`, or `M 5/9`, matched to the user's active raid listing difficulty.
+- Added LibDataBroker launcher support so broker displays can open Oak without relying on the minimap button.
+
 ## v4.0.0
 
 - Added a new theme system with Classic and Modern modes. Classic is now the default appearance and is designed to feel seamless with Blizzard's built-in World of Warcraft UI.
