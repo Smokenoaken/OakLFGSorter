@@ -1,7 +1,8 @@
 local addonName, addonTable = ...
 local L = addonTable.L
+local NormalizeFrameAnchorForMovement
 
-local OAK_LFG = CreateFrame("Frame", "OakensoulLFGSorterFrame", UIParent, "BackdropTemplate")
+local OAK_LFG = CreateFrame("Frame", "SorterClassicFrame", UIParent, "ButtonFrameTemplate")
 addonTable.OAK_LFG = OAK_LFG 
 OAK_LFG:SetSize(660, 444) 
 OAK_LFG:SetPoint("CENTER")
@@ -13,6 +14,7 @@ OAK_LFG:RegisterForDrag("LeftButton")
 OAK_LFG:SetScript("OnDragStart", function(self)
     OakLFGSorterDB = OakLFGSorterDB or {}
     OakLFGSorterDB.frameUserPlaced = true
+    NormalizeFrameAnchorForMovement(self)
     self.isOakDragging = true
     self:StartMoving()
 end)
@@ -22,8 +24,36 @@ OAK_LFG:SetFrameStrata("DIALOG")
 OAK_LFG:SetClampedToScreen(false)
 OAK_LFG:Hide()
 
-_G["OakensoulLFGSorterFrame"] = OAK_LFG
-tinsert(UISpecialFrames, "OakensoulLFGSorterFrame")
+if ButtonFrameTemplate_HidePortrait then
+    ButtonFrameTemplate_HidePortrait(OAK_LFG)
+end
+if OAK_LFG.Bg then
+    OAK_LFG.Bg:SetAlpha(1.0)
+end
+if OAK_LFG.TopTileStreaks then
+    OAK_LFG.TopTileStreaks:Hide()
+end
+if OAK_LFG.Inset then
+    OAK_LFG.Inset:ClearAllPoints()
+    OAK_LFG.Inset:SetPoint("TOPLEFT", 8, -64)
+    OAK_LFG.Inset:SetPoint("BOTTOMRIGHT", -4, 30)
+end
+if OAK_LFG.TitleText then
+    OAK_LFG.TitleText:SetText("OAK LFG Sorter")
+    OAK_LFG.TitleText:SetTextColor(0.90, 0.24, 0.02)
+end
+if OAK_LFG.SetTitle then
+    OAK_LFG:SetTitle("|cffe03d02OAK|r LFG Sorter")
+end
+if OAK_LFG.CloseButton then
+    OAK_LFG.CloseButton:SetScript("OnClick", function()
+        OAK_LFG:Hide()
+    end)
+end
+addonTable.BlizzardChrome = OAK_LFG
+
+_G["SorterClassicFrame"] = OAK_LFG
+tinsert(UISpecialFrames, "SorterClassicFrame")
 
 local combatCloseFrame = CreateFrame("Frame")
 combatCloseFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -40,76 +70,161 @@ combatCloseFrame:SetScript("OnEvent", function(_, event)
     end
 end)
 
-OAK_LFG:SetBackdrop({
-    bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX,
-    tile = false, edgeSize = 1, 
-    insets = { left = 1, right = 1, top = 1, bottom = 1 }
-})
-if addonTable.ApplyBackdropStyle then
-    addonTable.ApplyBackdropStyle(OAK_LFG, "panel")
-end
-OAK_LFG:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-OAK_LFG:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-
 local titleHeader = CreateFrame("Frame", nil, OAK_LFG)
 addonTable.TitleHeader = titleHeader
+local modernShell = CreateFrame("Frame", nil, OAK_LFG)
+modernShell:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 0, 0)
+modernShell:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", 0, 0)
+modernShell:SetFrameLevel(math.max(1, (OAK_LFG:GetFrameLevel() or 1) - 1))
+modernShell:Hide()
+
+modernShell.bg = modernShell:CreateTexture(nil, "BACKGROUND")
+modernShell.bg:SetAllPoints(modernShell)
+modernShell.bg:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+modernShell.inner = modernShell:CreateTexture(nil, "BORDER")
+modernShell.inner:SetTexture("Interface\\Buttons\\WHITE8X8")
+modernShell.inner:SetPoint("TOPLEFT", modernShell, "TOPLEFT", 8, -34)
+modernShell.inner:SetPoint("BOTTOMRIGHT", modernShell, "BOTTOMRIGHT", -8, 30)
+
+modernShell.borderTop = modernShell:CreateTexture(nil, "ARTWORK")
+modernShell.borderTop:SetTexture("Interface\\Buttons\\WHITE8X8")
+modernShell.borderTop:SetPoint("TOPLEFT", modernShell, "TOPLEFT", 36, 0)
+modernShell.borderTop:SetPoint("TOPRIGHT", modernShell, "TOPRIGHT", 0, 0)
+modernShell.borderTop:SetHeight(1)
+
+modernShell.borderBottom = modernShell:CreateTexture(nil, "ARTWORK")
+modernShell.borderBottom:SetTexture("Interface\\Buttons\\WHITE8X8")
+modernShell.borderBottom:SetPoint("BOTTOMLEFT", modernShell, "BOTTOMLEFT", 0, 0)
+modernShell.borderBottom:SetPoint("BOTTOMRIGHT", modernShell, "BOTTOMRIGHT", 0, 0)
+modernShell.borderBottom:SetHeight(1)
+
+modernShell.borderLeft = modernShell:CreateTexture(nil, "ARTWORK")
+modernShell.borderLeft:SetTexture("Interface\\Buttons\\WHITE8X8")
+modernShell.borderLeft:SetPoint("TOPLEFT", modernShell, "TOPLEFT", 0, -56)
+modernShell.borderLeft:SetPoint("BOTTOMLEFT", modernShell, "BOTTOMLEFT", 0, 0)
+modernShell.borderLeft:SetWidth(1)
+
+modernShell.borderRight = modernShell:CreateTexture(nil, "ARTWORK")
+modernShell.borderRight:SetTexture("Interface\\Buttons\\WHITE8X8")
+modernShell.borderRight:SetPoint("TOPRIGHT", modernShell, "TOPRIGHT", 0, 0)
+modernShell.borderRight:SetPoint("BOTTOMRIGHT", modernShell, "BOTTOMRIGHT", 0, 0)
+modernShell.borderRight:SetWidth(1)
+addonTable.ModernShell = modernShell
+
 local function ApplyHeaderInsets()
-    local pad = addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
     titleHeader:ClearAllPoints()
-    titleHeader:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 1 + pad, -1 - pad)
-    titleHeader:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -1 - pad, -1 - pad)
+    if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+        titleHeader:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 34, -26)
+        titleHeader:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -6, -26)
+    else
+        titleHeader:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 46, -28)
+        titleHeader:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -36, -30)
+    end
 end
 ApplyHeaderInsets()
-titleHeader:SetHeight(30)
+titleHeader:SetHeight(22)
+titleHeader:Hide()
 local thBg = titleHeader:CreateTexture(nil, "BACKGROUND")
 thBg:SetAllPoints()
-thBg:SetColorTexture(unpack(addonTable.OAK_COLOR_TITLEBAR or addonTable.OAK_COLOR_PANE))
+thBg:SetColorTexture(0.08, 0.08, 0.08, 0.65)
+local thTop = titleHeader:CreateTexture(nil, "BORDER")
+thTop:SetColorTexture(0.42, 0.42, 0.42, 0.65)
+thTop:SetPoint("TOPLEFT", titleHeader, "TOPLEFT", 2, 0)
+thTop:SetPoint("TOPRIGHT", titleHeader, "TOPRIGHT", -2, 0)
+thTop:SetHeight(1)
+local thBottom = titleHeader:CreateTexture(nil, "BORDER")
+thBottom:SetColorTexture(0, 0, 0, 0.9)
+thBottom:SetPoint("BOTTOMLEFT", titleHeader, "BOTTOMLEFT", 2, 0)
+thBottom:SetPoint("BOTTOMRIGHT", titleHeader, "BOTTOMRIGHT", -2, 0)
+thBottom:SetHeight(1)
 
-OAK_LFG.title = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontLarge")
-OAK_LFG.title:SetPoint("LEFT", titleHeader, "LEFT", 15, 0)
-OAK_LFG.title:SetText("OAK " .. L["LFG Sorter"])
-addonTable.FullTitleText = "OAK " .. L["LFG Sorter"]
-addonTable.CompactTitleText = "OAK " .. L["LFG"]
+OAK_LFG.title = titleHeader:CreateFontString(nil, "OVERLAY", "SorterClassic_FontLarge")
+OAK_LFG.title:SetPoint("CENTER", titleHeader, "CENTER", 0, 0)
+OAK_LFG.title:SetJustifyH("CENTER")
+OAK_LFG.title:SetText("OAK LFG Sorter")
+addonTable.FullTitleText = "OAK LFG Sorter"
+addonTable.CompactTitleText = "OAK LFG"
+OAK_LFG.title:SetTextColor(1.0, 0.82, 0.0)
+OAK_LFG.title:Hide()
+
+local headerLogo = CreateFrame("Frame", nil, OAK_LFG)
+headerLogo:SetSize(72, 72)
+headerLogo:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", -14, 8)
+headerLogo:EnableMouse(false)
+headerLogo:SetFrameStrata("FULLSCREEN_DIALOG")
+headerLogo:SetFrameLevel((OAK_LFG:GetFrameLevel() or 1) + 20)
+headerLogo.tex = headerLogo:CreateTexture(nil, "ARTWORK")
+headerLogo.tex:SetPoint("TOPLEFT", headerLogo, "TOPLEFT", 8, -8)
+headerLogo.tex:SetPoint("BOTTOMRIGHT", headerLogo, "BOTTOMRIGHT", -8, 8)
+headerLogo.tex:SetTexture("Interface\\AddOns\\OakLFGSorter\\Media\\Logo.tga")
+headerLogo.tex:SetTexCoord(0, 1, 0, 1)
+headerLogo.ring = headerLogo:CreateTexture(nil, "OVERLAY")
+headerLogo.ring:SetAtlas("auctionhouse-itemicon-border-artifact", true)
+headerLogo.ring:SetSize(88, 88)
+headerLogo.ring:SetPoint("CENTER", headerLogo, "CENTER", 0, 0)
+addonTable.HeaderLogo = headerLogo
+
+local controlsRow = CreateFrame("Frame", nil, OAK_LFG)
+addonTable.ControlsRow = controlsRow
+controlsRow:SetHeight(22)
+local function ApplyControlsRowInsets()
+    controlsRow:ClearAllPoints()
+    if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+        controlsRow:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 34, -29)
+        controlsRow:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -6, -29)
+    else
+        controlsRow:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 16, -31)
+        controlsRow:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -46, -33)
+    end
+end
+ApplyControlsRowInsets()
+
+local titleBar = CreateFrame("Frame", nil, OAK_LFG, "PanelDragBarTemplate")
+titleBar:SetPoint("TOPLEFT", 0, 0)
+titleBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "TOPRIGHT", 0, -32)
+titleBar:RegisterForDrag("LeftButton")
+titleBar:SetScript("OnDragStart", function()
+    local dragStart = OAK_LFG:GetScript("OnDragStart")
+    if dragStart then
+        dragStart(OAK_LFG)
+    end
+end)
+titleBar:SetScript("OnDragStop", function()
+    local dragStop = OAK_LFG:GetScript("OnDragStop")
+    if dragStop then
+        dragStop(OAK_LFG)
+    else
+        OAK_LFG:StopMovingOrSizing()
+        OAK_LFG.isOakDragging = false
+    end
+end)
+addonTable.TitleBar = titleBar
 
 -- Scale UI Elements
-local scaleSlider = CreateFrame("Slider", "OakLFGScaleSlider", titleHeader, "BackdropTemplate")
+local scaleSlider = CreateFrame("Slider", "SorterClassicScaleSlider", controlsRow, "OptionsSliderTemplate")
 scaleSlider:SetSize(80, 10)
-scaleSlider:SetPoint("LEFT", OAK_LFG.title, "RIGHT", 45, 0)
+scaleSlider:SetPoint("LEFT", controlsRow, "LEFT", 128, 0)
 scaleSlider:SetMinMaxValues(0.5, 1.5)
 scaleSlider:SetValueStep(0.05)
 scaleSlider:SetObeyStepOnDrag(true)
 scaleSlider:SetOrientation("HORIZONTAL")
-scaleSlider:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-if addonTable.ApplyBackdropStyle then
-    addonTable.ApplyBackdropStyle(scaleSlider, "inset")
-end
-scaleSlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
-scaleSlider:SetBackdropBorderColor(0, 0, 0, 1)
+if _G[scaleSlider:GetName() .. "Low"] then _G[scaleSlider:GetName() .. "Low"]:Hide() end
+if _G[scaleSlider:GetName() .. "High"] then _G[scaleSlider:GetName() .. "High"]:Hide() end
+if _G[scaleSlider:GetName() .. "Text"] then _G[scaleSlider:GetName() .. "Text"]:Hide() end
 
-local thumb = scaleSlider:CreateTexture(nil, "ARTWORK")
-thumb:SetTexture(addonTable.FLAT_TEX)
-thumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-thumb:SetSize(10, 14)
-scaleSlider:SetThumbTexture(thumb)
-
-local scaleLabel = scaleSlider:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+local scaleLabel = scaleSlider:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 scaleLabel:SetPoint("RIGHT", scaleSlider, "LEFT", -8, 0)
 scaleLabel:SetText(L["Scale"])
 
-local scaleEdit = CreateFrame("EditBox", nil, titleHeader, "BackdropTemplate")
+local scaleEdit = CreateFrame("EditBox", nil, controlsRow, "InputBoxTemplate")
 scaleEdit:SetSize(35, 18)
 scaleEdit:SetPoint("LEFT", scaleSlider, "RIGHT", 10, 0)
 scaleEdit:SetAutoFocus(false)
-scaleEdit:SetFontObject("OakLFG_FontRegular")
+scaleEdit:SetFontObject("SorterClassic_FontRegular")
 scaleEdit:SetJustifyH("CENTER")
-scaleEdit:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-if addonTable.ApplyBackdropStyle then
-    addonTable.ApplyBackdropStyle(scaleEdit, "inset")
-end
-scaleEdit:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-scaleEdit:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
 
-local scaleReset = addonTable.CreateFlatButton(titleHeader, L["Reset"], 45)
+local scaleReset = addonTable.CreateFlatButton(controlsRow, L["Reset"], 45)
 scaleReset:SetPoint("LEFT", scaleEdit, "RIGHT", 5, 0)
 scaleReset:SetAutoWidth(45, 120, 20)
 scaleReset:SetScript("OnEnter", function(self) 
@@ -131,17 +246,134 @@ local function CaptureFrameAnchor()
     return point, relativeTo or UIParent, relativePoint or point, xOfs or 0, yOfs or 0
 end
 
+local function GetFrameRectInParent(frame)
+    if not (frame and UIParent and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
+        return nil
+    end
+
+    local left = frame:GetLeft()
+    local right = frame:GetRight()
+    local top = frame:GetTop()
+    local bottom = frame:GetBottom()
+    if not (left and right and top and bottom) then
+        return nil
+    end
+
+    return {
+        left = left,
+        right = right,
+        top = top,
+        bottom = bottom,
+    }
+end
+
+local function GetFrameCenterInParent(frame)
+    local rect = GetFrameRectInParent(frame)
+    if not rect then
+        return nil, nil
+    end
+    return (rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2
+end
+
+local function SaveFrameBottomLeftPosition()
+    local rect = GetFrameRectInParent(OAK_LFG)
+    if not (OakLFGSorterDB and rect) then
+        return
+    end
+
+    OakLFGSorterDB.framePos = { "BOTTOMLEFT", "BOTTOMLEFT", rect.left, rect.bottom }
+end
+
+local function RepositionFrameRect(rect)
+    if not rect then
+        return
+    end
+
+    OAK_LFG:ClearAllPoints()
+    OAK_LFG:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", rect.left, rect.bottom)
+    SaveFrameBottomLeftPosition()
+end
+
+NormalizeFrameAnchorForMovement = function(frame)
+    local rect = GetFrameRectInParent(frame)
+    if not rect then
+        return
+    end
+
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", rect.left, rect.bottom)
+end
+
+local function ClampRectToScreen(rect)
+    if not (rect and UIParent) then
+        return rect
+    end
+
+    local parentWidth = UIParent:GetWidth() or 0
+    local parentHeight = UIParent:GetHeight() or 0
+    local width = (rect.right or 0) - (rect.left or 0)
+    local height = (rect.top or 0) - (rect.bottom or 0)
+    if parentWidth <= 0 or parentHeight <= 0 or width <= 0 or height <= 0 then
+        return rect
+    end
+
+    local clamped = {
+        left = rect.left,
+        right = rect.right,
+        top = rect.top,
+        bottom = rect.bottom,
+    }
+
+    if clamped.left < 0 then
+        local offset = -clamped.left
+        clamped.left = clamped.left + offset
+        clamped.right = clamped.right + offset
+    elseif clamped.right > parentWidth then
+        local offset = parentWidth - clamped.right
+        clamped.left = clamped.left + offset
+        clamped.right = clamped.right + offset
+    end
+
+    if clamped.bottom < 0 then
+        local offset = -clamped.bottom
+        clamped.bottom = clamped.bottom + offset
+        clamped.top = clamped.top + offset
+    elseif clamped.top > parentHeight then
+        local offset = parentHeight - clamped.top
+        clamped.bottom = clamped.bottom + offset
+        clamped.top = clamped.top + offset
+    end
+
+    return clamped
+end
+
 local function ApplyScalePreservingTopLeft(scale, fixedPoint, fixedRelativeTo, fixedRelativePoint, fixedX, fixedY)
     scale = tonumber(scale) or 1
+    local oldCenterX, oldCenterY = GetFrameCenterInParent(OAK_LFG)
     local point, relativeTo, relativePoint, xOfs, yOfs = fixedPoint, fixedRelativeTo, fixedRelativePoint, fixedX, fixedY
-    if not point then
+    if (not oldCenterX or not oldCenterY) and not point then
         point, relativeTo, relativePoint, xOfs, yOfs = CaptureFrameAnchor()
     end
+
     OAK_LFG:SetScale(scale)
-    if point then
+
+    if oldCenterX and oldCenterY then
+        local newRect = GetFrameRectInParent(OAK_LFG)
+        if newRect then
+            local width = newRect.right - newRect.left
+            local height = newRect.top - newRect.bottom
+            newRect.left = oldCenterX - (width / 2)
+            newRect.bottom = oldCenterY - (height / 2)
+            newRect.right = newRect.left + width
+            newRect.top = newRect.bottom + height
+            RepositionFrameRect(ClampRectToScreen(newRect))
+        end
+    elseif point then
         OAK_LFG:ClearAllPoints()
         OAK_LFG:SetPoint(point, relativeTo or UIParent, relativePoint or point, xOfs or 0, yOfs or 0)
-        if OakLFGSorterDB then
+        if addonTable.ClampFrameToScreen then
+            addonTable.ClampFrameToScreen(OAK_LFG, OakLFGSorterDB, "framePos")
+        elseif OakLFGSorterDB then
             OakLFGSorterDB.framePos = { point, relativePoint or point, xOfs or 0, yOfs or 0 }
         end
     end
@@ -479,42 +711,160 @@ addonTable.ScaleEdit = scaleEdit
 addonTable.ScaleLabel = scaleLabel
 addonTable.ScaleReset = scaleReset
 
-local closeBtn = CreateFrame("Button", nil, titleHeader)
-closeBtn:SetSize(30, 30)
-closeBtn:SetPoint("RIGHT", titleHeader, "RIGHT", 0, 0)
-local clBg = closeBtn:CreateTexture(nil, "BACKGROUND")
-clBg:SetAllPoints()
-clBg:SetColorTexture(0, 0, 0, 0)
-closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-closeBtn.text:SetPoint("CENTER")
-closeBtn.text:SetText("X")
+local closeBtn = OAK_LFG.CloseButton or CreateFrame("Button", nil, titleHeader, "UIPanelCloseButton")
 closeBtn:SetScript("OnClick", function()
-    OAK_LFG:Hide()  -- OnHide hook sets userExplicitlyClosed when not a system hide
+    OAK_LFG:Hide()
 end)
-closeBtn:SetScript("OnEnter", function() clBg:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.5) end)
-closeBtn:SetScript("OnLeave", function() clBg:SetColorTexture(0, 0, 0, 0) end)
 addonTable.CloseButton = closeBtn
 
-local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local modernCloseBtn = CreateFrame("Button", nil, titleHeader, "UIPanelCloseButton")
+modernCloseBtn:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -2, -2)
+modernCloseBtn:SetScript("OnClick", function()
+    OAK_LFG:Hide()
+end)
+modernCloseBtn:Hide()
+addonTable.ModernCloseButton = modernCloseBtn
+
+local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 addonTable.VersionText = VersionText
-VersionText:SetPoint("RIGHT", closeBtn, "LEFT", -5, 0)
-VersionText:SetText("|cff888888v3.0.21|r")
-VersionText:Hide()
+VersionText:SetPoint("RIGHT", titleHeader, "RIGHT", -8, 0)
+VersionText:SetText("|cff888888v3.0.0|r")
 
 addonTable.RegisterThemeRefresh("ui_header_theme", function()
+    local isClassic = addonTable.IsClassicTheme and addonTable.IsClassicTheme()
     if addonTable.ApplyBackdropStyle then
         addonTable.ApplyBackdropStyle(OAK_LFG, "panel")
-        addonTable.ApplyBackdropStyle(scaleSlider, "inset")
-        addonTable.ApplyBackdropStyle(scaleEdit, "inset")
+    end
+    if addonTable.ApplySliderChrome then
+        addonTable.ApplySliderChrome(scaleSlider, 80, 10, 14)
+    end
+    if addonTable.ApplyEditBoxChrome then
+        addonTable.ApplyEditBoxChrome(scaleEdit)
     end
     ApplyHeaderInsets()
-    OAK_LFG:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-    OAK_LFG:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-    thBg:SetColorTexture(unpack(addonTable.OAK_COLOR_TITLEBAR or addonTable.OAK_COLOR_PANE))
-    scaleSlider:SetBackdropColor(unpack(addonTable.OAK_COLOR_SLIDER_TRACK or {0.05, 0.05, 0.05, 1}))
-    scaleEdit:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-    OAK_LFG.title:SetTextColor(unpack(addonTable.OAK_COLOR_TITLE_TINT or {1, 1, 1, 1}))
-    thumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    ApplyControlsRowInsets()
+    if isClassic then
+        if addonTable.ModernShell then
+            addonTable.ModernShell:Hide()
+        end
+        OAK_LFG:SetBackdropColor(0, 0, 0, 0)
+        OAK_LFG:SetBackdropBorderColor(0, 0, 0, 0)
+        if OAK_LFG.Bg then
+            OAK_LFG.Bg:SetAlpha(1.0)
+            OAK_LFG.Bg:Show()
+        end
+        if OAK_LFG.NineSlice then
+            OAK_LFG.NineSlice:Show()
+        end
+        if OAK_LFG.Inset then
+            OAK_LFG.Inset:Show()
+        end
+        if OAK_LFG.TitleText then
+            OAK_LFG.TitleText:SetText("OAK LFG Sorter")
+            OAK_LFG.TitleText:SetTextColor(0.90, 0.24, 0.02)
+            OAK_LFG.TitleText:Show()
+        end
+        if OAK_LFG.CloseButton then
+            OAK_LFG.CloseButton:Show()
+        end
+        if addonTable.CloseButton and addonTable.CloseButton ~= OAK_LFG.CloseButton then
+            addonTable.CloseButton:Hide()
+        end
+        if addonTable.ModernCloseButton then
+            addonTable.ModernCloseButton:Hide()
+        end
+        if addonTable.TitleBar then
+            addonTable.TitleBar:Show()
+        end
+        if titleHeader then
+            titleHeader:Show()
+        end
+        if addonTable.HeaderLogo then
+            addonTable.HeaderLogo:Show()
+            if addonTable.HeaderLogo.ring then
+                addonTable.HeaderLogo.ring:SetVertexColor(1, 1, 1, 1)
+            end
+        end
+        titleHeader:SetHeight(22)
+        thBg:SetColorTexture(0.08, 0.08, 0.08, 0.0)
+        thTop:SetColorTexture(0.42, 0.42, 0.42, 0.65)
+        thBottom:SetColorTexture(0, 0, 0, 0.9)
+        OAK_LFG.title:Hide()
+        scaleSlider:Hide()
+        scaleEdit:Hide()
+        scaleLabel:Hide()
+        scaleReset:Hide()
+    else
+        if addonTable.ModernShell then
+            addonTable.ModernShell:Show()
+            addonTable.ModernShell.bg:SetVertexColor(unpack(addonTable.OAK_COLOR_BG or { 0.07, 0.10, 0.085, 0.93 }))
+            addonTable.ModernShell.inner:SetVertexColor(unpack(addonTable.OAK_COLOR_PANE or { 0.11, 0.16, 0.13, 1.0 }))
+            addonTable.ModernShell.borderTop:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            addonTable.ModernShell.borderBottom:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            addonTable.ModernShell.borderLeft:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            addonTable.ModernShell.borderRight:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        end
+        if OAK_LFG.Bg then
+            OAK_LFG.Bg:Hide()
+        end
+        if OAK_LFG.NineSlice then
+            OAK_LFG.NineSlice:Hide()
+        end
+        if OAK_LFG.Inset then
+            OAK_LFG.Inset:Hide()
+        end
+        if OAK_LFG.TitleText then
+            OAK_LFG.TitleText:Hide()
+        end
+        if OAK_LFG.CloseButton then
+            OAK_LFG.CloseButton:Hide()
+        end
+        if addonTable.CloseButton and addonTable.CloseButton ~= OAK_LFG.CloseButton then
+            addonTable.CloseButton:Show()
+        end
+        if addonTable.ModernCloseButton then
+            addonTable.ModernCloseButton:Show()
+        end
+        if addonTable.TitleBar then
+            addonTable.TitleBar:Hide()
+        end
+        titleHeader:Show()
+        titleHeader:SetHeight(30)
+        OAK_LFG:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG or { 0.07, 0.10, 0.085, 0.93 }))
+        OAK_LFG:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        thBg:SetColorTexture(unpack(addonTable.OAK_COLOR_TITLEBAR or addonTable.OAK_COLOR_PANE))
+        thTop:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
+        thBottom:SetColorTexture(0, 0, 0, 1)
+        OAK_LFG.title:Show()
+        if addonTable.HeaderLogo then
+            addonTable.HeaderLogo:Show()
+            if addonTable.HeaderLogo.ring then
+                addonTable.HeaderLogo.ring:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            end
+        end
+        scaleSlider:Show()
+        scaleEdit:Show()
+        scaleLabel:Show()
+        scaleReset:Show()
+    end
+    if OAK_LFG.TitleText then
+        if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+            OAK_LFG.TitleText:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+        else
+            OAK_LFG.TitleText:SetTextColor(0.90, 0.24, 0.02)
+        end
+    end
+    if OAK_LFG.title then
+        OAK_LFG.title:SetTextColor(unpack(addonTable.OAK_COLOR_TITLE_TINT or {1.0, 0.82, 0.0, 1}))
+    end
+    local thumb = scaleSlider.GetThumbTexture and scaleSlider:GetThumbTexture()
+    if thumb then
+        if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+            thumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        else
+            thumb:SetVertexColor(1, 1, 1, 1)
+        end
+    end
 end)
 
 local resizeGrip = CreateFrame("Button", nil, OAK_LFG, "PanelResizeButtonTemplate")
@@ -535,6 +885,7 @@ resizeGrip:SetScript("OnUpdate", function(self)
     self._oakResizePending = false
     self._oakResizeStarted = true
     OAK_LFG.isOakResizing = true
+    NormalizeFrameAnchorForMovement(OAK_LFG)
     OAK_LFG:StartSizing("BOTTOMRIGHT")
 end)
 resizeGrip:SetScript("OnMouseDown", function(self, button)
@@ -550,6 +901,9 @@ resizeGrip:SetScript("OnMouseUp", function(self, button)
         self._oakResizeStarted = false
         OAK_LFG:StopMovingOrSizing()
         OAK_LFG.isOakResizing = false
+        if addonTable.RefreshBrowserResponsiveLayout and addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
+            addonTable.RefreshBrowserResponsiveLayout()
+        end
     end
 end)
 

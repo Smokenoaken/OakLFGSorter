@@ -155,8 +155,8 @@ Detected from `activityInfo` flags:
 
 ## Debug tools
 
-- `/oaklfg` — toggle the addon window
-- `/oaklfg reset` — reset saved position and scale
+- `/sorter` — toggle the addon window
+- `/sorter reset` — reset saved position and scale
 - `/oakpvpdebug` — while Arena search results are loaded, dumps raw `leaderPvpRatingInfo` fields to chat (useful for diagnosing PVP rating API structure changes)
 
 ---

@@ -40,10 +40,11 @@ Slash commands:
 
 ```text
 /oaklfg
+/lfg
 /oaklfg reset
 ```
 
-- `/oaklfg` toggles the addon window
+- `/oaklfg` or `/lfg` toggles the addon window
 - `/oaklfg reset` resets saved position and scale
 
 ## Raider.IO Support

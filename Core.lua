@@ -910,6 +910,14 @@ end
 local function FetchSearchResultData()
     local liveSelection = GetCurrentSearchSelection()
     addonTable.UpdateSearchContext()
+    local previousResults = {}
+    local previousResultsByID = {}
+    for index, result in ipairs(addonTable.SearchResults or {}) do
+        previousResults[index] = result
+        if result and result.id then
+            previousResultsByID[result.id] = result
+        end
+    end
     wipe(addonTable.SearchResults)
     BuildSearchApplicationState()
     local signatureParts = {}
@@ -918,6 +926,9 @@ local function FetchSearchResultData()
     signatureParts[#signatureParts + 1] = tostring(currentContext.selectedCategoryKey or "")
     signatureParts[#signatureParts + 1] = tostring(currentContext.selectedCategoryID or "")
     signatureParts[#signatureParts + 1] = tostring(currentContext.mode or "")
+    local scopeSignature = table.concat(signatureParts, "|")
+    local sameSearchScope = addonTable._lastSearchScopeSignature == scopeSignature
+    addonTable._lastSearchScopeSignature = scopeSignature
     local panel = LFGListFrame and LFGListFrame.SearchPanel
     local categoryLabel = panel and panel.CategoryName and panel.CategoryName.GetText and panel.CategoryName:GetText() or ""
     local loweredCategoryLabel = strlower(tostring(categoryLabel or ""))
@@ -964,6 +975,8 @@ local function FetchSearchResultData()
     end
 
     local firstContextResult = nil
+    local liveResultsByID = {}
+    local liveResultOrder = {}
     for _, searchResultID in ipairs(resultIDs) do
         local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
         if resultInfo then
@@ -1012,6 +1025,28 @@ local function FetchSearchResultData()
                         pvpRating = pvpInfo
                     end
                     ratingValue = pvpRating
+                end
+
+                if (listingMode ~= "rated_pvp" and listingMode ~= "pvp")
+                    and resultInfo.leaderName
+                    and RaiderIO
+                    and RaiderIO.GetProfile
+                then
+                    local charName, charRealm = strsplit("-", resultInfo.leaderName)
+                    if not charRealm or charRealm == "" then
+                        charRealm = GetNormalizedRealmName() or ""
+                    else
+                        charRealm = charRealm:gsub("%s+", "")
+                    end
+
+                    local rioProfile = RaiderIO.GetProfile(charName, charRealm)
+                    local mPlus = rioProfile and rioProfile.mythicKeystoneProfile
+                    if type(mPlus) == "table" then
+                        mainRatingValue = math.floor(math.max(
+                            tonumber(mPlus.mainCurrentScore) or 0,
+                            tonumber(mPlus.warbandCurrentScore) or 0
+                        ))
+                    end
                 end
 
                 -- For raid mode: fetch RIO profile to compute raidProgress (used for sorting + display).
@@ -1090,7 +1125,8 @@ local function FetchSearchResultData()
                     -- leaderProfile intentionally omitted: fetched lazily at tooltip time via leaderName
                 }
 
-                table.insert(addonTable.SearchResults, entry)
+                liveResultsByID[searchResultID] = entry
+                liveResultOrder[#liveResultOrder + 1] = searchResultID
                 signatureParts[#signatureParts + 1] = table.concat({
                     tostring(searchResultID or ""),
                     tostring(activityID or ""),
@@ -1120,6 +1156,61 @@ local function FetchSearchResultData()
                 if not firstContextResult then
                     firstContextResult = entry
                 end
+            end
+        end
+    end
+
+    local filters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
+    local previousCount = #previousResults
+    local liveCount = #liveResultOrder
+    local missingCount = 0
+    if sameSearchScope and filters.keepUnavailable ~= false and previousCount > 0 and liveCount > 0 then
+        for _, previous in ipairs(previousResults) do
+            local previousID = previous and previous.id
+            if previousID and not liveResultsByID[previousID] then
+                missingCount = missingCount + 1
+            end
+        end
+    end
+    -- Guard against transient/paged Blizzard refreshes. If a large chunk of the
+    -- result set disappears at once, treat it as a fresh result page instead of
+    -- marking the whole browser as delisted.
+    local maxPreservedMissing = math.max(8, math.floor(previousCount * 0.10))
+    local preserveMissingResults = sameSearchScope
+        and filters.keepUnavailable ~= false
+        and previousCount > 0
+        and liveCount > 0
+        and missingCount > 0
+        and missingCount <= maxPreservedMissing
+
+    local usedLiveResults = {}
+    if preserveMissingResults then
+        for previousIndex, previous in ipairs(previousResults) do
+            local previousID = previous and previous.id
+            local live = previousID and liveResultsByID[previousID]
+            if live then
+                live._oakStableIndex = previous._oakStableIndex or previousIndex
+                live.isDelisted = nil
+                live.isUnavailable = nil
+                table.insert(addonTable.SearchResults, live)
+                usedLiveResults[previousID] = true
+            elseif previousID and previous and not previous.isDeclined and not (addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(previous.applicationStatus)) then
+                previous._oakStableIndex = previous._oakStableIndex or previousIndex
+                previous.isDelisted = true
+                previous.isUnavailable = true
+                previous.applicationStatus = previous.applicationStatus or "none"
+                table.insert(addonTable.SearchResults, previous)
+            end
+        end
+    end
+
+    for _, searchResultID in ipairs(liveResultOrder) do
+        if not usedLiveResults[searchResultID] then
+            local live = liveResultsByID[searchResultID]
+            if live then
+                local previous = previousResultsByID[searchResultID]
+                live._oakStableIndex = (previous and previous._oakStableIndex) or (#addonTable.SearchResults + 1)
+                table.insert(addonTable.SearchResults, live)
             end
         end
     end
@@ -2716,8 +2807,16 @@ OAK_LFG:SetScript("OnDragStop", function(self)
     end
     if OakLFGSorterDB then
         OakLFGSorterDB.frameUserPlaced = true
-        local point, _, relativePoint, xOfs, yOfs = self:GetPoint()
-        OakLFGSorterDB.framePos = { point, relativePoint, xOfs, yOfs }
+        local left = self:GetLeft()
+        local bottom = self:GetBottom()
+        if left and bottom then
+            OakLFGSorterDB.framePos = {
+                "BOTTOMLEFT",
+                "BOTTOMLEFT",
+                left,
+                bottom,
+            }
+        end
         OakLFGSorterDB.frameSize = { self:GetWidth(), self:GetHeight() }
     end
 end)
@@ -2736,10 +2835,22 @@ if addonTable.ResizeGrip then
             addonTable.ClampFrameToScreen(OAK_LFG, OakLFGSorterDB, "framePos")
         end
         if OakLFGSorterDB then OakLFGSorterDB.frameSize = { OAK_LFG:GetWidth(), OAK_LFG:GetHeight() } end
+        if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
+            if addonTable.RefreshBrowserResponsiveLayout then
+                addonTable.RefreshBrowserResponsiveLayout()
+            end
+        else
+            if addonTable.UpdateHeaderVisuals then
+                addonTable.UpdateHeaderVisuals()
+            end
+            if addonTable.UpdateDisplay then
+                addonTable.UpdateDisplay()
+            end
+        end
     end)
 end
 
-local function OakLFGCommand(msg)
+local function OakLFGSorterCommand(msg)
     if msg and msg:lower() == "reset" then
         if OakLFGSorterDB then
             OakLFGSorterDB.framePos = nil
@@ -2782,9 +2893,11 @@ local function OakLFGCommand(msg)
     end
 end
 
-SLASH_OAKLFG1 = "/oaklfg"
-SLASH_OAKLFG2 = "/lfg"
-SlashCmdList["OAKLFG"] = OakLFGCommand
+SLASH_OAKLFGSORTER1 = "/oaklfg"
+SLASH_OAKLFGSORTER2 = "/lfg"
+SLASH_OAKLFGSORTER3 = "/sorter"
+SLASH_OAKLFGSORTER4 = "/sorterclassic"
+SlashCmdList["OAKLFGSORTER"] = OakLFGSorterCommand
 
 function OakLFGSorter_ToggleBrowserWindow()
     if addonTable and addonTable.ToggleBrowserWindow then
@@ -2797,8 +2910,8 @@ function OakLFGSorter_ToggleBrowserWindow()
     end
 end
 
-SLASH_OAKPVPDEBUG1 = "/oakpvpdebug"
-SlashCmdList["OAKPVPDEBUG"] = function()
+SLASH_SORTERPVPDEBUG1 = "/sorterpvpdebug"
+SlashCmdList["SORTERPVPDEBUG"] = function()
     local results = addonTable.SearchResults
     if not results or #results == 0 then
         print("|cffff9900OAK PVP Debug:|r No search results cached.")

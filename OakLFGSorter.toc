@@ -1,9 +1,9 @@
 ## Interface: 120001, 120005
 ## Title: |cFFF48CBAOAK|r LFG Sorter
-## Notes: Sorts LFG applicants by Role, Class, and iLvl.
+## Notes: Unified OAK LFG Sorter with Classic and Modern themes.
 ## Author: OAK
 ## IconTexture: Interface\AddOns\OakLFGSorter\Media\icon.png
-## Version: 3.0.21
+## Version: 3.0.0
 ## X-Wago-ID: 96d2nXGO
 ## SavedVariables: OakLFGSorterDB
 ## SavedVariablesPerCharacter: OakLFGSorterCharDB

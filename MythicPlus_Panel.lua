@@ -280,30 +280,42 @@ end
 
 local panel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 panel:SetSize(246, 408)
-addonTable.ApplyBackdropStyle(panel, "panel")
-panel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-panel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+panel:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    edgeSize = 24,
+    insets = { left = 8, right = 8, top = 8, bottom = 8 }
+})
+panel:SetBackdropColor(0.90, 0.90, 0.90, 1)
+panel:SetBackdropBorderColor(1, 1, 1, 1)
 panel:Hide()
 addonTable.MythicPlusPanel = panel
 
-local header = panel:CreateTexture(nil, "BACKGROUND")
-header:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -1)
-header:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -1)
-header:SetHeight(42)
-header:SetColorTexture(unpack(addonTable.OAK_COLOR_TITLEBAR or addonTable.OAK_COLOR_PANE))
+local header = panel:CreateTexture(nil, "BORDER")
+header:SetTexture("Interface\\Buttons\\WHITE8X8")
+header:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -8)
+header:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
+header:SetHeight(24)
+header:SetVertexColor(0.18, 0.18, 0.18, 0.96)
 
-local divider = panel:CreateTexture(nil, "BACKGROUND")
-divider:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -1)
-divider:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, -1)
+local divider = panel:CreateTexture(nil, "BORDER")
+divider:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -2)
+divider:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, -2)
 divider:SetHeight(1)
-divider:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
+divider:SetColorTexture(0.52, 0.44, 0.22, 0.45)
 
-local title = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-title:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -8)
+local innerShade = panel:CreateTexture(nil, "BACKGROUND", nil, 1)
+innerShade:SetTexture("Interface\\Buttons\\WHITE8X8")
+innerShade:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -36)
+innerShade:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -10, 10)
+innerShade:SetVertexColor(0.28, 0.25, 0.21, 0.82)
+
+local title = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+title:SetPoint("CENTER", header, "CENTER", 0, 0)
 title:SetText("Mythic+ Overview")
 
-local subtitle = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+local subtitle = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
+subtitle:SetPoint("TOP", title, "BOTTOM", 0, -4)
 subtitle:SetTextColor(0.85, 0.78, 0.58)
 subtitle:SetText("Season snapshot")
 
@@ -323,18 +335,18 @@ vaultButton:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
-local scoreLabel = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-scoreLabel:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 10, -10)
+local scoreLabel = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+scoreLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -42)
 scoreLabel:SetText("Score")
 
-local scoreValue = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+local scoreValue = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 scoreValue:SetPoint("LEFT", scoreLabel, "RIGHT", 8, 0)
 
-local keyLabel = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+local keyLabel = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 keyLabel:SetPoint("TOPLEFT", scoreLabel, "BOTTOMLEFT", 0, -6)
 keyLabel:SetText("Your Key")
 
-local keyValue = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+local keyValue = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 keyValue:SetPoint("LEFT", keyLabel, "RIGHT", 8, 0)
 keyValue:SetWidth(132)
 keyValue:SetJustifyH("LEFT")
@@ -363,7 +375,7 @@ keyTeleportButton:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
-local affixHeader = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+local affixHeader = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 affixHeader:SetPoint("TOPLEFT", keyLabel, "BOTTOMLEFT", 0, -8)
 affixHeader:SetText("This Week")
 
@@ -377,8 +389,8 @@ for i = 1, 4 do
         button:SetPoint("LEFT", affixButtons[i - 1], "RIGHT", 6, 0)
     end
     button:SetBackdrop({ bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1 })
-    button:SetBackdropColor(0.06, 0.06, 0.08, 0.95)
-    button:SetBackdropBorderColor(0, 0, 0, 1)
+    button:SetBackdropColor(0.16, 0.16, 0.16, 0.95)
+    button:SetBackdropBorderColor(0.34, 0.34, 0.34, 1)
     button.icon = button:CreateTexture(nil, "ARTWORK")
     button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
     button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
@@ -400,26 +412,26 @@ for i = 1, 4 do
     affixButtons[i] = button
 end
 
-local bestHeader = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+local bestHeader = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 bestHeader:SetPoint("TOPLEFT", affixButtons[1], "BOTTOMLEFT", 0, -12)
 bestHeader:SetText("Season Best")
 
-local colDungeon = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local colDungeon = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 colDungeon:SetPoint("LEFT", bestHeader, "LEFT", 0, 0)
 colDungeon:SetText("")
-local colKey = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local colKey = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 colKey:SetWidth(28)
 colKey:SetJustifyH("CENTER")
 colKey:ClearAllPoints()
 colKey:SetPoint("LEFT", bestHeader, "LEFT", 126, 0)
 colKey:SetText("Key")
-local colTime = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local colTime = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 colTime:ClearAllPoints()
 colTime:SetPoint("LEFT", bestHeader, "LEFT", 156, 0)
 colTime:SetWidth(44)
 colTime:SetJustifyH("CENTER")
 colTime:SetText("Time")
-local colScore = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local colScore = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 colScore:ClearAllPoints()
 colScore:SetPoint("LEFT", bestHeader, "LEFT", 204, 0)
 colScore:SetWidth(22)
@@ -436,19 +448,19 @@ for i = 1, 8 do
     else
         row:SetPoint("TOPLEFT", dungeonRows[i - 1], "BOTTOMLEFT", 0, -1)
     end
-    row.name = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.name = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     row.name:SetPoint("LEFT", row, "LEFT", 0, 0)
     row.name:SetWidth(128)
     row.name:SetJustifyH("LEFT")
-    row.level = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.level = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     row.level:SetPoint("LEFT", row, "LEFT", 126, 0)
     row.level:SetWidth(28)
     row.level:SetJustifyH("CENTER")
-    row.time = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.time = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     row.time:SetPoint("LEFT", row, "LEFT", 156, 0)
     row.time:SetWidth(44)
     row.time:SetJustifyH("CENTER")
-    row.score = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.score = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     row.score:SetPoint("LEFT", row, "LEFT", 204, 0)
     row.score:SetWidth(22)
     row.score:SetJustifyH("CENTER")
@@ -468,7 +480,7 @@ for i = 1, 8 do
     dungeonRows[i] = row
 end
 
-local vaultHeader = panel:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+local vaultHeader = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 vaultHeader:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -300)
 vaultHeader:SetText("Great Vault")
 
@@ -482,13 +494,13 @@ for i = 1, 3 do
         button:SetPoint("TOPLEFT", vaultRows[i - 1], "BOTTOMLEFT", 0, 0)
     end
     button:SetBackdrop({ bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1 })
-    button:SetBackdropColor(0.06, 0.06, 0.08, 0.95)
-    button:SetBackdropBorderColor(0, 0, 0, 1)
-    button.label = button:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    button:SetBackdropColor(0.16, 0.16, 0.16, 0.95)
+    button:SetBackdropBorderColor(0.34, 0.34, 0.34, 1)
+    button.label = button:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     button.label:SetPoint("LEFT", button, "LEFT", 8, 0)
     button.label:SetWidth(68)
     button.label:SetJustifyH("LEFT")
-    button.value = button:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    button.value = button:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     button.value:SetPoint("RIGHT", button, "RIGHT", -8, 0)
     button.value:SetWidth(164)
     button.value:SetJustifyH("RIGHT")
@@ -496,14 +508,14 @@ for i = 1, 3 do
         OpenWeeklyRewardsUI()
     end)
     button:SetScript("OnEnter", function(self)
-        self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        self:SetBackdropBorderColor(0.58, 0.48, 0.20, 1)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Open Great Vault", 1, 1, 1)
         GameTooltip:AddLine("Click to open Blizzard's Great Vault panel.", 1, 1, 1, true)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(0, 0, 0, 1)
+        self:SetBackdropBorderColor(0.34, 0.34, 0.34, 1)
         GameTooltip:Hide()
     end)
     vaultRows[i] = button
@@ -720,11 +732,18 @@ end
 addonTable.RegisterThemeRefresh("mythic_plus_panel_theme", function()
     addonTable.ApplyBackdropStyle(panel, "panel")
     local alpha = addonTable.GetWindowOpacity and addonTable.GetWindowOpacity() or (addonTable.OAK_COLOR_BG and addonTable.OAK_COLOR_BG[4]) or 0.85
-    panel:SetBackdropColor(addonTable.OAK_COLOR_BG[1], addonTable.OAK_COLOR_BG[2], addonTable.OAK_COLOR_BG[3], alpha)
-    panel:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+        local bg = addonTable.OAK_COLOR_BG or {0.073, 0.082, 0.094, 0.98}
+        panel:SetBackdropColor(bg[1], bg[2], bg[3], alpha)
+    else
+        panel:SetBackdropColor(0.90, 0.90, 0.90, alpha)
+    end
+    local panelBorder = (addonTable.IsModernTheme and addonTable.IsModernTheme() and addonTable.OAK_COLOR_BORDER) or {1, 1, 1, 1}
+    panel:SetBackdropBorderColor(unpack(panelBorder))
     header:Show()
-    header:SetColorTexture(unpack(addonTable.OAK_COLOR_TITLEBAR or addonTable.OAK_COLOR_PANE))
-    divider:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
+    header:SetVertexColor(unpack(addonTable.OAK_COLOR_PANEL_TITLE_BG or {0.18, 0.18, 0.18, 0.96}))
+    divider:SetColorTexture(unpack(addonTable.OAK_COLOR_PANEL_TRIM or {0.52, 0.44, 0.22, 0.45}))
+    innerShade:SetVertexColor(unpack(addonTable.OAK_COLOR_PANEL_INNER or {0.28, 0.25, 0.21, 0.82}))
 end)
 
 panel:HookScript("OnShow", function()

@@ -32,7 +32,7 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
         toggleBox:SetPoint("LEFT", toggleHolder, "LEFT", 0, 0)
         toggleBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
 
-        local label = toggleHolder:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+        local label = toggleHolder:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
         label:SetPoint("LEFT", toggleBox, "RIGHT", 8, 0)
         label:SetText("Auto-Open Sorter")
 

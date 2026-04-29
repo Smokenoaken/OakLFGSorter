@@ -76,9 +76,6 @@ local function NotifySignupNoteBlocked()
     end
 end
 
-local FLAT_TEX = "Interface\\Buttons\\WHITE8X8"
-local OAK_COLOR_BORDER = {0, 0, 0, 1}
-
 local function GetAccentColor()
     return addonTable.ClassColor or addonTable.PlayerClassColor or { r = 1, g = 1, b = 1 }
 end
@@ -110,8 +107,8 @@ local function ApplyQuickSignupBarInsets()
     end
     local pad = GetThemeLayoutPad()
     quickSignupBar:ClearAllPoints()
-    quickSignupBar:SetPoint("BOTTOMLEFT", OAK_LFG, "BOTTOMLEFT", 1 + pad, 31)
-    quickSignupBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -1 - pad, 31)
+    quickSignupBar:SetPoint("BOTTOMLEFT", OAK_LFG, "BOTTOMLEFT", 8 + pad, 33)
+    quickSignupBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -30 - pad, 33)
 end
 
 local quickSignupState = {
@@ -788,19 +785,11 @@ local function HookSignupNoteFallback()
 end
 
 local function CreateQuickSignupToggle(parent)
-    local box = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    local box = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     box:SetSize(14, 14)
-    box:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
 
     function box:SetState(isActive)
-        local classColor = GetAccentColor()
-        if isActive then
-            self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
-            self:SetBackdropBorderColor(0, 0, 0, 1)
-        else
-            self:SetBackdropColor(unpack(GetToggleOffColor()))
-            self:SetBackdropBorderColor(classColor.r * 0.65, classColor.g * 0.65, classColor.b * 0.65, 1)
-        end
+        self:SetChecked(isActive == true)
     end
 
     return box
@@ -810,8 +799,12 @@ local function CreateQuickSignupRoleButton(parent, roleKey, tooltipText)
     local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
     btn.roleKey = roleKey
     btn:SetSize(18, 18)
-    btn:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
-    btn:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+    btn:SetBackdrop({
+        bgFile = addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8",
+        edgeFile = addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    btn:SetBackdropBorderColor(0, 0, 0, 1)
 
     btn.icon = btn:CreateTexture(nil, "OVERLAY")
     btn.icon:SetSize(14, 14)
@@ -821,16 +814,29 @@ local function CreateQuickSignupRoleButton(parent, roleKey, tooltipText)
         btn.icon:SetTexCoord(unpack(ROLE_TEX_COORDS[roleKey]))
     end
 
-    function btn:SetState(isActive)
+    function btn:SetState(isActive, isAvailable)
         local classColor = GetAccentColor()
-        if isActive then
-            self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 1)
+        isActive = isActive == true
+        isAvailable = isAvailable ~= false
+
+        if not isAvailable then
+            self:SetBackdropColor(0.06, 0.06, 0.07, 0.95)
+            self:SetBackdropBorderColor(0.12, 0.12, 0.13, 1)
+            self.icon:SetVertexColor(0.35, 0.35, 0.35, 1)
+            self.icon:SetDesaturated(true)
+            self.icon:SetAlpha(0.38)
+        elseif isActive then
+            self:SetBackdropColor(classColor.r, classColor.g, classColor.b, 0.95)
+            self:SetBackdropBorderColor(0, 0, 0, 1)
             self.icon:SetVertexColor(1, 1, 1, 1)
+            self.icon:SetDesaturated(false)
             self.icon:SetAlpha(1)
         else
             self:SetBackdropColor(unpack(GetPaneColor()))
+            self:SetBackdropBorderColor(classColor.r * 0.55, classColor.g * 0.55, classColor.b * 0.55, 0.85)
             self.icon:SetVertexColor(1, 1, 1, 1)
-            self.icon:SetAlpha(0.95)
+            self.icon:SetDesaturated(true)
+            self.icon:SetAlpha(0.5)
         end
     end
 
@@ -848,8 +854,6 @@ local function CreateQuickSignupRoleButton(parent, roleKey, tooltipText)
 end
 
 addonTable.RegisterThemeRefresh("search_signup_theme", function()
-    quickSignupBar:SetBackdropColor(unpack(GetQuickSignupBarColor()))
-    quickSignupBar:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
     ApplyQuickSignupBarInsets()
     if addonTable.UpdateSearchQuickSignupControls then
         addonTable.UpdateSearchQuickSignupControls()
@@ -859,9 +863,14 @@ end)
 -- Bar sits above OAK_LFG's footer row; shown only in browser mode
 quickSignupBar = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 quickSignupBar:SetHeight(24)
-quickSignupBar:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
-quickSignupBar:SetBackdropColor(unpack(GetQuickSignupBarColor()))
-quickSignupBar:SetBackdropBorderColor(unpack(OAK_COLOR_BORDER))
+quickSignupBar:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    edgeSize = 10,
+    insets = { left = 2, right = 2, top = 2, bottom = 2 },
+})
+quickSignupBar:SetBackdropColor(0.05, 0.05, 0.05, 0.75)
+quickSignupBar:SetBackdropBorderColor(0.35, 0.35, 0.35, 0.9)
 ApplyQuickSignupBarInsets()
 quickSignupBar:SetFrameStrata("DIALOG")
 quickSignupBar:SetFrameLevel(OAK_LFG:GetFrameLevel() + 20)
@@ -874,12 +883,12 @@ end
 local quickSignupToggleBox = CreateQuickSignupToggle(quickSignupBar)
 quickSignupToggleBox:SetPoint("LEFT", quickSignupBar, "LEFT", 10, 0)
 
-local quickSignupToggleLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local quickSignupToggleLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 quickSignupToggleLabel:SetPoint("LEFT", quickSignupToggleBox, "RIGHT", 6, 0)
 quickSignupToggleLabel:SetText(L["Quick Sign Up"])
 quickSignupToggleLabel:SetTextColor(1, 1, 1)
 
-local quickSignupRolesLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local quickSignupRolesLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 quickSignupRolesLabel:SetPoint("LEFT", quickSignupToggleLabel, "RIGHT", 10, 0)
 quickSignupRolesLabel:SetText(L["Roles"])
 quickSignupRolesLabel:SetTextColor(0.85, 0.85, 0.85)
@@ -888,30 +897,27 @@ quickSignupState.roleButtons.TANK = CreateQuickSignupRoleButton(quickSignupBar, 
 quickSignupState.roleButtons.HEALER = CreateQuickSignupRoleButton(quickSignupBar, "HEALER", "Use Healer for Quick Sign Up and preselect Healer in the Blizzard popup")
 quickSignupState.roleButtons.DAMAGER = CreateQuickSignupRoleButton(quickSignupBar, "DAMAGER", "Use Damage for Quick Sign Up and preselect Damage in the Blizzard popup")
 
-local signupLimitNote = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local signupLimitNote = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 signupLimitNote:SetText("Note: You can only sign up for a total of 5 groups at a time")
 signupLimitNote:SetTextColor(0.85, 0.85, 0.85)
 signupLimitNote:SetJustifyH("LEFT")
 signupLimitNote:SetWordWrap(false)
 signupLimitNote:SetScale(0.9)
 
-local cooldownLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local cooldownLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 cooldownLabel:SetTextColor(1, 0.6, 0.1, 1)
 cooldownLabel:SetJustifyH("LEFT")
 cooldownLabel:SetWordWrap(false)
 cooldownLabel:SetScale(0.9)
 cooldownLabel:Hide()
 
-local cancelOldestBtn = CreateFrame("Button", nil, quickSignupBar, "BackdropTemplate")
+local cancelOldestBtn = CreateFrame("Button", nil, quickSignupBar, "UIPanelButtonTemplate")
 cancelOldestBtn:SetSize(72, 15)
-cancelOldestBtn:SetBackdrop({bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1})
-cancelOldestBtn:SetBackdropColor(0.45, 0.08, 0.08, 0.92)
-cancelOldestBtn:SetBackdropBorderColor(0.6, 0.1, 0.1, 1)
-local cancelOldestLabel = cancelOldestBtn:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local cancelOldestLabel = cancelOldestBtn:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 cancelOldestLabel:SetPoint("CENTER")
 cancelOldestLabel:SetText("Cancel Oldest")
-cancelOldestLabel:SetTextColor(1, 0.75, 0.75)
-local persistNoteToggleLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+cancelOldestLabel:SetTextColor(1, 0.82, 0)
+local persistNoteToggleLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 persistNoteToggleLabel:SetPoint("RIGHT", quickSignupBar, "RIGHT", -12, 0)
 persistNoteToggleLabel:SetText(L["Persist Note"])
 persistNoteToggleLabel:SetTextColor(0.85, 0.85, 0.85)
@@ -962,14 +968,11 @@ function addonTable.UpdateSearchQuickSignupControls()
         end
 
         button:Show()
-        button:SetState(isAvailable and roleSettings[roleKey] == true)
-        button.icon:SetDesaturated(not isAvailable)
-        button.icon:SetAlpha(isAvailable and 1 or 0.28)
+        button:SetState(roleSettings[roleKey] == true, isAvailable)
         if isAvailable then
             button:Enable()
         else
             button:Disable()
-            button:SetBackdropColor(0.08, 0.08, 0.1, 0.9)
         end
     end
 

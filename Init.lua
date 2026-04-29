@@ -46,8 +46,10 @@ BINDING_HEADER_OAKLFGSORTER = "OAK LFG Sorter"
 BINDING_NAME_OAKLFGSORTER_TOGGLEBROWSER = "Toggle Browser Window"
 
 -- Global Database
-OakLFGSorterDB = OakLFGSorterDB or {}
-OakLFGSorterCharDB = OakLFGSorterCharDB or {}
+OakLFGSorterDB = OakLFGSorterDB or SorterClassicDB or {}
+OakLFGSorterCharDB = OakLFGSorterCharDB or SorterClassicCharDB or {}
+SorterClassicDB = OakLFGSorterDB
+SorterClassicCharDB = OakLFGSorterCharDB
 if OakLFGSorterDB.autoOpen == nil then OakLFGSorterDB.autoOpen = true end
 if OakLFGSorterDB.scale == nil then OakLFGSorterDB.scale = 1.0 end
 if OakLFGSorterDB.muteApplicantPing == nil then OakLFGSorterDB.muteApplicantPing = true end
@@ -60,12 +62,13 @@ if OakLFGSorterDB.showRegions == nil then OakLFGSorterDB.showRegions = false end
 if OakLFGSorterDB.showRegionFlags == nil then OakLFGSorterDB.showRegionFlags = false end
 if OakLFGSorterDB.lowLatencyOnly == nil then OakLFGSorterDB.lowLatencyOnly = false end
 if OakLFGSorterDB.showPartyKeys == nil then OakLFGSorterDB.showPartyKeys = true end
-if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "OakUI Font" end
+if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "Friz Quadrata TT" end
 if OakLFGSorterDB.fontSize == nil then OakLFGSorterDB.fontSize = 12 end
 if OakLFGSorterDB.windowOpacity == nil then OakLFGSorterDB.windowOpacity = 0.85 end
-if OakLFGSorterDB.themeStyle == nil then OakLFGSorterDB.themeStyle = "OAK" end
-if OakLFGSorterDB.themePreset == nil then OakLFGSorterDB.themePreset = "CLASS" end
-if type(OakLFGSorterDB.themeCustomColor) ~= "table" then OakLFGSorterDB.themeCustomColor = { r = 0.74, g = 0.49, b = 0.93 } end
+if OakLFGSorterDB.theme ~= "modern" then OakLFGSorterDB.theme = "classic" end
+if OakLFGSorterDB.themeStyle == nil then OakLFGSorterDB.themeStyle = "MODERN_CLEAN" end
+if OakLFGSorterDB.themePreset == nil then OakLFGSorterDB.themePreset = "OAK_TEAL" end
+if type(OakLFGSorterDB.themeCustomColor) ~= "table" then OakLFGSorterDB.themeCustomColor = nil end
 if type(OakLFGSorterDB.regionFilters) ~= "table" then OakLFGSorterDB.regionFilters = {} end
 OakLFGSorterDB.browserFilters = OakLFGSorterDB.browserFilters or {}
 
@@ -170,6 +173,7 @@ if browserFilters.partyFit == nil then browserFilters.partyFit = false end
 if browserFilters.needsLust == nil then browserFilters.needsLust = false end
 if browserFilters.needsBrez == nil then browserFilters.needsBrez = false end
 if browserFilters.hideDeclined == nil then browserFilters.hideDeclined = false end
+if browserFilters.keepUnavailable == nil then browserFilters.keepUnavailable = true end
 if type(browserFilters.selectedActivities) ~= "table" then browserFilters.selectedActivities = {} end
 if browserFilters.raidBossKills == nil then browserFilters.raidBossKills = "" end
 if browserFilters.raidTanks    == nil then browserFilters.raidTanks    = "" end
@@ -178,14 +182,17 @@ if browserFilters.raidDps      == nil then browserFilters.raidDps      = "" end
 
 -- Font Registration
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-local defaultFontPath = "Interface\\AddOns\\OakLFGSorter\\media\\OakFont.ttf"
+local defaultFontPath = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
-if LSM then LSM:Register("font", "OakUI Font", defaultFontPath) end
+if LSM then
+    LSM:Register("font", "OakUI Font", "Interface\\AddOns\\OakLFGSorter\\Media\\OakFont.ttf")
+    LSM:Register("font", "Friz Quadrata TT", defaultFontPath)
+end
 
 addonTable.Fonts = {
-    Regular = CreateFont("OakLFG_FontRegular"),
-    Large = CreateFont("OakLFG_FontLarge"),
-    Small = CreateFont("OakLFG_FontSmall")
+    Regular = CreateFont("SorterClassic_FontRegular"),
+    Large = CreateFont("SorterClassic_FontLarge"),
+    Small = CreateFont("SorterClassic_FontSmall")
 }
 
 local function ResolveFontPath(fontName)
@@ -215,7 +222,7 @@ local function ApplyOakFont(fontPath)
 end
 
 local function ReapplySavedFont()
-    local activeName = addonTable.GetActiveFontName and addonTable.GetActiveFontName() or "OakUI Font"
+    local activeName = addonTable.GetActiveFontName and addonTable.GetActiveFontName() or "Friz Quadrata TT"
     local fontPath = ResolveFontPath(activeName)
     addonTable.ActiveFontPath = fontPath
     ApplyOakFont(fontPath)
@@ -235,11 +242,11 @@ function addonTable.GetAvailableFontNames()
         return names
     end
 
-    return { "OakUI Font" }
+    return { "Friz Quadrata TT", "OakUI Font" }
 end
 
 function addonTable.GetActiveFontName()
-    return OakLFGSorterDB and OakLFGSorterDB.fontName or "OakUI Font"
+    return OakLFGSorterDB and OakLFGSorterDB.fontName or "Friz Quadrata TT"
 end
 
 function addonTable.GetFontPath(fontName)
@@ -247,7 +254,7 @@ function addonTable.GetFontPath(fontName)
 end
 
 function addonTable.SetActiveFont(fontName)
-    local resolvedName = (fontName and fontName ~= "") and fontName or "OakUI Font"
+    local resolvedName = (fontName and fontName ~= "") and fontName or "Friz Quadrata TT"
     local fontPath = ResolveFontPath(resolvedName)
     OakLFGSorterDB.fontName = resolvedName
     addonTable.ActiveFontPath = fontPath
@@ -353,10 +360,11 @@ end
 
 function addonTable.ApplyWindowOpacity()
     local alpha = addonTable.GetWindowOpacity()
-    local baseColor = addonTable.OAK_COLOR_BG or {0.106, 0.106, 0.129, 0.85}
+    local baseColor = addonTable.OAK_COLOR_BG or {0.205, 0.185, 0.165, 0.98}
+    local paneColor = addonTable.OAK_COLOR_PANE or {0.11, 0.16, 0.13, 1.0}
     local frames = {
-        addonTable.OAK_LFG,
         addonTable.MythicPlusPanel,
+        addonTable.PartyKeysPanel,
         addonTable.FilterPanel,
         addonTable.BrowserFilterPanel,
         addonTable.SupportersPanel,
@@ -372,6 +380,29 @@ function addonTable.ApplyWindowOpacity()
             frame:SetBackdropColor(baseColor[1], baseColor[2], baseColor[3], alpha)
         end
     end
+
+    if addonTable.OAK_LFG and addonTable.OAK_LFG.Bg then
+        addonTable.OAK_LFG.Bg:SetAlpha(alpha)
+    end
+    if addonTable.ModernShell then
+        if addonTable.ModernShell.bg then
+            addonTable.ModernShell.bg:SetVertexColor(baseColor[1], baseColor[2], baseColor[3], alpha)
+        end
+        if addonTable.ModernShell.inner then
+            addonTable.ModernShell.inner:SetVertexColor(paneColor[1], paneColor[2], paneColor[3], alpha)
+        end
+    end
+    if addonTable.OAK_LFG and addonTable.OAK_LFG.Inset then
+        if addonTable.OAK_LFG.Inset.Bg then
+            addonTable.OAK_LFG.Inset.Bg:SetAlpha(alpha)
+        end
+        if addonTable.OAK_LFG.Inset.NineSlice then
+            addonTable.OAK_LFG.Inset.NineSlice:SetAlpha(alpha)
+        end
+    end
+    if addonTable.BrowserPaneBg then
+        addonTable.BrowserPaneBg:SetVertexColor(0.04, 0.04, 0.04, math.max(0.12, alpha * 0.9))
+    end
 end
 
 function addonTable.SetWindowOpacity(value)
@@ -379,6 +410,9 @@ function addonTable.SetWindowOpacity(value)
     alpha = math.max(0.35, math.min(1.0, alpha))
     OakLFGSorterDB.windowOpacity = alpha
     addonTable.ApplyWindowOpacity()
+    if addonTable.UpdateDisplay then
+        addonTable.UpdateDisplay()
+    end
 end
 
 local function AnchorOakSidePanel(panel)
@@ -536,6 +570,354 @@ local registeredFlatButtons = {}
 local registeredCogButtons = {}
 local textMeasureFrame
 
+local function SetTextureVisible(texture, visible)
+    if not texture then
+        return
+    end
+
+    if visible then
+        if texture.SetAlpha then
+            texture:SetAlpha(1)
+        end
+        if texture.Show then
+            texture:Show()
+        end
+    else
+        if texture.SetAlpha then
+            texture:SetAlpha(0)
+        end
+        if texture.Hide then
+            texture:Hide()
+        end
+    end
+end
+
+local function IsProtectedButtonTexture(button, region)
+    return region == button.icon
+        or region == button.arrow
+        or region == button.OakVisualFill
+        or region == button.OakModernFill
+        or region == button.OakModernBorderTop
+        or region == button.OakModernBorderBottom
+        or region == button.OakModernBorderLeft
+        or region == button.OakModernBorderRight
+end
+
+local function ButtonHasNativeTemplateArt(button)
+    return button
+        and (
+            button.OakUsesNativeButtonTheme
+            or button.NormalTexture
+            or button.PushedTexture
+            or button.DisabledTexture
+            or button.HighlightTexture
+            or button.Left
+            or button.Middle
+            or button.Right
+        )
+end
+
+local function SetModernButtonChromeVisible(button, visible)
+    if not button then
+        return
+    end
+
+    SetTextureVisible(button.OakModernFill, visible)
+    SetTextureVisible(button.OakModernBorderTop, visible)
+    SetTextureVisible(button.OakModernBorderBottom, visible)
+    SetTextureVisible(button.OakModernBorderLeft, visible)
+    SetTextureVisible(button.OakModernBorderRight, visible)
+end
+
+local function EnsureModernButtonChrome(button, fillColor, borderColor)
+    if not button then
+        return
+    end
+
+    if not button.OakModernFill then
+        local fill = button:CreateTexture(nil, "BACKGROUND", nil, 0)
+        fill:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+        fill:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+        fill:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
+        button.OakModernFill = fill
+
+        local top = button:CreateTexture(nil, "BORDER", nil, 1)
+        top:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+        top:SetPoint("TOPRIGHT", button, "TOPRIGHT", 0, 0)
+        top:SetHeight(1)
+        top:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
+        button.OakModernBorderTop = top
+
+        local bottom = button:CreateTexture(nil, "BORDER", nil, 1)
+        bottom:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
+        bottom:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 0)
+        bottom:SetHeight(1)
+        bottom:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
+        button.OakModernBorderBottom = bottom
+
+        local left = button:CreateTexture(nil, "BORDER", nil, 1)
+        left:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+        left:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
+        left:SetWidth(1)
+        left:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
+        button.OakModernBorderLeft = left
+
+        local right = button:CreateTexture(nil, "BORDER", nil, 1)
+        right:SetPoint("TOPRIGHT", button, "TOPRIGHT", 0, 0)
+        right:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 0)
+        right:SetWidth(1)
+        right:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
+        button.OakModernBorderRight = right
+    end
+
+    fillColor = fillColor or addonTable.OAK_COLOR_PANE or { 0.11, 0.16, 0.13, 1 }
+    borderColor = borderColor or { 0, 0, 0, 1 }
+
+    button.OakModernFill:SetVertexColor(fillColor[1] or 0.11, fillColor[2] or 0.16, fillColor[3] or 0.13, fillColor[4] or 1)
+    button.OakModernBorderTop:SetVertexColor(borderColor[1] or 0, borderColor[2] or 0, borderColor[3] or 0, borderColor[4] or 1)
+    button.OakModernBorderBottom:SetVertexColor(borderColor[1] or 0, borderColor[2] or 0, borderColor[3] or 0, borderColor[4] or 1)
+    button.OakModernBorderLeft:SetVertexColor(borderColor[1] or 0, borderColor[2] or 0, borderColor[3] or 0, borderColor[4] or 1)
+    button.OakModernBorderRight:SetVertexColor(borderColor[1] or 0, borderColor[2] or 0, borderColor[3] or 0, borderColor[4] or 1)
+
+    SetModernButtonChromeVisible(button, true)
+end
+
+local function HookModernBorderForwarding(button)
+    if not button or button.OakBorderForwardingHooked or not button.SetBackdropBorderColor then
+        return
+    end
+
+    button.OakOriginalSetBackdropBorderColor = button.OakOriginalSetBackdropBorderColor or button.SetBackdropBorderColor
+    button.SetBackdropBorderColor = function(self, r, g, b, a)
+        self:OakOriginalSetBackdropBorderColor(r, g, b, a)
+        if self.OakModernBorderTop then
+            self.OakModernBorderTop:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
+        end
+        if self.OakModernBorderBottom then
+            self.OakModernBorderBottom:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
+        end
+        if self.OakModernBorderLeft then
+            self.OakModernBorderLeft:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
+        end
+        if self.OakModernBorderRight then
+            self.OakModernBorderRight:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
+        end
+    end
+    button.OakBorderForwardingHooked = true
+end
+
+local function ApplyModernInteractiveBorder(button, hovered)
+    if not button then
+        return
+    end
+
+    local color = hovered and addonTable.ClassColor or nil
+    local r, g, b, a
+    if color then
+        r, g, b, a = color.r or 1, color.g or 1, color.b or 1, color.a or 1
+    else
+        local border = addonTable.OAK_COLOR_BORDER or { 0, 0, 0, 1 }
+        r, g, b, a = border[1] or 0, border[2] or 0, border[3] or 0, border[4] or 1
+    end
+
+    if button.SetBackdropBorderColor then
+        button:SetBackdropBorderColor(r, g, b, a)
+    end
+    if button.OakModernBorderTop then
+        button.OakModernBorderTop:SetVertexColor(r, g, b, a)
+    end
+    if button.OakModernBorderBottom then
+        button.OakModernBorderBottom:SetVertexColor(r, g, b, a)
+    end
+    if button.OakModernBorderLeft then
+        button.OakModernBorderLeft:SetVertexColor(r, g, b, a)
+    end
+    if button.OakModernBorderRight then
+        button.OakModernBorderRight:SetVertexColor(r, g, b, a)
+    end
+end
+
+addonTable.ApplyModernInteractiveBorder = ApplyModernInteractiveBorder
+
+local function EnsureModernHoverFeedback(button)
+    if not button or button.OakModernHoverFeedbackHooked then
+        return
+    end
+
+    button:HookScript("OnEnter", function(self)
+        if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+            ApplyModernInteractiveBorder(self, true)
+            if self.text and self.text.SetTextColor then
+                self.text:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            end
+        end
+    end)
+    button:HookScript("OnLeave", function(self)
+        if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+            ApplyModernInteractiveBorder(self, false)
+            if self.text and self.text.SetTextColor then
+                self.text:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            end
+        end
+    end)
+    button.OakModernHoverFeedbackHooked = true
+end
+
+local function HideNativeButtonTextureRegions(button)
+    if not button then
+        return
+    end
+
+    SetTextureVisible(button.NormalTexture, false)
+    SetTextureVisible(button.PushedTexture, false)
+    SetTextureVisible(button.DisabledTexture, false)
+    SetTextureVisible(button.HighlightTexture, false)
+    SetTextureVisible(button.Left, false)
+    SetTextureVisible(button.Middle, false)
+    SetTextureVisible(button.Right, false)
+
+    if button.GetNormalTexture then
+        SetTextureVisible(button:GetNormalTexture(), false)
+    end
+    if button.GetPushedTexture then
+        SetTextureVisible(button:GetPushedTexture(), false)
+    end
+    if button.GetDisabledTexture then
+        SetTextureVisible(button:GetDisabledTexture(), false)
+    end
+    if button.GetHighlightTexture then
+        SetTextureVisible(button:GetHighlightTexture(), false)
+    end
+
+    if button.GetRegions then
+        local regions = { button:GetRegions() }
+        for _, region in ipairs(regions) do
+            if region
+                and region.GetObjectType
+                and region:GetObjectType() == "Texture"
+                and not IsProtectedButtonTexture(button, region)
+            then
+                SetTextureVisible(region, false)
+            end
+        end
+    end
+end
+
+local function HideNativeButtonTextures(button)
+    if not button then
+        return
+    end
+
+    HideNativeButtonTextureRegions(button)
+    if button.SetNormalTexture then
+        button:SetNormalTexture("")
+    end
+    if button.SetPushedTexture then
+        button:SetPushedTexture("")
+    end
+    if button.SetDisabledTexture then
+        button:SetDisabledTexture("")
+    end
+    if button.SetHighlightTexture then
+        button:SetHighlightTexture("")
+    end
+
+    HideNativeButtonTextureRegions(button)
+end
+
+local function ApplyExplicitClassicButtonSkin(button)
+    if not button then
+        return
+    end
+
+    local hasTemplateSlices = button.Left or button.Middle or button.Right
+    if not hasTemplateSlices then
+        if button.SetNormalTexture then
+            button:SetNormalTexture("Interface\\Buttons\\UI-Panel-Button-Up")
+        end
+        if button.SetPushedTexture then
+            button:SetPushedTexture("Interface\\Buttons\\UI-Panel-Button-Down")
+        end
+        if button.SetDisabledTexture then
+            button:SetDisabledTexture("Interface\\Buttons\\UI-Panel-Button-Disabled")
+        end
+    end
+    if button.SetHighlightTexture then
+        button:SetHighlightTexture("Interface\\Buttons\\UI-Panel-Button-Highlight")
+        local highlight = button:GetHighlightTexture()
+        if highlight and highlight.SetBlendMode then
+            highlight:SetBlendMode("ADD")
+        end
+        SetTextureVisible(highlight, true)
+    end
+
+    SetTextureVisible(button.Left, true)
+    SetTextureVisible(button.Middle, true)
+    SetTextureVisible(button.Right, true)
+    SetModernButtonChromeVisible(button, false)
+
+    if button.OakVisualFill then
+        button.OakVisualFill:Hide()
+    end
+    if button.SetBackdropColor then
+        button:SetBackdropColor(0, 0, 0, 0)
+    end
+    if button.SetBackdropBorderColor then
+        button:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+
+    if button.text then
+        if button.text.SetFontObject then
+            button.text:SetFontObject(GameFontNormal)
+        end
+        if button.text.SetShadowOffset then
+            button.text:SetShadowOffset(0, 0)
+        end
+        if button.text.SetShadowColor then
+            button.text:SetShadowColor(0, 0, 0, 0)
+        end
+    end
+end
+
+local function ApplyExplicitModernButtonSkin(button, flatButtonFill)
+    if not button then
+        return
+    end
+
+    if not button.SetBackdropBorderColor then
+        function button:SetBackdropBorderColor() end
+    end
+    HookModernBorderForwarding(button)
+
+    if ButtonHasNativeTemplateArt(button) then
+        HideNativeButtonTextures(button)
+    end
+    if button.OakVisualFill then
+        button.OakVisualFill:Hide()
+    end
+
+    if addonTable.ApplyBackdropStyle then
+        addonTable.ApplyBackdropStyle(button, "button")
+    end
+    flatButtonFill = flatButtonFill or addonTable.OAK_COLOR_PANE or { 0.11, 0.16, 0.13, 1 }
+    EnsureModernButtonChrome(button, flatButtonFill, { 0, 0, 0, 1 })
+    button:SetBackdropColor(unpack(flatButtonFill))
+    button:SetBackdropBorderColor(0, 0, 0, 1)
+    EnsureModernHoverFeedback(button)
+
+    if button.text then
+        if button.text.SetFontObject then
+            button.text:SetFontObject("SorterClassic_FontRegular")
+        end
+        if button.text.SetShadowOffset then
+            button.text:SetShadowOffset(0, 0)
+        end
+        if button.text.SetShadowColor then
+            button.text:SetShadowColor(0, 0, 0, 0)
+        end
+    end
+end
+
 function addonTable.RegisterFontDropdown(button)
     if not button then
         return
@@ -600,121 +982,166 @@ local _, playerClass = UnitClass("player")
 addonTable.PlayerClass = playerClass
 addonTable.PlayerClassColor = RAID_CLASS_COLORS[playerClass] or { r = 1, g = 1, b = 1 }
 
-addonTable.ThemeStyles = {
-    {
-        id = "OAK",
-        label = "Oak",
-        colors = {
-            bg = { 0.07, 0.10, 0.085, 0.93 },
-            pane = { 0.11, 0.16, 0.13, 1.0 },
-            border = { 0, 0, 0, 1.0 },
-            rowA = { 0.17, 0.24, 0.19, 0.48 },
-            rowB = { 0.08, 0.12, 0.10, 0.22 },
-            stickyPanel = { 0.10, 0.19, 0.12, 0.97 },
-            contextBar = { 0.11, 0.16, 0.13, 0.88 },
-            quickSignupBar = { 0.11, 0.16, 0.13, 0.88 },
-            sliderTrack = { 0.03, 0.05, 0.04, 1.0 },
-            buttonInactive = { 0.11, 0.16, 0.13, 1.0 },
-            toggleOffFill = { 0.06, 0.09, 0.075, 0.97 },
-            titleBar = { 0.15, 0.22, 0.17, 1.0 },
-            dropdownHover = { 0.86, 1.0, 0.90, 0.14 },
-            stickyAccent = { 1.0, 1.0, 1.0, 1.0 },
-            stickyAccentSoft = { 0.85, 0.95, 0.86, 0.95 },
-            titleTint = { 0.90, 1.0, 0.90, 1.0 },
-        },
-    },
-    {
-        id = "DARK",
-        label = "Dark",
-        colors = {
-            bg = { 0.045, 0.045, 0.055, 0.95 },
-            pane = { 0.085, 0.085, 0.10, 1.0 },
-            border = { 0.015, 0.015, 0.02, 1.0 },
-            rowA = { 0.12, 0.12, 0.14, 0.55 },
-            rowB = { 0.07, 0.07, 0.08, 0.35 },
-            stickyPanel = { 0.06, 0.09, 0.06, 0.98 },
-            contextBar = { 0.07, 0.07, 0.08, 0.88 },
-            quickSignupBar = { 0.07, 0.07, 0.08, 0.88 },
-            sliderTrack = { 0.025, 0.025, 0.03, 1.0 },
-            buttonInactive = { 0.10, 0.10, 0.12, 1.0 },
-            toggleOffFill = { 0.06, 0.06, 0.07, 0.97 },
-            titleBar = { 0.09, 0.09, 0.10, 1.0 },
-            dropdownHover = { 1, 1, 1, 0.08 },
-            stickyAccent = { 1.0, 1.0, 1.0, 1.0 },
-            stickyAccentSoft = { 0.82, 0.82, 0.82, 0.85 },
-            titleTint = { 0.96, 0.96, 0.96, 1.0 },
-        },
-    },
-    {
-        id = "AMBER",
-        label = "Amber",
-        colors = {
-            bg = { 0.20, 0.17, 0.12, 0.97 },
-            pane = { 0.34, 0.28, 0.18, 1.0 },
-            border = { 0.11, 0.08, 0.04, 1.0 },
-            rowA = { 0.42, 0.33, 0.20, 0.55 },
-            rowB = { 0.24, 0.19, 0.11, 0.28 },
-            stickyPanel = { 0.29, 0.28, 0.14, 0.96 },
-            contextBar = { 0.30, 0.24, 0.15, 0.90 },
-            quickSignupBar = { 0.30, 0.24, 0.15, 0.90 },
-            sliderTrack = { 0.16, 0.12, 0.07, 1.0 },
-            buttonInactive = { 0.36, 0.29, 0.19, 1.0 },
-            toggleOffFill = { 0.22, 0.17, 0.11, 0.98 },
-            titleBar = { 0.42, 0.31, 0.16, 1.0 },
-            dropdownHover = { 1.0, 0.93, 0.70, 0.18 },
-            stickyAccent = { 1.0, 0.95, 0.80, 1.0 },
-            stickyAccentSoft = { 0.96, 0.86, 0.58, 0.95 },
-            titleTint = { 1.0, 0.94, 0.72, 1.0 },
-        },
-    },
-    {
-        id = "BLIZZARD",
-        label = "Blizzard Brown",
-        colors = {
-            bg = { 0.18, 0.15, 0.11, 0.96 },
-            pane = { 0.28, 0.22, 0.14, 1.0 },
-            border = { 0.09, 0.07, 0.03, 1.0 },
-            rowA = { 0.37, 0.29, 0.18, 0.48 },
-            rowB = { 0.22, 0.17, 0.10, 0.24 },
-            stickyPanel = { 0.25, 0.24, 0.12, 0.95 },
-            contextBar = { 0.26, 0.21, 0.13, 0.88 },
-            quickSignupBar = { 0.36, 0.29, 0.18, 0.96 },
-            sliderTrack = { 0.14, 0.10, 0.06, 1.0 },
-            buttonInactive = { 0.36, 0.29, 0.18, 1.0 },
-            toggleOffFill = { 0.20, 0.15, 0.09, 0.97 },
-            titleBar = { 0.33, 0.25, 0.13, 1.0 },
-            dropdownHover = { 1.0, 0.92, 0.68, 0.14 },
-            stickyAccent = { 1.0, 0.95, 0.82, 1.0 },
-            stickyAccentSoft = { 0.94, 0.84, 0.60, 0.92 },
-            titleTint = { 1.0, 0.94, 0.76, 1.0 },
-        },
-    },
-    {
-        id = "BLIZZARD_GRAY",
-        label = "Blizzard Gray",
-        colors = {
-            bg = { 0.155, 0.145, 0.135, 0.965 },
-            pane = { 0.215, 0.205, 0.192, 1.0 },
-            border = { 0.08, 0.065, 0.04, 1.0 },
-            rowA = { 0.255, 0.245, 0.232, 0.46 },
-            rowB = { 0.175, 0.165, 0.154, 0.24 },
-            stickyPanel = { 0.205, 0.198, 0.186, 0.95 },
-            contextBar = { 0.20, 0.193, 0.182, 0.89 },
-            quickSignupBar = { 0.29, 0.277, 0.255, 0.97 },
-            sliderTrack = { 0.115, 0.108, 0.098, 1.0 },
-            buttonInactive = { 0.29, 0.277, 0.255, 1.0 },
-            toggleOffFill = { 0.165, 0.157, 0.147, 0.97 },
-            titleBar = { 0.255, 0.243, 0.224, 1.0 },
-            dropdownHover = { 1.0, 0.93, 0.68, 0.10 },
-            stickyAccent = { 0.96, 0.93, 0.86, 1.0 },
-            stickyAccentSoft = { 0.84, 0.81, 0.75, 0.92 },
-            titleTint = { 0.96, 0.93, 0.84, 1.0 },
-        },
-    },
+local CLASSIC_BLIZZARD_THEME = {
+    bg = { 0.205, 0.185, 0.165, 0.98 },
+    pane = { 0.255, 0.235, 0.205, 1.0 },
+    border = { 0.11, 0.085, 0.05, 1.0 },
+    rowA = { 0.16, 0.16, 0.16, 0.92 },
+    rowB = { 0.11, 0.11, 0.11, 0.92 },
+    stickyPanel = { 0.24, 0.22, 0.19, 0.96 },
+    contextBar = { 0.245, 0.225, 0.195, 0.93 },
+    quickSignupBar = { 0.255, 0.235, 0.205, 0.97 },
+    sliderTrack = { 0.12, 0.105, 0.09, 1.0 },
+    buttonInactive = { 0.255, 0.235, 0.205, 1.0 },
+    toggleOffFill = { 0.18, 0.16, 0.14, 0.97 },
+    titleBar = { 0.255, 0.235, 0.205, 1.0 },
+    dropdownHover = { 1.0, 0.93, 0.68, 0.07 },
+    stickyAccent = { 0.96, 0.93, 0.86, 1.0 },
+    stickyAccentSoft = { 0.84, 0.81, 0.75, 0.82 },
+    titleTint = { 0.96, 0.93, 0.84, 1.0 },
+    toggleActiveFill = { 0.36, 0.29, 0.13, 0.98 },
+    toggleActiveBorder = { 0.58, 0.48, 0.20, 1.0 },
+    toggleInactiveFill = { 0.14, 0.14, 0.14, 0.95 },
+    toggleInactiveBorder = { 0.34, 0.34, 0.34, 1.0 },
+    text = { 0.96, 0.96, 0.96, 1.0 },
+    textMuted = { 0.84, 0.84, 0.84, 1.0 },
+    panelTitleBg = { 0.18, 0.18, 0.18, 0.96 },
+    panelInner = { 0.28, 0.25, 0.21, 0.82 },
+    panelInnerBorder = { 0.31, 0.31, 0.31, 0.70 },
+    panelTrim = { 0.52, 0.44, 0.22, 0.45 },
 }
 
+local MODERN_CLEAN_THEME = {
+    bg = { 0.07, 0.10, 0.085, 0.93 },
+    pane = { 0.11, 0.16, 0.13, 1.0 },
+    border = { 0, 0, 0, 1.0 },
+    rowA = { 0.17, 0.24, 0.19, 0.48 },
+    rowB = { 0.08, 0.12, 0.10, 0.22 },
+    stickyPanel = { 0.10, 0.19, 0.12, 0.97 },
+    contextBar = { 0.11, 0.16, 0.13, 0.88 },
+    quickSignupBar = { 0.11, 0.16, 0.13, 0.88 },
+    sliderTrack = { 0.03, 0.05, 0.04, 1.0 },
+    buttonInactive = { 0.11, 0.16, 0.13, 1.0 },
+    toggleOffFill = { 0.06, 0.09, 0.075, 0.97 },
+    titleBar = { 0.15, 0.22, 0.17, 1.0 },
+    dropdownHover = { 0.86, 1.0, 0.90, 0.14 },
+    stickyAccent = { 1.0, 1.0, 1.0, 1.0 },
+    stickyAccentSoft = { 0.85, 0.95, 0.86, 0.95 },
+    titleTint = { 0.90, 1.0, 0.90, 1.0 },
+    toggleActiveFill = { 0.15, 0.37, 0.23, 0.98 },
+    toggleActiveBorder = { 0.34, 0.83, 0.52, 1.0 },
+    toggleInactiveFill = { 0.066, 0.084, 0.070, 0.96 },
+    toggleInactiveBorder = { 0.20, 0.29, 0.22, 1.0 },
+    text = { 0.92, 0.95, 0.92, 1.0 },
+    textMuted = { 0.68, 0.73, 0.68, 1.0 },
+    panelTitleBg = { 0.10, 0.16, 0.13, 0.98 },
+    panelInner = { 0.06, 0.09, 0.075, 0.84 },
+    panelInnerBorder = { 0.18, 0.24, 0.20, 0.80 },
+    panelTrim = { 0.85, 0.95, 0.86, 0.28 },
+}
+
+local MODERN_GROVE_THEME = {
+    bg = { 0.20, 0.17, 0.12, 0.97 },
+    pane = { 0.34, 0.28, 0.18, 1.0 },
+    border = { 0.11, 0.08, 0.04, 1.0 },
+    rowA = { 0.42, 0.33, 0.20, 0.55 },
+    rowB = { 0.24, 0.19, 0.11, 0.28 },
+    stickyPanel = { 0.29, 0.28, 0.14, 0.96 },
+    contextBar = { 0.30, 0.24, 0.15, 0.90 },
+    quickSignupBar = { 0.30, 0.24, 0.15, 0.90 },
+    sliderTrack = { 0.16, 0.12, 0.07, 1.0 },
+    buttonInactive = { 0.36, 0.29, 0.19, 1.0 },
+    toggleOffFill = { 0.22, 0.17, 0.11, 0.98 },
+    titleBar = { 0.42, 0.31, 0.16, 1.0 },
+    dropdownHover = { 1.0, 0.93, 0.70, 0.18 },
+    stickyAccent = { 1.0, 0.95, 0.80, 1.0 },
+    stickyAccentSoft = { 0.96, 0.86, 0.58, 0.95 },
+    titleTint = { 1.0, 0.94, 0.72, 1.0 },
+    toggleActiveFill = { 0.46, 0.30, 0.13, 0.98 },
+    toggleActiveBorder = { 1.0, 0.72, 0.28, 1.0 },
+    toggleInactiveFill = { 0.24, 0.18, 0.11, 0.96 },
+    toggleInactiveBorder = { 0.44, 0.31, 0.16, 1.0 },
+    text = { 0.98, 0.94, 0.86, 1.0 },
+    textMuted = { 0.82, 0.76, 0.66, 1.0 },
+    panelTitleBg = { 0.30, 0.24, 0.15, 0.98 },
+    panelInner = { 0.20, 0.15, 0.09, 0.84 },
+    panelInnerBorder = { 0.42, 0.31, 0.16, 0.80 },
+    panelTrim = { 1.0, 0.84, 0.52, 0.32 },
+}
+
+local THEME_MODE_CLASSIC = "classic"
+local THEME_MODE_MODERN = "modern"
+local MODERN_DEFAULT_STYLE = "OAK"
+local MODERN_DEFAULT_PRESET = "CLASS"
+local MODERN_CUSTOM_PRESET = "CUSTOM"
+
+addonTable.ThemeModes = {
+    { id = THEME_MODE_CLASSIC, label = "Classic" },
+    { id = THEME_MODE_MODERN, label = "Modern" },
+}
+addonTable.ThemeStyles = {
+    { id = "OAK", label = "Oak", colors = MODERN_CLEAN_THEME },
+    { id = "DARK", label = "Dark", colors = {
+        bg = { 0.045, 0.045, 0.055, 0.95 },
+        pane = { 0.085, 0.085, 0.10, 1.0 },
+        border = { 0.015, 0.015, 0.02, 1.0 },
+        rowA = { 0.12, 0.12, 0.14, 0.55 },
+        rowB = { 0.07, 0.07, 0.08, 0.35 },
+        stickyPanel = { 0.06, 0.09, 0.06, 0.98 },
+        contextBar = { 0.07, 0.07, 0.08, 0.88 },
+        quickSignupBar = { 0.07, 0.07, 0.08, 0.88 },
+        sliderTrack = { 0.025, 0.025, 0.03, 1.0 },
+        buttonInactive = { 0.10, 0.10, 0.12, 1.0 },
+        toggleOffFill = { 0.06, 0.06, 0.07, 0.97 },
+        titleBar = { 0.09, 0.09, 0.10, 1.0 },
+        dropdownHover = { 1, 1, 1, 0.08 },
+        stickyAccent = { 1.0, 1.0, 1.0, 1.0 },
+        stickyAccentSoft = { 0.82, 0.82, 0.82, 0.85 },
+        titleTint = { 0.96, 0.96, 0.96, 1.0 },
+        toggleActiveFill = { 0.31, 0.31, 0.35, 0.98 },
+        toggleActiveBorder = { 0.72, 0.72, 0.78, 1.0 },
+        toggleInactiveFill = { 0.06, 0.06, 0.07, 0.97 },
+        toggleInactiveBorder = { 0.24, 0.24, 0.29, 1.0 },
+        text = { 0.93, 0.93, 0.95, 1.0 },
+        textMuted = { 0.72, 0.72, 0.76, 1.0 },
+        panelTitleBg = { 0.09, 0.09, 0.10, 0.98 },
+        panelInner = { 0.05, 0.05, 0.06, 0.84 },
+        panelInnerBorder = { 0.20, 0.20, 0.22, 0.80 },
+        panelTrim = { 0.82, 0.82, 0.86, 0.24 },
+    } },
+    { id = "AMBER", label = "Amber", colors = MODERN_GROVE_THEME },
+    { id = "BLIZZARD", label = "Blizzard Brown", colors = CLASSIC_BLIZZARD_THEME },
+    { id = "BLIZZARD_GRAY", label = "Blizzard Gray", colors = {
+        bg = { 0.155, 0.145, 0.135, 0.965 },
+        pane = { 0.215, 0.205, 0.192, 1.0 },
+        border = { 0.08, 0.065, 0.04, 1.0 },
+        rowA = { 0.255, 0.245, 0.232, 0.46 },
+        rowB = { 0.175, 0.165, 0.154, 0.24 },
+        stickyPanel = { 0.205, 0.198, 0.186, 0.95 },
+        contextBar = { 0.20, 0.193, 0.182, 0.89 },
+        quickSignupBar = { 0.29, 0.277, 0.255, 0.97 },
+        sliderTrack = { 0.115, 0.108, 0.098, 1.0 },
+        buttonInactive = { 0.29, 0.277, 0.255, 1.0 },
+        toggleOffFill = { 0.165, 0.157, 0.147, 0.97 },
+        titleBar = { 0.255, 0.243, 0.224, 1.0 },
+        dropdownHover = { 1.0, 0.93, 0.68, 0.10 },
+        stickyAccent = { 0.96, 0.93, 0.86, 1.0 },
+        stickyAccentSoft = { 0.84, 0.81, 0.75, 0.92 },
+        titleTint = { 0.96, 0.93, 0.84, 1.0 },
+        toggleActiveFill = { 0.36, 0.29, 0.18, 0.98 },
+        toggleActiveBorder = { 0.74, 0.60, 0.34, 1.0 },
+        toggleInactiveFill = { 0.16, 0.15, 0.14, 0.97 },
+        toggleInactiveBorder = { 0.36, 0.34, 0.30, 1.0 },
+        text = { 0.94, 0.92, 0.88, 1.0 },
+        textMuted = { 0.76, 0.74, 0.70, 1.0 },
+        panelTitleBg = { 0.22, 0.21, 0.19, 0.98 },
+        panelInner = { 0.14, 0.13, 0.12, 0.84 },
+        panelInnerBorder = { 0.32, 0.30, 0.28, 0.80 },
+        panelTrim = { 0.86, 0.76, 0.54, 0.26 },
+    } },
+}
 addonTable.ThemePresets = {
-    { id = "CLASS", label = "Class Colored" },
+    { id = "CLASS", label = "Class Color", color = nil },
     { id = "SKY", label = "Sky Blue", color = { r = 0.30, g = 0.76, b = 0.98 } },
     { id = "MINT", label = "Mint", color = { r = 0.35, g = 0.90, b = 0.66 } },
     { id = "LIGHT_GRAY", label = "Light Gray", color = { r = 0.741, g = 0.725, b = 0.706 } },
@@ -724,48 +1151,131 @@ addonTable.ThemePresets = {
     { id = "AMBER", label = "Amber", color = { r = 0.98, g = 0.65, b = 0.18 } },
     { id = "ROSE", label = "Rose", color = { r = 0.92, g = 0.43, b = 0.61 } },
     { id = "EMERALD", label = "Emerald", color = { r = 0.20, g = 0.82, b = 0.58 } },
-    { id = "CUSTOM", label = "Custom" },
+    { id = MODERN_CUSTOM_PRESET, label = "Custom", color = { r = 0.31, g = 0.86, b = 0.88 } },
 }
 
-local function GetThemeStyleByID(styleID)
-    for _, style in ipairs(addonTable.ThemeStyles) do
-        if style.id == styleID then
-            return style
+local function FindThemeOption(options, optionID)
+    if type(options) ~= "table" then
+        return nil
+    end
+
+    for _, option in ipairs(options) do
+        if option.id == optionID then
+            return option
         end
     end
-    return addonTable.ThemeStyles[1]
+
+    return nil
 end
 
-local function GetThemePresetByID(themeID)
-    for _, preset in ipairs(addonTable.ThemePresets) do
-        if preset.id == themeID then
-            return preset
-        end
+local function NormalizeThemeMode(themeMode)
+    if themeMode == THEME_MODE_MODERN then
+        return THEME_MODE_MODERN
     end
-    return addonTable.ThemePresets[1]
+    return THEME_MODE_CLASSIC
+end
+
+local function NormalizeThemeStyleID(styleID)
+    if styleID == "MODERN_CLEAN" then
+        return "OAK"
+    end
+    if styleID == "MODERN_GROVE" then
+        return "AMBER"
+    end
+    return styleID
+end
+
+local function NormalizeThemePresetID(presetID)
+    if presetID == "OAK_TEAL" then
+        return "CLASS"
+    end
+    if presetID == "LEAF" then
+        return "EMERALD"
+    end
+    if presetID == "VIOLET" then
+        return "MIDNIGHT"
+    end
+    return presetID
+end
+
+local function EnsureModernThemeDefaults()
+    OakLFGSorterDB.themeStyle = NormalizeThemeStyleID(OakLFGSorterDB.themeStyle)
+    OakLFGSorterDB.themePreset = NormalizeThemePresetID(OakLFGSorterDB.themePreset)
+    if not FindThemeOption(addonTable.ThemeStyles, OakLFGSorterDB.themeStyle) then
+        OakLFGSorterDB.themeStyle = MODERN_DEFAULT_STYLE
+    end
+    if not FindThemeOption(addonTable.ThemePresets, OakLFGSorterDB.themePreset) then
+        OakLFGSorterDB.themePreset = MODERN_DEFAULT_PRESET
+    end
+    if OakLFGSorterDB.themePreset == MODERN_CUSTOM_PRESET and type(OakLFGSorterDB.themeCustomColor) ~= "table" then
+        OakLFGSorterDB.themeCustomColor = CopyTable(FindThemeOption(addonTable.ThemePresets, MODERN_DEFAULT_PRESET).color)
+    end
+end
+
+function addonTable.GetThemeMode()
+    OakLFGSorterDB.theme = NormalizeThemeMode(OakLFGSorterDB.theme)
+    return OakLFGSorterDB.theme
+end
+
+function addonTable.IsClassicTheme()
+    return addonTable.GetThemeMode() == THEME_MODE_CLASSIC
+end
+
+function addonTable.IsModernTheme()
+    return addonTable.GetThemeMode() == THEME_MODE_MODERN
+end
+
+function addonTable.GetThemeModeLabel()
+    local mode = addonTable.GetThemeMode()
+    local option = FindThemeOption(addonTable.ThemeModes, mode)
+    return option and option.label or "Classic"
 end
 
 function addonTable.GetThemeStyle()
-    return OakLFGSorterDB and OakLFGSorterDB.themeStyle or "OAK"
+    if not addonTable.IsModernTheme() then
+        return "CLASSIC_BLIZZARD"
+    end
+    EnsureModernThemeDefaults()
+    return OakLFGSorterDB.themeStyle
 end
 
-function addonTable.GetThemeStyleLabel(styleID)
-    local style = GetThemeStyleByID(styleID or addonTable.GetThemeStyle())
-    return style.label or style.id or "Oak"
+function addonTable.GetThemeStyleLabel()
+    if not addonTable.IsModernTheme() then
+        return "Classic Blizzard"
+    end
+    local style = FindThemeOption(addonTable.ThemeStyles, addonTable.GetThemeStyle())
+    return style and style.label or "Clean"
 end
 
 function addonTable.GetThemeStyleColors(styleID)
-    local style = GetThemeStyleByID(styleID or addonTable.GetThemeStyle())
-    return style.colors or addonTable.ThemeStyles[1].colors
+    if styleID == "CLASSIC_BLIZZARD" then
+        return CLASSIC_BLIZZARD_THEME
+    end
+
+    if addonTable.IsModernTheme() or styleID then
+        local style = FindThemeOption(addonTable.ThemeStyles, styleID or addonTable.GetThemeStyle())
+        if style and style.colors then
+            return style.colors
+        end
+    end
+
+    return CLASSIC_BLIZZARD_THEME
 end
 
 function addonTable.GetThemePreset()
-    return OakLFGSorterDB and OakLFGSorterDB.themePreset or "CLASS"
+    if not addonTable.IsModernTheme() then
+        return "CLASSIC_BLIZZARD"
+    end
+    EnsureModernThemeDefaults()
+    return OakLFGSorterDB.themePreset
 end
 
 function addonTable.GetThemeCustomColor()
-    OakLFGSorterDB.themeCustomColor = NormalizeThemeColor(OakLFGSorterDB.themeCustomColor)
-    return OakLFGSorterDB.themeCustomColor
+    if addonTable.IsModernTheme() and type(OakLFGSorterDB.themeCustomColor) == "table" then
+        local color = NormalizeThemeColor(OakLFGSorterDB.themeCustomColor)
+        return { r = color.r, g = color.g, b = color.b, a = color.a or 1 }
+    end
+    return { r = 0.31, g = 0.86, b = 0.88, a = 1 }
 end
 
 function addonTable.GetThemeColor(name, styleID)
@@ -778,19 +1288,30 @@ function addonTable.GetThemeColor(name, styleID)
 end
 
 function addonTable.GetThemeAccentColor(themeID)
-    local preset = GetThemePresetByID(themeID or addonTable.GetThemePreset())
-    if preset.id == "CLASS" then
-        return addonTable.PlayerClassColor
+    if not addonTable.IsModernTheme() then
+        return { r = 0.741, g = 0.725, b = 0.706, a = 1 }
     end
-    if preset.id == "CUSTOM" then
+
+    local presetID = themeID or addonTable.GetThemePreset()
+    if presetID == "CLASS" then
+        local classColor = addonTable.PlayerClassColor or { r = 1, g = 1, b = 1 }
+        return { r = classColor.r or 1, g = classColor.g or 1, b = classColor.b or 1, a = 1 }
+    end
+    if presetID == MODERN_CUSTOM_PRESET then
         return addonTable.GetThemeCustomColor()
     end
-    return NormalizeThemeColor(preset.color)
+
+    local preset = FindThemeOption(addonTable.ThemePresets, presetID) or FindThemeOption(addonTable.ThemePresets, MODERN_DEFAULT_PRESET)
+    local color = NormalizeThemeColor(preset and preset.color)
+    return { r = color.r, g = color.g, b = color.b, a = color.a or 1 }
 end
 
 function addonTable.GetThemePresetLabel(themeID)
-    local preset = GetThemePresetByID(themeID or addonTable.GetThemePreset())
-    return preset.label or preset.id or "Class Colored"
+    if not addonTable.IsModernTheme() then
+        return "Classic Blizzard"
+    end
+    local preset = FindThemeOption(addonTable.ThemePresets, themeID or addonTable.GetThemePreset())
+    return preset and preset.label or "Oak Teal"
 end
 
 local function NotifyThemeRefreshers()
@@ -801,37 +1322,27 @@ end
 
 local function RefreshRegisteredButtons()
     local style = addonTable.GetThemeStyle and addonTable.GetThemeStyle() or "OAK"
-    local useQuickSignupButtonFill = style == "BLIZZARD" or style == "BLIZZARD_GRAY"
-    local flatButtonFill = useQuickSignupButtonFill and addonTable.OAK_COLOR_QUICKSIGNUP or addonTable.OAK_COLOR_PANE
-    local borderColor = {0, 0, 0, 1}
-    local function EnsureButtonVisualFill(button)
-        if not button then
-            return nil
-        end
-        if not button.OakVisualFill then
-            local fill = button:CreateTexture(nil, "BACKGROUND", nil, 1)
-            fill:SetPoint("TOPLEFT", button, "TOPLEFT", 4, -4)
-            fill:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -4, 4)
-            button.OakVisualFill = fill
-        end
-        return button.OakVisualFill
-    end
+    local useQuickSignupFill = style == "BLIZZARD" or style == "BLIZZARD_GRAY" or style == "CLASSIC_BLIZZARD"
+    local flatButtonFill = useQuickSignupFill and (addonTable.OAK_COLOR_QUICKSIGNUP or addonTable.OAK_COLOR_PANE) or addonTable.OAK_COLOR_PANE
 
     for key, button in pairs(registeredFlatButtons) do
         if button and button.SetBackdropColor then
-            if addonTable.ApplyBackdropStyle then
-                addonTable.ApplyBackdropStyle(button, "button")
+            if button.OakVisualFill then
+                button.OakVisualFill:Hide()
             end
-            button:SetBackdropColor(unpack(flatButtonFill))
-            button:SetBackdropBorderColor(unpack(borderColor))
-            local visualFill = EnsureButtonVisualFill(button)
-            if visualFill then
-                visualFill:SetTexture(addonTable.FLAT_TEX)
-                visualFill:SetVertexColor(flatButtonFill[1] or 0, flatButtonFill[2] or 0, flatButtonFill[3] or 0, flatButtonFill[4] or 1)
-                visualFill:Show()
-            end
-            if button.RefreshAutoWidth then
-                button:RefreshAutoWidth()
+            if addonTable.IsClassicTheme and addonTable.IsClassicTheme() then
+                ApplyExplicitClassicButtonSkin(button)
+                if button.RefreshAutoWidth then
+                    button:RefreshAutoWidth()
+                end
+            else
+                ApplyExplicitModernButtonSkin(button, flatButtonFill)
+                if button.text and button.text.SetTextColor then
+                    button.text:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+                end
+                if button.RefreshAutoWidth then
+                    button:RefreshAutoWidth()
+                end
             end
         else
             registeredFlatButtons[key] = nil
@@ -840,16 +1351,13 @@ local function RefreshRegisteredButtons()
 
     for key, button in pairs(registeredCogButtons) do
         if button and button.SetBackdropColor then
-            if addonTable.ApplyBackdropStyle then
-                addonTable.ApplyBackdropStyle(button, "button")
+            if button.OakVisualFill then
+                button.OakVisualFill:Hide()
             end
-            button:SetBackdropColor(unpack(flatButtonFill))
-            button:SetBackdropBorderColor(unpack(borderColor))
-            local visualFill = EnsureButtonVisualFill(button)
-            if visualFill then
-                visualFill:SetTexture(addonTable.FLAT_TEX)
-                visualFill:SetVertexColor(flatButtonFill[1] or 0, flatButtonFill[2] or 0, flatButtonFill[3] or 0, flatButtonFill[4] or 1)
-                visualFill:Show()
+            if addonTable.IsClassicTheme and addonTable.IsClassicTheme() then
+                ApplyExplicitClassicButtonSkin(button)
+            else
+                ApplyExplicitModernButtonSkin(button, flatButtonFill)
             end
         else
             registeredCogButtons[key] = nil
@@ -858,7 +1366,7 @@ local function RefreshRegisteredButtons()
 end
 
 function addonTable.ApplyTheme()
-    local styleColors = addonTable.GetThemeStyleColors()
+    local styleColors = addonTable.GetThemeStyleColors() or CLASSIC_BLIZZARD_THEME
     addonTable.ClassColor = addonTable.GetThemeAccentColor()
     addonTable.OAK_COLOR_BG = CopyThemeArray(styleColors.bg)
     addonTable.OAK_COLOR_PANE = CopyThemeArray(styleColors.pane)
@@ -875,6 +1383,17 @@ function addonTable.ApplyTheme()
     addonTable.OAK_COLOR_STICKY_ACCENT = CopyThemeArray(styleColors.stickyAccent)
     addonTable.OAK_COLOR_STICKY_ACCENT_SOFT = CopyThemeArray(styleColors.stickyAccentSoft)
     addonTable.OAK_COLOR_TITLE_TINT = CopyThemeArray(styleColors.titleTint)
+    addonTable.OAK_COLOR_BUTTON_INACTIVE = CopyThemeArray(styleColors.buttonInactive)
+    addonTable.OAK_COLOR_TOGGLE_ACTIVE = CopyThemeArray(styleColors.toggleActiveFill)
+    addonTable.OAK_COLOR_TOGGLE_ACTIVE_BORDER = CopyThemeArray(styleColors.toggleActiveBorder)
+    addonTable.OAK_COLOR_TOGGLE_INACTIVE = CopyThemeArray(styleColors.toggleInactiveFill)
+    addonTable.OAK_COLOR_TOGGLE_INACTIVE_BORDER = CopyThemeArray(styleColors.toggleInactiveBorder)
+    addonTable.OAK_COLOR_TEXT = CopyThemeArray(styleColors.text)
+    addonTable.OAK_COLOR_TEXT_MUTED = CopyThemeArray(styleColors.textMuted)
+    addonTable.OAK_COLOR_PANEL_TITLE_BG = CopyThemeArray(styleColors.panelTitleBg)
+    addonTable.OAK_COLOR_PANEL_INNER = CopyThemeArray(styleColors.panelInner)
+    addonTable.OAK_COLOR_PANEL_INNER_BORDER = CopyThemeArray(styleColors.panelInnerBorder)
+    addonTable.OAK_COLOR_PANEL_TRIM = CopyThemeArray(styleColors.panelTrim)
     RefreshRegisteredButtons()
     NotifyThemeRefreshers()
     if addonTable.ApplyWindowOpacity then addonTable.ApplyWindowOpacity() end
@@ -885,48 +1404,248 @@ function addonTable.ApplyTheme()
     if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
 end
 
+function addonTable.SetThemeMode(themeMode)
+    local previousTheme = addonTable.GetThemeMode and addonTable.GetThemeMode() or THEME_MODE_CLASSIC
+    local nextTheme = NormalizeThemeMode(themeMode)
+    if previousTheme == nextTheme then
+        addonTable.ApplyTheme()
+        return
+    end
+
+    OakLFGSorterDB.theme = nextTheme
+    if nextTheme == THEME_MODE_MODERN then
+        EnsureModernThemeDefaults()
+    end
+
+    if ReloadUI then
+        ReloadUI()
+        return
+    end
+
+    addonTable.ApplyTheme()
+end
+
 function addonTable.SetThemeStyle(styleID)
-    OakLFGSorterDB.themeStyle = GetThemeStyleByID(styleID).id
+    if addonTable.IsModernTheme() and FindThemeOption(addonTable.ThemeStyles, styleID) then
+        OakLFGSorterDB.themeStyle = styleID
+    end
     addonTable.ApplyTheme()
 end
 
 function addonTable.SetThemePreset(themeID)
-    OakLFGSorterDB.themePreset = GetThemePresetByID(themeID).id
+    if addonTable.IsModernTheme() and FindThemeOption(addonTable.ThemePresets, themeID) then
+        OakLFGSorterDB.themePreset = themeID
+        if themeID == MODERN_CUSTOM_PRESET and type(OakLFGSorterDB.themeCustomColor) ~= "table" then
+            local accent = addonTable.GetThemeAccentColor(MODERN_DEFAULT_PRESET)
+            OakLFGSorterDB.themeCustomColor = { r = accent.r, g = accent.g, b = accent.b, a = 1 }
+        end
+    end
     addonTable.ApplyTheme()
 end
 
 function addonTable.SetThemeCustomColor(color)
-    OakLFGSorterDB.themeCustomColor = NormalizeThemeColor(color)
-    OakLFGSorterDB.themePreset = "CUSTOM"
+    if not addonTable.IsModernTheme() then
+        return
+    end
+    local normalized = NormalizeThemeColor(color)
+    OakLFGSorterDB.themeCustomColor = { r = normalized.r, g = normalized.g, b = normalized.b, a = normalized.a or 1 }
+    OakLFGSorterDB.themePreset = MODERN_CUSTOM_PRESET
     addonTable.ApplyTheme()
 end
 
 function addonTable.OpenThemeColorPicker()
-    local previousPreset = addonTable.GetThemePreset()
-    local color = addonTable.GetThemeCustomColor()
-    if ColorPickerFrame and ColorPickerFrame.SetupColorPickerAndShow then
-        local pickerInfo = {
-            r = color.r,
-            g = color.g,
-            b = color.b,
+    if not addonTable.IsModernTheme() or not ColorPickerFrame then
+        return
+    end
+
+    local current = addonTable.GetThemeAccentColor()
+    local previous = { r = current.r, g = current.g, b = current.b, a = current.a or 1 }
+    local function ApplyColor()
+        local r, g, b = ColorPickerFrame:GetColorRGB()
+        addonTable.SetThemeCustomColor({ r = r, g = g, b = b, a = 1 })
+    end
+    local function CancelColor()
+        addonTable.SetThemeCustomColor(previous)
+    end
+
+    if ColorPickerFrame.SetupColorPickerAndShow then
+        ColorPickerFrame:SetupColorPickerAndShow({
+            r = current.r,
+            g = current.g,
+            b = current.b,
             hasOpacity = false,
-            swatchFunc = function()
-                local r, g, b = ColorPickerFrame:GetColorRGB()
-                addonTable.SetThemeCustomColor({ r = r, g = g, b = b })
-            end,
-            cancelFunc = function(previous)
-                if previous then
-                    OakLFGSorterDB.themeCustomColor = NormalizeThemeColor({
-                        r = previous.r,
-                        g = previous.g,
-                        b = previous.b,
-                    })
-                    OakLFGSorterDB.themePreset = previousPreset
-                    addonTable.ApplyTheme()
-                end
-            end,
-        }
-        ColorPickerFrame:SetupColorPickerAndShow(pickerInfo)
+            swatchFunc = ApplyColor,
+            cancelFunc = CancelColor,
+        })
+        return
+    end
+
+    ColorPickerFrame.func = ApplyColor
+    ColorPickerFrame.cancelFunc = CancelColor
+    ColorPickerFrame.hasOpacity = false
+    ColorPickerFrame:SetColorRGB(current.r, current.g, current.b)
+    ColorPickerFrame:Hide()
+    ColorPickerFrame:Show()
+end
+
+function addonTable.GetThemeToggleColors(isActive)
+    if isActive then
+        return addonTable.OAK_COLOR_TOGGLE_ACTIVE or { 0.36, 0.29, 0.13, 0.98 },
+            addonTable.OAK_COLOR_TOGGLE_ACTIVE_BORDER or { 0.58, 0.48, 0.20, 1 }
+    end
+    return addonTable.OAK_COLOR_TOGGLE_INACTIVE or { 0.14, 0.14, 0.14, 0.95 },
+        addonTable.OAK_COLOR_TOGGLE_INACTIVE_BORDER or { 0.34, 0.34, 0.34, 1 }
+end
+
+function addonTable.ApplyToggleVisual(box, label, isActive)
+    if not box then
+        return
+    end
+
+    if not box.check then
+        box.check = box:CreateTexture(nil, "OVERLAY")
+        box.check:SetAtlas("common-icon-checkmark-yellow")
+        box.check:SetSize(12, 12)
+        box.check:SetPoint("CENTER")
+    end
+
+    local fill, border = addonTable.GetThemeToggleColors(isActive)
+    box:SetBackdropColor(unpack(fill))
+    box:SetBackdropBorderColor(unpack(border))
+    if isActive then
+        box.check:Show()
+        if label then label:SetTextColor(unpack(addonTable.OAK_COLOR_TEXT or { 0.96, 0.96, 0.96, 1 })) end
+    else
+        box.check:Hide()
+        if label then label:SetTextColor(unpack(addonTable.OAK_COLOR_TEXT_MUTED or { 0.84, 0.84, 0.84, 1 })) end
+    end
+end
+
+function addonTable.ApplySliderChrome(slider, width, thumbWidth, thumbHeight)
+    if not slider then
+        return nil
+    end
+
+    slider:SetHeight(10)
+    slider:SetWidth(tonumber(width) or slider:GetWidth() or 120)
+    if slider.SetBackdrop then
+        slider:SetBackdrop(nil)
+    end
+
+    if slider.SetThumbTexture then
+        slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    end
+
+    local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
+    if thumb then
+        thumb:SetTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+        thumb:SetSize(tonumber(thumbWidth) or 16, tonumber(thumbHeight) or 24)
+        if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+            local accent = addonTable.ClassColor or { r = 1, g = 1, b = 1 }
+            thumb:SetVertexColor(accent.r or 1, accent.g or 1, accent.b or 1, 1)
+        else
+            thumb:SetVertexColor(1, 1, 1, 1)
+        end
+    end
+    return thumb
+end
+
+function addonTable.ApplyEditBoxChrome(editBox)
+    if not editBox then
+        return
+    end
+    if addonTable.ApplyBackdropStyle then
+        addonTable.ApplyBackdropStyle(editBox, "inset")
+    end
+    if editBox.SetBackdropColor then
+        editBox:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG or { 0.05, 0.05, 0.05, 1 }))
+    end
+    if editBox.SetBackdropBorderColor then
+        if addonTable.IsClassicTheme and addonTable.IsClassicTheme() then
+            editBox:SetBackdropBorderColor(1, 1, 1, 1)
+        else
+            editBox:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER or { 0, 0, 0, 1 }))
+        end
+    end
+end
+
+function addonTable.ApplyPanelChrome(panel, titleFontString)
+    if not panel then
+        return
+    end
+
+    if addonTable.ApplyBackdropStyle then
+        addonTable.ApplyBackdropStyle(panel, "panel")
+    end
+    if panel.SetBackdropBorderColor then
+        if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+            panel:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER or { 0, 0, 0, 1 }))
+        else
+            panel:SetBackdropBorderColor(1, 1, 1, 1)
+        end
+    end
+
+    if not panel.OakTitleBg then
+        panel.OakTitleBg = panel:CreateTexture(nil, "BORDER")
+        panel.OakTitleBg:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
+        panel.OakTitleBg:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -8)
+        panel.OakTitleBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
+        panel.OakTitleBg:SetHeight(24)
+    end
+    panel.OakTitleBg:SetVertexColor(unpack(addonTable.OAK_COLOR_PANEL_TITLE_BG or { 0.18, 0.18, 0.18, 0.96 }))
+
+    if not panel.OakTopTrim then
+        panel.OakTopTrim = panel:CreateTexture(nil, "BORDER")
+        panel.OakTopTrim:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
+        panel.OakTopTrim:SetPoint("TOPLEFT", panel.OakTitleBg, "BOTTOMLEFT", 0, -2)
+        panel.OakTopTrim:SetPoint("TOPRIGHT", panel.OakTitleBg, "BOTTOMRIGHT", 0, -2)
+        panel.OakTopTrim:SetHeight(1)
+    end
+    panel.OakTopTrim:SetVertexColor(unpack(addonTable.OAK_COLOR_PANEL_TRIM or { 0.52, 0.44, 0.22, 0.45 }))
+
+    if not panel.OakInnerShade then
+        panel.OakInnerShade = panel:CreateTexture(nil, "BACKGROUND", nil, 1)
+        panel.OakInnerShade:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
+        panel.OakInnerShade:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -36)
+        panel.OakInnerShade:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -10, 10)
+    end
+    panel.OakInnerShade:SetVertexColor(unpack(addonTable.OAK_COLOR_PANEL_INNER or { 0.28, 0.25, 0.21, 0.82 }))
+
+    if not panel.OakInnerBorder then
+        panel.OakInnerBorder = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+        panel.OakInnerBorder:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -36)
+        panel.OakInnerBorder:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -10, 10)
+        panel.OakInnerBorder:SetBackdrop({
+            bgFile = addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8",
+            edgeFile = addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        panel.OakInnerBorder:SetBackdropColor(0, 0, 0, 0)
+    end
+    panel.OakInnerBorder:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_PANEL_INNER_BORDER or { 0.31, 0.31, 0.31, 0.70 }))
+
+    if titleFontString then
+        titleFontString:ClearAllPoints()
+        titleFontString:SetPoint("CENTER", panel.OakTitleBg, "CENTER", 0, 0)
+    end
+end
+
+function addonTable.ApplyScrollBarChrome(scrollBar)
+    if not scrollBar then
+        return
+    end
+
+    local thumb = (scrollBar.GetThumbTexture and scrollBar:GetThumbTexture()) or (scrollBar.Track and scrollBar.Track.Thumb)
+    if thumb and thumb.SetVertexColor then
+        if thumb.SetTexture then
+            thumb:SetTexture(addonTable.FLAT_TEX)
+        end
+        if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+            local accent = addonTable.ClassColor or { r = 1, g = 1, b = 1 }
+            thumb:SetVertexColor(accent.r or 1, accent.g or 1, accent.b or 1, 1)
+        else
+            thumb:SetVertexColor(1, 1, 1, 1)
+        end
     end
 end
 
@@ -935,18 +1654,18 @@ function addonTable.CreateFontDropdown(parent, width)
     local listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     listFrame:SetSize(width + 18, 224)
     listFrame:SetBackdrop({
-        bgFile = addonTable.FLAT_TEX,
-        edgeFile = addonTable.FLAT_TEX,
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 }
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        edgeSize = 24,
+        insets = { left = 8, right = 8, top = 8, bottom = 8 }
     })
-    listFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-    listFrame:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    listFrame:SetBackdropColor(1, 1, 1, 1)
+    listFrame:SetBackdropBorderColor(1, 1, 1, 1)
     listFrame:SetFrameStrata("FULLSCREEN_DIALOG")
     listFrame:Hide()
 
     fontDropdownCounter = fontDropdownCounter + 1
-    local scrollFrame = CreateFrame("ScrollFrame", "OakLFGFontDropdownScroll" .. fontDropdownCounter, listFrame, "UIPanelScrollFrameTemplate")
+    local scrollFrame = CreateFrame("ScrollFrame", "SorterClassicFontDropdownScroll" .. fontDropdownCounter, listFrame, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", listFrame, "TOPLEFT", 1, -1)
     scrollFrame:SetPoint("BOTTOMRIGHT", listFrame, "BOTTOMRIGHT", -24, 1)
 
@@ -966,8 +1685,10 @@ function addonTable.CreateFontDropdown(parent, width)
         scrollThumb = scrollBar:GetThumbTexture()
         if scrollThumb then
             scrollThumb:SetTexture(addonTable.FLAT_TEX)
-            scrollThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
             scrollThumb:SetSize(8, 60)
+        end
+        if addonTable.ApplyScrollBarChrome then
+            addonTable.ApplyScrollBarChrome(scrollBar)
         end
         scrollBar:SetWidth(8)
     end
@@ -989,31 +1710,22 @@ function addonTable.CreateFontDropdown(parent, width)
         for index, fontName in ipairs(fontNames) do
             local optionButton = optionButtons[index]
             if not optionButton then
-                optionButton = CreateFrame("Button", nil, child, "BackdropTemplate")
-                optionButton.bg = optionButton:CreateTexture(nil, "BACKGROUND")
-                optionButton.bg:SetAllPoints()
-                optionButton.text = optionButton:CreateFontString(nil, "OVERLAY")
-                optionButton.text:SetPoint("LEFT", optionButton, "LEFT", 8, 0)
-                optionButton.text:SetPoint("RIGHT", optionButton, "RIGHT", -8, 0)
-                optionButton.text:SetJustifyH("LEFT")
+                optionButton = CreateFrame("Button", nil, child, "UIPanelButtonTemplate")
+                optionButton.text = optionButton.Text
+                if optionButton.text then
+                    optionButton.text:SetJustifyH("LEFT")
+                end
                 optionButtons[index] = optionButton
             end
 
             optionButton:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -((index - 1) * 22))
             optionButton:SetSize(width, 22)
-            optionButton.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
 
             local fontPath = addonTable.GetFontPath(fontName)
             optionButton.text:SetFont(fontPath, 12, "")
             optionButton.text:SetShadowColor(0, 0, 0, 1)
             optionButton.text:SetShadowOffset(1, -1)
-            optionButton.text:SetText(fontName)
-            optionButton:SetScript("OnEnter", function(self)
-                self.bg:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.28)
-            end)
-            optionButton:SetScript("OnLeave", function(self)
-                self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
-            end)
+            optionButton:SetText(fontName)
             optionButton:SetScript("OnClick", function()
                 addonTable.SetActiveFont(fontName)
                 addonTable.RefreshRegisteredFontDropdowns()
@@ -1040,10 +1752,8 @@ function addonTable.CreateFontDropdown(parent, width)
 
     addonTable.RegisterFontDropdown(dropdownButton)
     addonTable.RegisterThemeRefresh("font_dropdown_" .. tostring(dropdownButton), function()
-        listFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-        listFrame:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-        if scrollThumb then
-            scrollThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        if scrollBar and addonTable.ApplyScrollBarChrome then
+            addonTable.ApplyScrollBarChrome(scrollBar)
         end
         if listFrame:IsShown() then
             RefreshOptions()
@@ -1081,44 +1791,68 @@ end
 
 -- Colors & Styling
 addonTable.FLAT_TEX = "Interface\\Buttons\\WHITE8X8"
+local initialThemeColors = addonTable.GetThemeStyleColors() or CLASSIC_BLIZZARD_THEME
 addonTable.ClassColor = addonTable.GetThemeAccentColor()
-addonTable.OAK_COLOR_BG = {0.106, 0.106, 0.129, 0.85}
-addonTable.OAK_COLOR_PANE = {0.137, 0.141, 0.172, 1}
-addonTable.OAK_COLOR_BORDER = {0, 0, 0, 1}
-addonTable.ROW_COLOR_A = {0.2, 0.22, 0.28, 0.4}
-addonTable.ROW_COLOR_B = {0, 0, 0, 0}
+addonTable.OAK_COLOR_BG = CopyThemeArray(initialThemeColors.bg)
+addonTable.OAK_COLOR_PANE = CopyThemeArray(initialThemeColors.pane)
+addonTable.OAK_COLOR_BORDER = CopyThemeArray(initialThemeColors.border)
+addonTable.ROW_COLOR_A = CopyThemeArray(initialThemeColors.rowA)
+addonTable.ROW_COLOR_B = CopyThemeArray(initialThemeColors.rowB)
+addonTable.OAK_COLOR_STICKY = CopyThemeArray(initialThemeColors.stickyPanel)
+addonTable.OAK_COLOR_CONTEXT = CopyThemeArray(initialThemeColors.contextBar)
+addonTable.OAK_COLOR_QUICKSIGNUP = CopyThemeArray(initialThemeColors.quickSignupBar)
+addonTable.OAK_COLOR_SLIDER_TRACK = CopyThemeArray(initialThemeColors.sliderTrack)
+addonTable.OAK_COLOR_TOGGLE_OFF = CopyThemeArray(initialThemeColors.toggleOffFill)
+addonTable.OAK_COLOR_TITLEBAR = CopyThemeArray(initialThemeColors.titleBar)
+addonTable.OAK_COLOR_DROPDOWN_HOVER = CopyThemeArray(initialThemeColors.dropdownHover)
+addonTable.OAK_COLOR_STICKY_ACCENT = CopyThemeArray(initialThemeColors.stickyAccent)
+addonTable.OAK_COLOR_STICKY_ACCENT_SOFT = CopyThemeArray(initialThemeColors.stickyAccentSoft)
+addonTable.OAK_COLOR_TITLE_TINT = CopyThemeArray(initialThemeColors.titleTint)
+addonTable.OAK_COLOR_BUTTON_INACTIVE = CopyThemeArray(initialThemeColors.buttonInactive)
+addonTable.OAK_COLOR_TOGGLE_ACTIVE = CopyThemeArray(initialThemeColors.toggleActiveFill)
+addonTable.OAK_COLOR_TOGGLE_ACTIVE_BORDER = CopyThemeArray(initialThemeColors.toggleActiveBorder)
+addonTable.OAK_COLOR_TOGGLE_INACTIVE = CopyThemeArray(initialThemeColors.toggleInactiveFill)
+addonTable.OAK_COLOR_TOGGLE_INACTIVE_BORDER = CopyThemeArray(initialThemeColors.toggleInactiveBorder)
+addonTable.OAK_COLOR_TEXT = CopyThemeArray(initialThemeColors.text)
+addonTable.OAK_COLOR_TEXT_MUTED = CopyThemeArray(initialThemeColors.textMuted)
+addonTable.OAK_COLOR_PANEL_TITLE_BG = CopyThemeArray(initialThemeColors.panelTitleBg)
+addonTable.OAK_COLOR_PANEL_INNER = CopyThemeArray(initialThemeColors.panelInner)
+addonTable.OAK_COLOR_PANEL_INNER_BORDER = CopyThemeArray(initialThemeColors.panelInnerBorder)
+addonTable.OAK_COLOR_PANEL_TRIM = CopyThemeArray(initialThemeColors.panelTrim)
 
 function addonTable.GetBackdropStyle(kind)
-    local style = addonTable.GetThemeStyle and addonTable.GetThemeStyle() or "OAK"
-    if style == "BLIZZARD" or style == "BLIZZARD_GRAY" then
-        if kind == "button" then
-            return {
-                bgFile = addonTable.FLAT_TEX,
-                edgeFile = addonTable.FLAT_TEX,
-                edgeSize = 1,
-                insets = { left = 1, right = 1, top = 1, bottom = 1 },
-            }
-        elseif kind == "inset" then
-            return {
-                bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                edgeSize = 12,
-                insets = { left = 3, right = 3, top = 3, bottom = 3 },
-            }
-        end
+    if kind == "button" then
         return {
-            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-            edgeSize = 24,
-            insets = { left = 8, right = 8, top = 8, bottom = 8 },
+            bgFile = addonTable.FLAT_TEX,
+            edgeFile = addonTable.FLAT_TEX,
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        }
+    end
+
+    if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+        return {
+            bgFile = addonTable.FLAT_TEX,
+            edgeFile = addonTable.FLAT_TEX,
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        }
+    end
+
+    if kind == "inset" then
+        return {
+            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
         }
     end
 
     return {
-        bgFile = addonTable.FLAT_TEX,
-        edgeFile = addonTable.FLAT_TEX,
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        edgeSize = 24,
+        insets = { left = 8, right = 8, top = 8, bottom = 8 },
     }
 end
 
@@ -1129,11 +1863,7 @@ function addonTable.ApplyBackdropStyle(frame, kind)
 end
 
 function addonTable.GetThemeFramePadding()
-    local style = addonTable.GetThemeStyle and addonTable.GetThemeStyle() or "OAK"
-    if style == "BLIZZARD" or style == "BLIZZARD_GRAY" then
-        return 8
-    end
-    return 0
+    return 8
 end
 
 addonTable.RoleTexCoords = {
@@ -1209,15 +1939,79 @@ function addonTable.GetCurrentViewMode()
 end
 
 function addonTable.CreateFlatButton(parent, label, width)
+    local useModernConstructor = OakLFGSorterDB and OakLFGSorterDB.theme == THEME_MODE_MODERN
+    if not useModernConstructor then
+        local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        btn:SetSize(width, 22)
+        btn:SetText(label)
+        btn.OakUsesNativeButtonTheme = true
+        btn.text = btn.Text
+        if not btn.text then
+            btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            btn.text:SetPoint("CENTER")
+            btn:SetFontString(btn.text)
+        end
+        ApplyExplicitClassicButtonSkin(btn)
+        if not btn.SetBackdropColor then
+            function btn:SetBackdropColor() end
+        end
+        if not btn.SetBackdropBorderColor then
+            function btn:SetBackdropBorderColor() end
+        end
+
+        function btn:SetLabel(text)
+            self:SetText(text or "")
+            self:RefreshAutoWidth()
+        end
+
+        function btn:SetAutoWidth(minWidth, maxWidth, padding)
+            self.autoWidthMin = tonumber(minWidth) or self:GetWidth() or 0
+            self.autoWidthMax = tonumber(maxWidth)
+            self.autoWidthPadding = tonumber(padding) or 20
+            self:RefreshAutoWidth()
+        end
+
+        function btn:RefreshAutoWidth()
+            if not self.autoWidthMin then
+                return
+            end
+
+            if not textMeasureFrame then
+                textMeasureFrame = UIParent:CreateFontString(nil, "ARTWORK", "SorterClassic_FontRegular")
+                textMeasureFrame:Hide()
+            end
+
+            local fontObject = self.text:GetFontObject() or GameFontNormal
+            if fontObject then
+                textMeasureFrame:SetFontObject(fontObject)
+            end
+            textMeasureFrame:SetText(self:GetText() or "")
+
+            local targetWidth = math.ceil((textMeasureFrame:GetUnboundedStringWidth() or 0) + (self.autoWidthPadding or 20))
+            targetWidth = math.max(self.autoWidthMin or 0, targetWidth)
+            if self.autoWidthMax then
+                targetWidth = math.min(self.autoWidthMax, targetWidth)
+            end
+
+            self:SetWidth(targetWidth)
+        end
+
+        registeredFlatButtons[btn] = btn
+        return btn
+    end
+
     local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
     btn:SetSize(width, 22)
+    btn.OakUsesNativeButtonTheme = false
     addonTable.ApplyBackdropStyle(btn, "button")
-    btn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE)) 
+    HookModernBorderForwarding(btn)
+    btn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
     btn:SetBackdropBorderColor(0, 0, 0, 1)
 
-    btn.text = btn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    btn.text = btn:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     btn.text:SetPoint("CENTER")
     btn.text:SetText(label)
+    ApplyExplicitModernButtonSkin(btn, addonTable.OAK_COLOR_PANE)
 
     function btn:SetLabel(text)
         self.text:SetText(text or "")
@@ -1237,11 +2031,11 @@ function addonTable.CreateFlatButton(parent, label, width)
         end
 
         if not textMeasureFrame then
-            textMeasureFrame = UIParent:CreateFontString(nil, "ARTWORK", "OakLFG_FontRegular")
+            textMeasureFrame = UIParent:CreateFontString(nil, "ARTWORK", "SorterClassic_FontRegular")
             textMeasureFrame:Hide()
         end
 
-        local fontObject = self.text:GetFontObject() or _G["OakLFG_FontRegular"]
+        local fontObject = self.text:GetFontObject() or _G["SorterClassic_FontRegular"]
         if fontObject then
             textMeasureFrame:SetFontObject(fontObject)
         end
@@ -1256,174 +2050,284 @@ function addonTable.CreateFlatButton(parent, label, width)
         self:SetWidth(targetWidth)
     end
 
-    btn:SetScript("OnEnter", function(self)
-        self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-    end)
-    btn:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(0, 0, 0, 1)
-    end)
+    EnsureModernHoverFeedback(btn)
     registeredFlatButtons[btn] = btn
     return btn
 end
 
 function addonTable.CreateSimpleDropdown(parent, width, labelProvider, optionListProvider, onSelect)
-    local dropdownButton = addonTable.CreateFlatButton(parent, labelProvider(), width)
-    local inheritedSetAutoWidth = dropdownButton.SetAutoWidth
-    dropdownButton.arrow = dropdownButton:CreateTexture(nil, "ARTWORK")
-    dropdownButton.arrow:SetSize(10, 10)
-    dropdownButton.arrow:SetPoint("RIGHT", dropdownButton, "RIGHT", -6, 0)
-    dropdownButton.arrow:SetTexture("Interface\\BUTTONS\\Arrow-Down-Up")
-    dropdownButton.arrow:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-    dropdownButton.text:ClearAllPoints()
-    dropdownButton.text:SetPoint("LEFT", dropdownButton, "LEFT", 8, 0)
-    dropdownButton.text:SetPoint("RIGHT", dropdownButton.arrow, "LEFT", -4, 0)
-    dropdownButton.text:SetJustifyH("CENTER")
+    local useModernConstructor = OakLFGSorterDB and OakLFGSorterDB.theme == THEME_MODE_MODERN
+    if useModernConstructor then
+        local dropdownButton = addonTable.CreateFlatButton(parent, labelProvider(), width)
+        local inheritedSetAutoWidth = dropdownButton.SetAutoWidth
+        dropdownButton.arrow = dropdownButton:CreateTexture(nil, "ARTWORK")
+        dropdownButton.arrow:SetSize(10, 10)
+        dropdownButton.arrow:SetPoint("RIGHT", dropdownButton, "RIGHT", -6, 0)
+        dropdownButton.arrow:SetTexture("Interface\\BUTTONS\\Arrow-Down-Up")
+        dropdownButton.arrow:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        dropdownButton.text:ClearAllPoints()
+        dropdownButton.text:SetPoint("LEFT", dropdownButton, "LEFT", 8, 0)
+        dropdownButton.text:SetPoint("RIGHT", dropdownButton.arrow, "LEFT", -4, 0)
+        dropdownButton.text:SetJustifyH("CENTER")
+        dropdownButton:HookScript("OnEnter", function(self)
+            ApplyModernInteractiveBorder(self, true)
+            if self.text then
+                self.text:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            end
+            if self.arrow then
+                self.arrow:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            end
+        end)
+        dropdownButton:HookScript("OnLeave", function(self)
+            ApplyModernInteractiveBorder(self, false)
+            if self.text then
+                self.text:SetTextColor(1, 0.82, 0, 1)
+            end
+            if self.arrow then
+                self.arrow:SetVertexColor(1, 0.82, 0, 1)
+            end
+        end)
 
-    local listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    addonTable.ApplyBackdropStyle(listFrame, "panel")
-    listFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-    listFrame:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-    listFrame:SetFrameStrata("FULLSCREEN_DIALOG")
-    listFrame:Hide()
+        local listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        addonTable.ApplyBackdropStyle(listFrame, "panel")
+        listFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+        listFrame:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        listFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+        listFrame:Hide()
 
-    fontDropdownCounter = fontDropdownCounter + 1
-    local scrollFrame = CreateFrame("ScrollFrame", "OakLFGSimpleDropdownScroll" .. fontDropdownCounter, listFrame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", listFrame, "TOPLEFT", 1, -1)
-    scrollFrame:SetPoint("BOTTOMRIGHT", listFrame, "BOTTOMRIGHT", -24, 1)
+        fontDropdownCounter = fontDropdownCounter + 1
+        local scrollFrame = CreateFrame("ScrollFrame", "SorterClassicSimpleDropdownScroll" .. fontDropdownCounter, listFrame, "UIPanelScrollFrameTemplate")
+        scrollFrame:SetPoint("TOPLEFT", listFrame, "TOPLEFT", 1, -1)
+        scrollFrame:SetPoint("BOTTOMRIGHT", listFrame, "BOTTOMRIGHT", -24, 1)
 
-    local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
-    local scrollThumb
-    if scrollBar then
-        local upBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollUpButton"]
-        local downBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollDownButton"]
-        if upBtn then upBtn:Hide(); upBtn:SetSize(0.1, 0.1) end
-        if downBtn then downBtn:Hide(); downBtn:SetSize(0.1, 0.1) end
-        local topTex = _G[scrollFrame:GetName() .. "ScrollBarTop"]
-        local bottomTex = _G[scrollFrame:GetName() .. "ScrollBarBottom"]
-        local midTex = _G[scrollFrame:GetName() .. "ScrollBarMiddle"]
-        if topTex then topTex:Hide() end
-        if bottomTex then bottomTex:Hide() end
-        if midTex then midTex:Hide() end
-        scrollThumb = scrollBar:GetThumbTexture()
-        if scrollThumb then
-            scrollThumb:SetTexture(addonTable.FLAT_TEX)
-            scrollThumb:SetSize(8, 60)
+        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+        local scrollThumb
+        if scrollBar then
+            local upBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollUpButton"]
+            local downBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollDownButton"]
+            if upBtn then upBtn:Hide(); upBtn:SetSize(0.1, 0.1) end
+            if downBtn then downBtn:Hide(); downBtn:SetSize(0.1, 0.1) end
+            local topTex = _G[scrollFrame:GetName() .. "ScrollBarTop"]
+            local bottomTex = _G[scrollFrame:GetName() .. "ScrollBarBottom"]
+            local midTex = _G[scrollFrame:GetName() .. "ScrollBarMiddle"]
+            if topTex then topTex:Hide() end
+            if bottomTex then bottomTex:Hide() end
+            if midTex then midTex:Hide() end
+            scrollThumb = scrollBar:GetThumbTexture()
+            if scrollThumb then
+                scrollThumb:SetTexture(addonTable.FLAT_TEX)
+                scrollThumb:SetSize(8, 60)
+            end
+            scrollBar:SetWidth(8)
         end
-        scrollBar:SetWidth(8)
+
+        local child = CreateFrame("Frame")
+        child:SetSize(width, 1)
+        scrollFrame:SetScrollChild(child)
+        local optionButtons = {}
+
+        local function RefreshSelection()
+            dropdownButton.text:SetText(labelProvider())
+            if dropdownButton.RefreshAutoWidth then
+                dropdownButton:RefreshAutoWidth()
+            end
+        end
+
+        local function RefreshOptions()
+            local options = optionListProvider() or {}
+            local height = math.min(#options, 8) * 22 + 2
+            listFrame:SetSize(width + 18, math.max(height, 24))
+            child:SetHeight(math.max(1, #options * 22))
+
+            for _, button in ipairs(optionButtons) do
+                button:Hide()
+            end
+
+            for index, option in ipairs(options) do
+                local optionButton = optionButtons[index]
+                if not optionButton then
+                    optionButton = CreateFrame("Button", nil, child, "BackdropTemplate")
+                    optionButton.bg = optionButton:CreateTexture(nil, "BACKGROUND")
+                    optionButton.bg:SetAllPoints()
+                    optionButton.separator = optionButton:CreateTexture(nil, "ARTWORK")
+                    optionButton.separator:SetHeight(1)
+                    optionButton.separator:SetPoint("LEFT", optionButton, "LEFT", 8, 0)
+                    optionButton.separator:SetPoint("RIGHT", optionButton, "RIGHT", -8, 0)
+                    optionButton.text = optionButton:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+                    optionButton.text:SetPoint("LEFT", optionButton, "LEFT", 8, 0)
+                    optionButton.text:SetPoint("RIGHT", optionButton, "RIGHT", -8, 0)
+                    optionButton.text:SetJustifyH("LEFT")
+                    optionButtons[index] = optionButton
+                end
+
+                optionButton:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -((index - 1) * 22))
+                optionButton:SetSize(width, 22)
+                optionButton.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
+                optionButton.text:SetText(option.label)
+                if option.separator then
+                    optionButton.separator:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.45)
+                    optionButton.separator:Show()
+                    optionButton.text:ClearAllPoints()
+                    optionButton.text:SetPoint("CENTER", optionButton, "CENTER", 0, 0)
+                    optionButton.text:SetTextColor(0.85, 0.85, 0.85)
+                    optionButton:SetScript("OnEnter", nil)
+                    optionButton:SetScript("OnLeave", nil)
+                    optionButton:SetScript("OnClick", nil)
+                else
+                    optionButton.separator:Hide()
+                    optionButton.text:ClearAllPoints()
+                    optionButton.text:SetPoint("LEFT", optionButton, "LEFT", 8, 0)
+                    optionButton.text:SetPoint("RIGHT", optionButton, "RIGHT", -8, 0)
+                    optionButton.text:SetTextColor(1, 1, 1)
+                    optionButton:SetScript("OnEnter", function(self)
+                        self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_DROPDOWN_HOVER))
+                    end)
+                    optionButton:SetScript("OnLeave", function(self)
+                        self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
+                    end)
+                    optionButton:SetScript("OnClick", function()
+                        onSelect(option.id, option)
+                        listFrame:Hide()
+                    end)
+                end
+                optionButton:Show()
+            end
+        end
+
+        function dropdownButton:RefreshSelection()
+            RefreshSelection()
+        end
+
+        function dropdownButton:SetAutoWidth(minWidth, maxWidth, padding)
+            local extraPadding = (tonumber(padding) or 24) + 14
+            if type(inheritedSetAutoWidth) == "function" then
+                inheritedSetAutoWidth(self, minWidth, maxWidth, extraPadding)
+            end
+        end
+
+        dropdownButton:SetScript("OnClick", function(self)
+            RefreshOptions()
+            if listFrame:IsShown() then
+                listFrame:Hide()
+            else
+                listFrame:ClearAllPoints()
+                listFrame:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
+                listFrame:Show()
+            end
+        end)
+
+        addonTable.RegisterThemeRefresh("simple_dropdown_" .. tostring(dropdownButton), function()
+            listFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
+            listFrame:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            if dropdownButton.arrow then
+                dropdownButton.arrow:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            end
+            if scrollThumb then
+                scrollThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            end
+            RefreshSelection()
+            if listFrame:IsShown() then
+                RefreshOptions()
+            end
+        end)
+        dropdownButton:RefreshSelection()
+
+        return dropdownButton, listFrame
     end
 
-    local child = CreateFrame("Frame")
-    child:SetSize(width, 1)
-    scrollFrame:SetScrollChild(child)
-    local optionButtons = {}
+    local dropdownButton = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+    dropdownButton:SetWidth(width)
+    dropdownButton:SetFrameLevel((parent:GetFrameLevel() or 1) + 2)
+
+    local function GetSelectedOptionID()
+        local options = optionListProvider() or {}
+        local selectedLabel = tostring(labelProvider() or "")
+        for _, option in ipairs(options) do
+            if not option.separator and option.label == selectedLabel then
+                return option.id
+            end
+        end
+        return nil
+    end
 
     local function RefreshSelection()
-        dropdownButton.text:SetText(labelProvider())
-        if dropdownButton.RefreshAutoWidth then
-            dropdownButton:RefreshAutoWidth()
+        local text = labelProvider() or ""
+        local textWidget = dropdownButton.Text or (dropdownButton.GetFontString and dropdownButton:GetFontString()) or dropdownButton.text
+        if textWidget and textWidget.SetText then
+            textWidget:SetText(text)
+        elseif dropdownButton.SetDefaultText then
+            dropdownButton:SetDefaultText(text)
+        elseif dropdownButton.OverrideText then
+            dropdownButton:OverrideText(text)
         end
     end
 
-    local function RefreshOptions()
+    dropdownButton:SetupMenu(function(_, rootDescription)
         local options = optionListProvider() or {}
-        local height = math.min(#options, 8) * 22 + 2
-        listFrame:SetSize(width + 18, math.max(height, 24))
-        child:SetHeight(math.max(1, #options * 22))
+        local selectedID = GetSelectedOptionID()
 
-        for _, button in ipairs(optionButtons) do
-            button:Hide()
+        local function IsSelected(option)
+            return option and option.id == selectedID
         end
 
-        for index, option in ipairs(options) do
-            local optionButton = optionButtons[index]
-            if not optionButton then
-                optionButton = CreateFrame("Button", nil, child, "BackdropTemplate")
-                optionButton.bg = optionButton:CreateTexture(nil, "BACKGROUND")
-                optionButton.bg:SetAllPoints()
-                optionButton.separator = optionButton:CreateTexture(nil, "ARTWORK")
-                optionButton.separator:SetHeight(1)
-                optionButton.separator:SetPoint("LEFT", optionButton, "LEFT", 8, 0)
-                optionButton.separator:SetPoint("RIGHT", optionButton, "RIGHT", -8, 0)
-                optionButton.text = optionButton:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-                optionButton.text:SetPoint("LEFT", optionButton, "LEFT", 8, 0)
-                optionButton.text:SetPoint("RIGHT", optionButton, "RIGHT", -8, 0)
-                optionButton.text:SetJustifyH("LEFT")
-                optionButtons[index] = optionButton
-            end
+        local function SelectOption(option)
+            onSelect(option.id, option)
+            C_Timer.After(0, RefreshSelection)
+            return MenuResponse and (MenuResponse.CloseAll or MenuResponse.Close) or nil
+        end
 
-            optionButton:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -((index - 1) * 22))
-            optionButton:SetSize(width, 22)
-            optionButton.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
-            optionButton.text:SetText(option.label)
+        for _, option in ipairs(options) do
             if option.separator then
-                optionButton.separator:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.45)
-                optionButton.separator:Show()
-                optionButton.text:ClearAllPoints()
-                optionButton.text:SetPoint("CENTER", optionButton, "CENTER", 0, 0)
-                optionButton.text:SetTextColor(0.85, 0.85, 0.85)
-                optionButton:SetScript("OnEnter", nil)
-                optionButton:SetScript("OnLeave", nil)
-                optionButton:SetScript("OnClick", nil)
+                rootDescription:CreateTitle(option.label or "")
             else
-                optionButton.separator:Hide()
-                optionButton.text:ClearAllPoints()
-                optionButton.text:SetPoint("LEFT", optionButton, "LEFT", 8, 0)
-                optionButton.text:SetPoint("RIGHT", optionButton, "RIGHT", -8, 0)
-                optionButton.text:SetTextColor(1, 1, 1)
-                optionButton:SetScript("OnEnter", function(self)
-                    self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_DROPDOWN_HOVER))
-                end)
-                optionButton:SetScript("OnLeave", function(self)
-                    self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
-                end)
-                optionButton:SetScript("OnClick", function()
-                    onSelect(option.id, option)
-                    listFrame:Hide()
-                end)
+                rootDescription:CreateRadio(option.label or "", IsSelected, SelectOption, option)
             end
-            optionButton:Show()
         end
-    end
+    end)
 
     function dropdownButton:RefreshSelection()
         RefreshSelection()
     end
 
     function dropdownButton:SetAutoWidth(minWidth, maxWidth, padding)
-        local extraPadding = (tonumber(padding) or 24) + 14
-        if type(inheritedSetAutoWidth) == "function" then
-            inheritedSetAutoWidth(self, minWidth, maxWidth, extraPadding)
+        if not textMeasureFrame then
+            textMeasureFrame = UIParent:CreateFontString(nil, "ARTWORK", "SorterClassic_FontRegular")
+            textMeasureFrame:Hide()
         end
+        textMeasureFrame:SetFontObject(GameFontNormal)
+        textMeasureFrame:SetText(labelProvider() or "")
+        local targetWidth = math.ceil((textMeasureFrame:GetUnboundedStringWidth() or 0) + (tonumber(padding) or 32))
+        targetWidth = math.max(tonumber(minWidth) or width or 0, targetWidth)
+        if maxWidth then
+            targetWidth = math.min(maxWidth, targetWidth)
+        end
+        self:SetWidth(targetWidth)
     end
 
-    dropdownButton:SetScript("OnClick", function(self)
-        RefreshOptions()
-        if listFrame:IsShown() then
-            listFrame:Hide()
-        else
-            listFrame:ClearAllPoints()
-            listFrame:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
-            listFrame:Show()
-        end
-    end)
-
     addonTable.RegisterThemeRefresh("simple_dropdown_" .. tostring(dropdownButton), function()
-        listFrame:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-        listFrame:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-        if dropdownButton.arrow then
-            dropdownButton.arrow:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-        end
-        if scrollThumb then
-            scrollThumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-        end
         RefreshSelection()
-        if listFrame:IsShown() then
-            RefreshOptions()
-        end
     end)
     dropdownButton:RefreshSelection()
 
-    return dropdownButton, listFrame
+    return dropdownButton, nil
+end
+
+function addonTable.CreateThemeModeDropdown(parent, width)
+    return addonTable.CreateSimpleDropdown(
+        parent,
+        width,
+        function() return addonTable.GetThemeModeLabel() end,
+        function()
+            local options = {}
+            for _, themeMode in ipairs(addonTable.ThemeModes) do
+                table.insert(options, { id = themeMode.id, label = themeMode.label })
+            end
+            return options
+        end,
+        function(id)
+            addonTable.SetThemeMode(id)
+        end
+    )
 end
 
 function addonTable.CreateThemeDropdown(parent, width)
@@ -1463,29 +2367,46 @@ function addonTable.CreateThemeStyleDropdown(parent, width)
 end
 
 function addonTable.CreateCogButton(parent, size)
-    local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     btn:SetSize(size, size)
-    addonTable.ApplyBackdropStyle(btn, "button")
-    btn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
-    btn:SetBackdropBorderColor(0, 0, 0, 1)
+    btn:SetText("")
+    btn.OakUsesNativeButtonTheme = true
 
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
-    btn.icon:SetSize(size - 8, size - 8)
+    btn.icon:SetSize(size - 6, size - 6)
     btn.icon:SetPoint("CENTER")
     btn.icon:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+    btn.icon:SetTexCoord(0, 1, 0, 1)
 
-    btn.fallback = btn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    btn.fallback = btn:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     btn.fallback:SetPoint("CENTER")
     btn.fallback:SetText("O")
     btn.fallback:SetAlpha(0)
+    if not btn.SetBackdropColor then
+        function btn:SetBackdropColor() end
+    end
+    if not btn.SetBackdropBorderColor then
+        function btn:SetBackdropBorderColor() end
+    end
+    HookModernBorderForwarding(btn)
 
-    btn:SetScript("OnEnter", function(self)
-        self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-    end)
-    btn:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(0, 0, 0, 1)
-    end)
     registeredCogButtons[btn] = btn
+    if addonTable.IsClassicTheme and addonTable.IsClassicTheme() then
+        ApplyExplicitClassicButtonSkin(btn)
+    else
+        ApplyExplicitModernButtonSkin(btn, addonTable.OAK_COLOR_PANE)
+    end
+
+    btn:HookScript("OnEnter", function(self)
+        if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+            ApplyModernInteractiveBorder(self, true)
+        end
+    end)
+    btn:HookScript("OnLeave", function(self)
+        if addonTable.IsModernTheme and addonTable.IsModernTheme() then
+            ApplyModernInteractiveBorder(self, false)
+        end
+    end)
 
     return btn
 end

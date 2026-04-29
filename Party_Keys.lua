@@ -13,10 +13,10 @@ local function GetOpenRaidLib()
     return openRaidLib
 end
 local PARTY_KEY_ROWS = 5
-local ROW_HEIGHT = 14
-local PANEL_WIDTH = 164
-local PANEL_PADDING = 3
-local TITLE_HEIGHT = 10
+local ROW_HEIGHT = 18
+local PANEL_WIDTH = 226
+local PANEL_PADDING = 8
+local TITLE_HEIGHT = 16
 
 local RIO_DUNGEON_ABBREVIATIONS = {
     ["seat of the triumvirate"] = "SEAT",
@@ -78,14 +78,39 @@ partyKeysPanel:SetSize(PANEL_WIDTH, TITLE_HEIGHT + PANEL_PADDING * 2)
 partyKeysPanel:SetPoint("TOPLEFT", OAK_LFG, "BOTTOMLEFT", 10, -2)
 partyKeysPanel:SetFrameStrata("DIALOG")
 partyKeysPanel:SetFrameLevel((OAK_LFG:GetFrameLevel() or 0) + 5)
-addonTable.ApplyBackdropStyle(partyKeysPanel, "panel")
-partyKeysPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-partyKeysPanel:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+partyKeysPanel:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    edgeSize = 12,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+})
+partyKeysPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG or {0.205, 0.185, 0.165, 0.85}))
+partyKeysPanel:SetBackdropBorderColor(0.38, 0.36, 0.32, 1)
 partyKeysPanel:Hide()
 addonTable.PartyKeysPanel = partyKeysPanel
 
-local title = partyKeysPanel:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-title:SetPoint("TOPLEFT", partyKeysPanel, "TOPLEFT", PANEL_PADDING, -2)
+local titleBg = partyKeysPanel:CreateTexture(nil, "BORDER")
+titleBg:SetTexture("Interface\\Buttons\\WHITE8X8")
+titleBg:SetPoint("TOPLEFT", partyKeysPanel, "TOPLEFT", 5, -5)
+titleBg:SetPoint("TOPRIGHT", partyKeysPanel, "TOPRIGHT", -5, -5)
+titleBg:SetHeight(TITLE_HEIGHT)
+titleBg:SetVertexColor(0.18, 0.18, 0.18, 0.96)
+
+local titleTrim = partyKeysPanel:CreateTexture(nil, "BORDER")
+titleTrim:SetTexture("Interface\\Buttons\\WHITE8X8")
+titleTrim:SetPoint("TOPLEFT", titleBg, "BOTTOMLEFT", 0, -2)
+titleTrim:SetPoint("TOPRIGHT", titleBg, "BOTTOMRIGHT", 0, -2)
+titleTrim:SetHeight(1)
+titleTrim:SetVertexColor(0.52, 0.44, 0.22, 0.45)
+
+local innerShade = partyKeysPanel:CreateTexture(nil, "BACKGROUND", nil, 1)
+innerShade:SetTexture("Interface\\Buttons\\WHITE8X8")
+innerShade:SetPoint("TOPLEFT", partyKeysPanel, "TOPLEFT", 5, -24)
+innerShade:SetPoint("BOTTOMRIGHT", partyKeysPanel, "BOTTOMRIGHT", -5, 5)
+innerShade:SetVertexColor(0.11, 0.10, 0.09, 0.82)
+
+local title = partyKeysPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
+title:SetPoint("CENTER", titleBg, "CENTER", 0, 0)
 title:SetText("Party Keys")
 
 local rows = {}
@@ -94,32 +119,39 @@ local pendingUpdateAfterCombat = false
 local function CreateRow(index)
     local row = CreateFrame("Frame", nil, partyKeysPanel)
     row:SetSize(PANEL_WIDTH - PANEL_PADDING * 2, ROW_HEIGHT)
-    row:SetPoint("TOPLEFT", partyKeysPanel, "TOPLEFT", PANEL_PADDING, -(TITLE_HEIGHT + 2 + ((index - 1) * ROW_HEIGHT)))
+    row:SetPoint("TOPLEFT", partyKeysPanel, "TOPLEFT", PANEL_PADDING, -(TITLE_HEIGHT + 12 + ((index - 1) * ROW_HEIGHT)))
+
+    row.bg = row:CreateTexture(nil, "BACKGROUND")
+    row.bg:SetAllPoints()
+    row.bg:SetTexture("Interface\\Buttons\\WHITE8X8")
+    row.bg:SetVertexColor(index % 2 == 0 and 0.10 or 0.08, index % 2 == 0 and 0.10 or 0.08, index % 2 == 0 and 0.10 or 0.08, 0.68)
 
     row.icon = row:CreateTexture(nil, "ARTWORK")
     row.icon:SetSize(12, 12)
-    row.icon:SetPoint("LEFT", row, "LEFT", 0, 0)
+    row.icon:SetPoint("LEFT", row, "LEFT", 4, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    row.dungeonButton = CreateFrame("Button", nil, row)
-    row.dungeonButton:SetPoint("LEFT", row, "LEFT", 14, 0)
-    row.dungeonButton:SetSize(54, 12)
+    row.dungeonButton = CreateFrame("Button", nil, row, "SecureActionButtonTemplate")
+    row.dungeonButton:RegisterForClicks("AnyUp", "AnyDown")
+    row.dungeonButton:SetPoint("LEFT", row, "LEFT", 18, 0)
+    row.dungeonButton:SetSize(72, 16)
 
-    row.dungeonText = row.dungeonButton:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.dungeonText = row.dungeonButton:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     row.dungeonText:SetPoint("LEFT", row.dungeonButton, "LEFT", 0, 0)
     row.dungeonText:SetJustifyH("LEFT")
 
-    row.level = row.dungeonButton:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.level = row.dungeonButton:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     row.level:SetPoint("LEFT", row.dungeonText, "RIGHT", 2, 0)
     row.level:SetJustifyH("LEFT")
 
-    row.player = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.player = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     row.player:SetPoint("LEFT", row.dungeonButton, "RIGHT", 4, 0)
-    row.player:SetWidth(60)
+    row.player:SetWidth(78)
     row.player:SetJustifyH("LEFT")
 
-    row.score = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+    row.score = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     row.score:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+    row.score:SetWidth(40)
     row.score:SetJustifyH("RIGHT")
 
     row.dungeonButton:SetScript("OnEnter", function(self)
@@ -136,25 +168,6 @@ local function CreateRow(index)
     end)
     row.dungeonButton:SetScript("OnLeave", function()
         GameTooltip:Hide()
-    end)
-    row.dungeonButton:SetScript("OnClick", function(self)
-        if not self.spellID then
-            return
-        end
-        if InCombatLockdown and InCombatLockdown() then
-            UIErrorsFrame:AddMessage("Cannot use dungeon teleports in combat.", 1.0, 0.1, 0.1)
-            return
-        end
-
-        if not IsTeleportKnown(self.spellID) then
-            return
-        end
-
-        if C_Spell and C_Spell.CastSpell then
-            C_Spell.CastSpell(self.spellID)
-        else
-            CastSpellByID(self.spellID)
-        end
     end)
 
     row:Hide()
@@ -211,6 +224,10 @@ local function HideRows()
         row:Hide()
         row.dungeonButton.spellID = nil
         row.dungeonButton.tooltipDungeon = nil
+        row.dungeonButton:SetAttribute("type", nil)
+        row.dungeonButton:SetAttribute("type1", nil)
+        row.dungeonButton:SetAttribute("spell", nil)
+        row.dungeonButton:SetAttribute("spell1", nil)
     end
 end
 
@@ -307,7 +324,17 @@ local function UpdatePartyKeysPanel()
         row.dungeonButton.tooltipDungeon = dungeonName
         row.dungeonButton.spellID = spellID
         if spellID and IsTeleportKnown(spellID) then
+            local spellName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or GetSpellInfo(spellID)
+            row.dungeonButton:SetAttribute("type", "spell")
+            row.dungeonButton:SetAttribute("type1", "spell")
+            row.dungeonButton:SetAttribute("spell", spellName or spellID)
+            row.dungeonButton:SetAttribute("spell1", spellName or spellID)
             row.dungeonText:SetTextColor(0.55, 1, 0.55, 1)
+        else
+            row.dungeonButton:SetAttribute("type", nil)
+            row.dungeonButton:SetAttribute("type1", nil)
+            row.dungeonButton:SetAttribute("spell", nil)
+            row.dungeonButton:SetAttribute("spell1", nil)
         end
 
         row:Show()
@@ -319,7 +346,7 @@ local function UpdatePartyKeysPanel()
         return
     end
 
-    local height = TITLE_HEIGHT + (PANEL_PADDING * 2) + (visible * ROW_HEIGHT) + 2
+    local height = TITLE_HEIGHT + 18 + (visible * ROW_HEIGHT) + 8
     partyKeysPanel:SetHeight(height)
     partyKeysPanel:Show()
 end
@@ -327,9 +354,17 @@ end
 addonTable.UpdatePartyKeysPanel = UpdatePartyKeysPanel
 
 addonTable.RegisterThemeRefresh("party_keys_theme", function()
-    addonTable.ApplyBackdropStyle(partyKeysPanel, "panel")
-    partyKeysPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-    partyKeysPanel:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    if addonTable.ApplyBackdropStyle then
+        addonTable.ApplyBackdropStyle(partyKeysPanel, "inset")
+    end
+    local alpha = addonTable.GetWindowOpacity and addonTable.GetWindowOpacity() or 0.85
+    local bg = addonTable.OAK_COLOR_BG or {0.205, 0.185, 0.165, 0.85}
+    local border = (addonTable.IsModernTheme and addonTable.IsModernTheme() and addonTable.OAK_COLOR_BORDER) or {0.38, 0.36, 0.32, 1}
+    partyKeysPanel:SetBackdropColor(bg[1], bg[2], bg[3], alpha)
+    partyKeysPanel:SetBackdropBorderColor(unpack(border))
+    titleBg:SetVertexColor(unpack(addonTable.OAK_COLOR_PANEL_TITLE_BG or {0.18, 0.18, 0.18, 0.96}))
+    titleTrim:SetVertexColor(unpack(addonTable.OAK_COLOR_PANEL_TRIM or {0.52, 0.44, 0.22, 0.45}))
+    innerShade:SetVertexColor(unpack(addonTable.OAK_COLOR_PANEL_INNER or {0.11, 0.10, 0.09, 0.82}))
     title:SetTextColor(unpack(addonTable.OAK_COLOR_TITLE_TINT or { 1, 1, 1, 1 }))
     UpdatePartyKeysPanel()
 end)

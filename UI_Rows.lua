@@ -11,9 +11,9 @@ local COLLAPSED_FRAME_WIDTH = 460
 local BROWSER_COLLAPSED_WIDTH = 535
 local BROWSER_DEFAULT_WIDTH = 660
 local MAX_FRAME_WIDTH = 1100
-local BASE_HEADER_TOP_OFFSET = -43
-local BASE_SCROLL_TOP_OFFSET = -70
-local APPLICANT_CONTEXT_BAR_HEIGHT = 24
+local BASE_HEADER_TOP_OFFSET = -60
+local BASE_SCROLL_TOP_OFFSET = -86
+local APPLICANT_CONTEXT_BAR_HEIGHT = 28
 local HEADER_TOP_OFFSET = BASE_HEADER_TOP_OFFSET
 local SCROLL_TOP_OFFSET = BASE_SCROLL_TOP_OFFSET
 local roleWeights = { ["TANK"] = 1, ["HEALER"] = 2, ["DAMAGER"] = 3 }
@@ -21,6 +21,7 @@ local GetBrowserApplicationPriority
 local IsRaidBrowserMode  -- forward declaration (defined below IsBrowserMode)
 local IsPvpBrowserMode
 local RefreshBrowserResponsiveLayout
+local UpdateNotesToggleLayout
 local MODE_CONFIGS = {
     mythic_plus = { ratingLabel = "M+ Rating", keyLabel = "Key" },
     rated_pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
@@ -209,41 +210,31 @@ IsPvpBrowserMode = function()
     return m == "pvp" or m == "rated_pvp"
 end
 
-local scrollFrame = CreateFrame("ScrollFrame", "OakLFGScrollFrame", OAK_LFG, "UIPanelScrollFrameTemplate")
+local scrollFrame = CreateFrame("ScrollFrame", "SorterClassicScrollFrame", OAK_LFG)
 scrollFrame:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 10, SCROLL_TOP_OFFSET)
 scrollFrame:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -25, 35) 
 
-local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
-if scrollBar then
-    local upBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollUpButton"]
-    local downBtn = _G[scrollFrame:GetName() .. "ScrollBarScrollDownButton"]
-    if upBtn then upBtn:Hide(); upBtn:SetSize(0.1, 0.1) end
-    if downBtn then downBtn:Hide(); downBtn:SetSize(0.1, 0.1) end
-
-    local topTex = _G[scrollFrame:GetName() .. "ScrollBarTop"]
-    local bottomTex = _G[scrollFrame:GetName() .. "ScrollBarBottom"]
-    local midTex = _G[scrollFrame:GetName() .. "ScrollBarMiddle"]
-    if topTex then topTex:Hide() end
-    if bottomTex then bottomTex:Hide() end
-    if midTex then midTex:Hide() end
-    
-    local thumb = scrollBar:GetThumbTexture()
-    if thumb then
-        thumb:SetTexture(addonTable.FLAT_TEX)
-        thumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1) 
-        thumb:SetSize(8, 60)
-    end
-    scrollBar:SetWidth(8)
-    scrollBar:ClearAllPoints()
-    scrollBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -12, SCROLL_TOP_OFFSET - 1)
-    scrollBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -12, 35)
+if not scrollFrame.RegisterCallback then
+    Mixin(scrollFrame, CallbackRegistryMixin)
+    scrollFrame:OnLoad()
 end
+
+local scrollBar = CreateFrame("EventFrame", "SorterClassicMinimalScrollBar", OAK_LFG, "MinimalScrollBar")
+scrollBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -8, SCROLL_TOP_OFFSET - 4)
+scrollBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -8, 39)
+ScrollUtil.InitScrollFrameWithScrollBar(scrollFrame, scrollBar)
+
+local browserPaneBg = scrollFrame:CreateTexture(nil, "BACKGROUND", nil, -1)
+browserPaneBg:SetAllPoints(scrollFrame)
+browserPaneBg:SetTexture("Interface\\Buttons\\WHITE8X8")
+browserPaneBg:SetVertexColor(0.04, 0.04, 0.04, 0.72)
+addonTable.BrowserPaneBg = browserPaneBg
 
 local scrollChild = CreateFrame("Frame")
 scrollChild:SetSize(scrollFrame:GetWidth(), 1)
 scrollFrame:SetScrollChild(scrollChild)
 
-local emptyStateText = scrollChild:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+local emptyStateText = scrollChild:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 emptyStateText:SetPoint("TOP", scrollChild, "TOP", 0, -80)
 emptyStateText:SetWidth(420)
 emptyStateText:SetJustifyH("CENTER")
@@ -252,9 +243,7 @@ emptyStateText:SetTextColor(0.78, 0.78, 0.78)
 emptyStateText:Hide()
 
 -- Browser mode: sticky panel that floats above the scroll area, holding applied (pending) groups
-local stickyPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
-stickyPanel:SetBackdrop({ bgFile = addonTable.FLAT_TEX })
-stickyPanel:SetBackdropColor(unpack(addonTable.OAK_COLOR_STICKY or {0.05, 0.10, 0.05, 0.95}))
+local stickyPanel = CreateFrame("Frame", nil, OAK_LFG, "InsetFrameTemplate")
 stickyPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() + 5)
 stickyPanel:Hide()
 local stickyRows = {}
@@ -277,24 +266,24 @@ _bsepTex:SetAllPoints(browserAppliedSeparator)
 _bsepTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[1] or 0.7), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[2] or 0.7), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[3] or 0.7), addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[4] or 0.9)
 browserAppliedSeparator:Hide()
 
-local applicantContextBar = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
+local applicantContextBar = CreateFrame("Frame", nil, OAK_LFG, "InsetFrameTemplate")
 applicantContextBar:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 1, -31)
 applicantContextBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -1, -31)
 applicantContextBar:SetHeight(APPLICANT_CONTEXT_BAR_HEIGHT)
-applicantContextBar:SetBackdrop({ bgFile = addonTable.FLAT_TEX })
-applicantContextBar:SetBackdropColor(unpack(addonTable.OAK_COLOR_CONTEXT or {0.08, 0.08, 0.10, 0.75}))
 applicantContextBar:Hide()
 
-local applicantListingTitle = applicantContextBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-applicantListingTitle:SetPoint("TOPLEFT", applicantContextBar, "TOPLEFT", 12, -2)
-applicantListingTitle:SetPoint("TOPRIGHT", applicantContextBar, "TOPRIGHT", -12, -2)
+local applicantListingTitle = applicantContextBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+applicantListingTitle:SetPoint("TOPLEFT", applicantContextBar, "TOPLEFT", 12, -3)
+applicantListingTitle:SetPoint("TOPRIGHT", applicantContextBar, "TOPRIGHT", -12, -3)
+applicantListingTitle:SetHeight(10)
 applicantListingTitle:SetJustifyH("LEFT")
 applicantListingTitle:SetJustifyV("TOP")
 applicantListingTitle:SetWordWrap(false)
 
-local applicantListingActivity = applicantContextBar:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-applicantListingActivity:SetPoint("BOTTOMLEFT", applicantContextBar, "BOTTOMLEFT", 12, 3)
-applicantListingActivity:SetPoint("BOTTOMRIGHT", applicantContextBar, "BOTTOMRIGHT", -12, 3)
+local applicantListingActivity = applicantContextBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
+applicantListingActivity:SetPoint("TOPLEFT", applicantListingTitle, "BOTTOMLEFT", 0, 1)
+applicantListingActivity:SetPoint("TOPRIGHT", applicantListingTitle, "BOTTOMRIGHT", 0, 1)
+applicantListingActivity:SetHeight(11)
 applicantListingActivity:SetJustifyH("LEFT")
 applicantListingActivity:SetJustifyV("BOTTOM")
 applicantListingActivity:SetTextColor(0.75, 0.75, 0.75)
@@ -310,16 +299,17 @@ end
 local function ApplyApplicantContextInsets()
     local pad = GetThemeLayoutPad()
     applicantContextBar:ClearAllPoints()
-    applicantContextBar:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 1 + pad, -31 - pad)
-    applicantContextBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -1 - pad, -31 - pad)
+    applicantContextBar:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", 9 + pad, -60 - pad)
+    applicantContextBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -9 - pad, -60 - pad)
 end
 ApplyApplicantContextInsets()
 
 local function UpdateApplicantContextLayout()
     local contextVisible = applicantContextBar:IsShown()
     local pad = GetThemeLayoutPad()
-    HEADER_TOP_OFFSET = (contextVisible and (BASE_HEADER_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_HEADER_TOP_OFFSET) - pad
-    SCROLL_TOP_OFFSET = (contextVisible and (BASE_SCROLL_TOP_OFFSET - APPLICANT_CONTEXT_BAR_HEIGHT) or BASE_SCROLL_TOP_OFFSET) - pad
+    local contextOffset = contextVisible and (APPLICANT_CONTEXT_BAR_HEIGHT + 6) or 0
+    HEADER_TOP_OFFSET = (BASE_HEADER_TOP_OFFSET - contextOffset) - pad
+    SCROLL_TOP_OFFSET = (BASE_SCROLL_TOP_OFFSET - contextOffset) - pad
 
     local isBrowser = addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
     local bottomOffset = (isBrowser and SCROLL_BOTTOM_BROWSER or SCROLL_BOTTOM_APPLICANT) + pad
@@ -372,20 +362,22 @@ end
 local function GetTargetFrameWidth()
     local savedWidth = OakLFGSorterDB and tonumber(OakLFGSorterDB.windowWidth)
     if IsBrowserMode() then
-        local minWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and BROWSER_COLLAPSED_WIDTH or FULL_FRAME_WIDTH
+        if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+            return BROWSER_COLLAPSED_WIDTH
+        end
+        local minWidth = FULL_FRAME_WIDTH
         if savedWidth and savedWidth > minWidth then
             return math.min(MAX_FRAME_WIDTH, savedWidth)
         end
         return math.max(minWidth, BROWSER_DEFAULT_WIDTH)
     end
 
-    if savedWidth and savedWidth > 0 then
-        local minWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and COLLAPSED_FRAME_WIDTH or FULL_FRAME_WIDTH
-        return math.max(minWidth, math.min(MAX_FRAME_WIDTH, savedWidth))
+    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        return COLLAPSED_FRAME_WIDTH
     end
 
-    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
-        return math.max(COLLAPSED_FRAME_WIDTH, BROWSER_DEFAULT_WIDTH)
+    if savedWidth and savedWidth > 0 then
+        return math.max(FULL_FRAME_WIDTH, math.min(MAX_FRAME_WIDTH, savedWidth))
     end
     return FULL_FRAME_WIDTH
 end
@@ -393,17 +385,30 @@ addonTable.GetTargetFrameWidth = GetTargetFrameWidth
 
 OAK_LFG:SetScript("OnSizeChanged", function(self, width, height)
     scrollChild:SetWidth(scrollFrame:GetWidth())
-    local targetWidth = GetTargetFrameWidth()
-    if not IsBrowserMode() and math.abs(width - targetWidth) > 0.5 then
-        self:SetWidth(targetWidth)
-        return
+    if OakLFGSorterDB and width and width > 0 and (IsBrowserMode() or not OakLFGSorterDB.hideNotes) then
+        OakLFGSorterDB.windowWidth = math.floor(width + 0.5)
     end
 
     if IsBrowserMode() then
-        if OakLFGSorterDB then
-            OakLFGSorterDB.windowWidth = math.floor((width or 0) + 0.5)
+        if self.isOakResizing then
+            if not self._oakResizeRefreshPending then
+                self._oakResizeRefreshPending = true
+                C_Timer.After(0.08, function()
+                    self._oakResizeRefreshPending = false
+                    if self and self:IsShown() and IsBrowserMode() then
+                        RefreshBrowserResponsiveLayout({ liveResize = true })
+                    end
+                end)
+            end
+        else
+            RefreshBrowserResponsiveLayout()
         end
-        RefreshBrowserResponsiveLayout()
+    else
+        addonTable.UpdateHeaderVisuals()
+        UpdateNotesToggleLayout()
+        if not self.isOakResizing and addonTable.UpdateDisplay then
+            addonTable.UpdateDisplay()
+        end
     end
 end)
 
@@ -430,13 +435,13 @@ local function GetFooterButtonYOffset()
     return 0
 end
 
-local lustText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local lustText = footer:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 lustText:SetPoint("LEFT", footer, "LEFT", 0, 0)
-local brezText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local brezText = footer:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 brezText:SetPoint("LEFT", lustText, "RIGHT", 10, 0)
 
 -- Browser mode: "Showing X of Y groups" replaces lust/brez indicators
-local groupCountText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local groupCountText = footer:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 groupCountText:SetPoint("LEFT", footer, "LEFT", 2, 0)
 groupCountText:SetTextColor(0.75, 0.75, 0.75)
 groupCountText:Hide()
@@ -556,9 +561,14 @@ pvpBtn:SetScript("OnLeave", function(self)
 end)
 
 local listDropdown = CreateFrame("Frame", nil, footer, "BackdropTemplate")
-addonTable.ApplyBackdropStyle(listDropdown, "panel")
-listDropdown:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-listDropdown:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+listDropdown:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    edgeSize = 12,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+})
+listDropdown:SetBackdropColor(1, 1, 1, 1)
+listDropdown:SetBackdropBorderColor(1, 1, 1, 1)
 listDropdown:SetFrameStrata("FULLSCREEN_DIALOG")
 listDropdown:SetClampedToScreen(true)
 listDropdown:Hide()
@@ -597,28 +607,27 @@ local function RefreshListingDropdown()
     for index, option in ipairs(options) do
         local button = listDropdownButtons[index]
         if not button then
-            button = CreateFrame("Button", nil, listDropdown, "BackdropTemplate")
+            button = CreateFrame("Button", nil, listDropdown)
             button.bg = button:CreateTexture(nil, "BACKGROUND")
             button.bg:SetAllPoints()
-            button.text = button:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+            button.bg:SetTexture("Interface\\Buttons\\WHITE8X8")
+            button.bg:SetVertexColor(0.10, 0.10, 0.10, 0.98)
+            button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             button.text:SetPoint("LEFT", button, "LEFT", 8, 0)
             button.text:SetPoint("RIGHT", button, "RIGHT", -8, 0)
             button.text:SetJustifyH("LEFT")
+            button.highlight = button:CreateTexture(nil, "HIGHLIGHT")
+            button.highlight:SetAllPoints()
+            button.highlight:SetColorTexture(1, 1, 1, 0.06)
             listDropdownButtons[index] = button
         end
 
         button.optionID = option.id
         button:SetPoint("TOPLEFT", listDropdown, "TOPLEFT", 1, -1 - ((index - 1) * rowHeight))
         button:SetSize(width, rowHeight)
-        button.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
+        button.bg:SetVertexColor(0.10, 0.10, 0.10, 0.98)
         button.text:SetText(option.label)
-        button.text:SetTextColor(1, 1, 1, 1)
-        button:SetScript("OnEnter", function(self)
-            self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_DROPDOWN_HOVER))
-        end)
-        button:SetScript("OnLeave", function(self)
-            self.bg:SetColorTexture(unpack(addonTable.OAK_COLOR_BG))
-        end)
+        button.text:SetTextColor(1, 0.82, 0, 1)
         button:SetScript("OnClick", function(self)
             listDropdown:Hide()
             if addonTable.OpenBlizzardListingPanel then
@@ -642,14 +651,12 @@ listBtn:SetScript("OnClick", function(self)
 end)
 
 addonTable.RegisterThemeRefresh("listing_dropdown_theme", function()
-    listDropdown:SetBackdropColor(unpack(addonTable.OAK_COLOR_BG))
-    listDropdown:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     if listDropdown:IsShown() then
         RefreshListingDropdown()
     end
 end)
 
-local footerVersionText = footer:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
+local footerVersionText = footer:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 footerVersionText:SetPoint("RIGHT", footer, "RIGHT", -2, 0)
 footerVersionText:SetText(addonTable.VersionText and addonTable.VersionText:GetText() or "")
 
@@ -757,6 +764,10 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
     local valA, valB
     local listingMode = GetListingMode()
     local isBrowser = IsBrowserMode()
+
+    if isBrowser and (grpA.isUnavailable or grpB.isUnavailable) then
+        return (grpA._oakStableIndex or grpA.id or 0) < (grpB._oakStableIndex or grpB.id or 0)
+    end
 
     if isBrowser then
         if sortBy == "role" then valA, valB = grpA.dungeonName or grpA.activityFilterLabel or grpA.activityName or "", grpB.dungeonName or grpB.activityFilterLabel or grpB.activityName or ""
@@ -954,7 +965,7 @@ local function MeasureDungeonColumnWidth()
     end
 
     local widest = B_DUNGEON.w
-    local fontObject = _G["OakLFG_FontSmall"]
+    local fontObject = _G["SorterClassic_FontSmall"]
     local labels = {}
 
     for _, entry in ipairs(addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}) do
@@ -1280,6 +1291,60 @@ function addonTable.UpdateHeaderVisuals()
     local pad = addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
     local currentWidth = tonumber(OAK_LFG and OAK_LFG:GetWidth()) or FULL_FRAME_WIDTH
     local headerRightLimit = currentWidth - 14 - pad
+    local function GetHeaderColumnRight(sortKey)
+        if isRaidBrowser then
+            if sortKey == "role" then
+                return raidBrowserColumns.spec.x
+            elseif sortKey == "spec" then
+                return raidBrowserColumns.ilvl.x
+            elseif sortKey == "ilvl" then
+                return raidBrowserColumns.class.x
+            elseif sortKey == "class" then
+                return raidBrowserColumns.rating.x
+            elseif sortKey == "rating" then
+                return raidBrowserColumns.key.x
+            elseif sortKey == "key" then
+                return (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and browserCols.raidNoteCollapsed.x or browserCols.raidNote.x
+            end
+        elseif isRbgBrowser then
+            if sortKey == "role" then
+                return rbgBrowserColumns.ilvl.x
+            elseif sortKey == "ilvl" then
+                return rbgBrowserColumns.class.x
+            elseif sortKey == "class" then
+                return rbgBrowserColumns.rating.x
+            elseif sortKey == "rating" then
+                return rbgBrowserColumns.key.x
+            elseif sortKey == "key" then
+                return browserCols.rbgNote.x
+            end
+        elseif isPvpBrowser then
+            if sortKey == "role" then
+                return pvpBrowserColumns.ilvl.x
+            elseif sortKey == "ilvl" then
+                return pvpBrowserColumns.class.x
+            elseif sortKey == "class" then
+                return pvpBrowserColumns.rating.x
+            elseif sortKey == "rating" then
+                return pvpBrowserColumns.key.x
+            elseif sortKey == "key" then
+                return browserCols.pvpNote.x
+            end
+        elseif isBrowser then
+            if sortKey == "role" then
+                return browserColumns.ilvl.x
+            elseif sortKey == "ilvl" then
+                return browserColumns.class.x
+            elseif sortKey == "class" then
+                return browserColumns.rating.x
+            elseif sortKey == "rating" then
+                return browserColumns.key.x
+            elseif sortKey == "key" then
+                return browserCols.note.x
+            end
+        end
+        return nil
+    end
 
     for _, header in ipairs(headers) do
         local column
@@ -1296,7 +1361,9 @@ function addonTable.UpdateHeaderVisuals()
         end
 
         if column then
-            local headerWidth = math.max(20, math.min(column.w, headerRightLimit - column.x))
+            local nextColumnX = GetHeaderColumnRight(header.sortKey)
+            local maxWidth = nextColumnX and (nextColumnX - column.x) or column.w
+            local headerWidth = math.max(20, math.min(column.w, maxWidth, headerRightLimit - column.x))
             header:ClearAllPoints()
             header:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", column.x + pad, HEADER_TOP_OFFSET)
             header:SetSize(headerWidth, 22)
@@ -1394,14 +1461,19 @@ local function CreateHeader(label, sortKey, column)
     local btn = CreateFrame("Button", nil, OAK_LFG, "BackdropTemplate")
     btn:SetSize(column.w, 22)
     btn:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", column.x, HEADER_TOP_OFFSET)
-    btn:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-    btn:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
-    btn:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+    btn:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 0, right = 0, top = 0, bottom = 0 }
+    })
+    btn:SetBackdropColor(0.18, 0.18, 0.18, 0.95)
+    btn:SetBackdropBorderColor(0.36, 0.36, 0.36, 0.8)
     btn:EnableMouse(true)
     btn:SetFrameLevel(OAK_LFG:GetFrameLevel() + 10)
     
     btn.baseText = label; btn.sortKey = sortKey
-    btn.text = btn:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    btn.text = btn:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     local leftPadding = (column.align == "LEFT") and 6 or 2
     local rightPadding = (column.align == "LEFT") and 12 or 2
     btn.text:SetPoint("LEFT", btn, "LEFT", leftPadding, 0)
@@ -1427,7 +1499,7 @@ local function CreateHeader(label, sortKey, column)
     btn:SetScript("OnEnter", function(self)
         local title, description = GetHeaderTooltipData(self.sortKey)
         if title and description then
-            self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+            self:SetBackdropBorderColor(0.72, 0.58, 0.18, 0.95)
             GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
             GameTooltip:SetText(title, 1, 1, 1)
             GameTooltip:AddLine(description, 1, 1, 1, true)
@@ -1436,7 +1508,7 @@ local function CreateHeader(label, sortKey, column)
         end
     end)
     btn:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
+        self:SetBackdropBorderColor(0.36, 0.36, 0.36, 0.8)
         GameTooltip:Hide()
     end)
     table.insert(headers, btn)
@@ -1461,11 +1533,28 @@ local function GetCurrentNoteColumn()
         return browserCols.note
     end
 
-    if UsesSecondaryMetricColumn() then
-        return C_NOTE
+    local currentWidth = tonumber(OAK_LFG and OAK_LFG:GetWidth()) or FULL_FRAME_WIDTH
+    if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        return {
+            x = math.max(C_KEY.x + C_KEY.w + 6, currentWidth - 88),
+            w = 58,
+            align = "LEFT",
+        }
     end
 
-    return { x = C_KEY.x, w = C_KEY.w + C_NOTE.w, align = "LEFT" }
+    if UsesSecondaryMetricColumn() then
+        return {
+            x = C_NOTE.x,
+            w = math.max(C_NOTE.w, currentWidth - C_NOTE.x - 90),
+            align = "LEFT",
+        }
+    end
+
+    return {
+        x = C_KEY.x,
+        w = math.max(C_KEY.w + C_NOTE.w, currentWidth - C_KEY.x - 90),
+        align = "LEFT",
+    }
 end
 
 local function GetCurrentRowNoteColumn()
@@ -1579,21 +1668,23 @@ local function GetBrowserSetupSummary(result)
 end
 
 local function GetBrowserRowColor(result, isAltColor)
+    local opacity = addonTable.GetWindowOpacity and addonTable.GetWindowOpacity() or 1
+    local rowAlpha = 0.70 + (math.max(0.35, math.min(1.0, opacity)) * 0.12)
     if result.isRoleFilled then
-        return 0.46, 0.30, 0.10, 0.60
+        return 0.28, 0.22, 0.11, rowAlpha
     end
     if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
-        return 0.12, 0.32, 0.16, 0.55
+        return 0.14, 0.22, 0.14, rowAlpha
     end
     if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
-        return 0.34, 0.10, 0.10, 0.55
+        return 0.24, 0.12, 0.12, rowAlpha
     end
     if (result.numBNetFriends or 0) > 0 or (result.numCharFriends or 0) > 0 then
-        return 0.12, 0.22, 0.36, 0.50
+        return 0.13, 0.17, 0.24, rowAlpha
     end
 
     local color = isAltColor and addonTable.ROW_COLOR_B or addonTable.ROW_COLOR_A
-    return unpack(color)
+    return color[1], color[2], color[3], rowAlpha
 end
 
 local function GetApplicantStatusText(group)
@@ -1605,11 +1696,13 @@ local function GetApplicantStatusText(group)
 end
 
 local function GetApplicantRowColor(group, isAltColor)
+    local opacity = addonTable.GetWindowOpacity and addonTable.GetWindowOpacity() or 1
+    local rowAlpha = 0.70 + (math.max(0.35, math.min(1.0, opacity)) * 0.12)
     if GetApplicantStatusText(group) then
-        return 0.12, 0.32, 0.16, 0.55
+        return 0.14, 0.22, 0.14, rowAlpha
     end
     local color = isAltColor and addonTable.ROW_COLOR_B or addonTable.ROW_COLOR_A
-    return unpack(color)
+    return color[1], color[2], color[3], rowAlpha
 end
 
 CreateHeader(L["Role"], "role", C_ROLE)
@@ -1626,7 +1719,7 @@ local notesHeader = CreateHeader(L["Notes"], "note", C_NOTE)
 local noteVisibilityBtn = addonTable.CreateFlatButton(OAK_LFG, "-", 20)
 noteVisibilityBtn:SetSize(20, 22)
 
-local function UpdateNotesToggleLayout()
+UpdateNotesToggleLayout = function()
     local noteColumn = GetCurrentNoteColumn()
     local pad = addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
     local xOffset = noteColumn.x + pad
@@ -1639,7 +1732,8 @@ local function UpdateNotesToggleLayout()
         -- In raid-browser collapsed mode the note column starts at x=500 inside a
         -- 535px frame, leaving only 33px — the old hard-coded 55 caused overflow.
         local currentWidth = tonumber(OAK_LFG and OAK_LFG:GetWidth()) or GetTargetFrameWidth()
-        local maxW = currentWidth - xOffset - 2
+        local rightInset = (addonTable.IsModernTheme and addonTable.IsModernTheme()) and 12 or 2
+        local maxW = currentWidth - xOffset - rightInset
         notesToggleBtn:SetWidth(math.min(55, math.max(20, maxW)))
         -- Left-justify the "Notes" label in collapsed state
         notesToggleBtn.text:ClearAllPoints()
@@ -1679,14 +1773,23 @@ end
 
 addonTable.RegisterThemeRefresh("ui_rows_theme", function()
     local pad = addonTable.GetThemeFramePadding and addonTable.GetThemeFramePadding() or 0
-    local scrollRightOffset = -12
-    local scrollBottomOffset = 35
-    if (addonTable.GetThemeStyle and (addonTable.GetThemeStyle() == "BLIZZARD" or addonTable.GetThemeStyle() == "BLIZZARD_GRAY")) then
+    local scrollRightOffset = -6
+    local scrollBottomOffset = 33
+    local isClassic = addonTable.IsClassicTheme and addonTable.IsClassicTheme()
+    if isClassic or (addonTable.GetThemeStyle and (addonTable.GetThemeStyle() == "BLIZZARD" or addonTable.GetThemeStyle() == "BLIZZARD_GRAY")) then
         scrollRightOffset = -6
         scrollBottomOffset = 33
     else
         scrollRightOffset = -12 - pad
         scrollBottomOffset = 35 + pad
+    end
+    if browserPaneBg then
+        if isClassic then
+            browserPaneBg:SetVertexColor(0.04, 0.04, 0.04, 0.72)
+            browserPaneBg:Show()
+        else
+            browserPaneBg:Hide()
+        end
     end
     ApplyApplicantContextInsets()
     ApplyFooterInsets()
@@ -1711,13 +1814,12 @@ addonTable.RegisterThemeRefresh("ui_rows_theme", function()
     applicantContextBar:SetBackdropColor(unpack(addonTable.OAK_COLOR_CONTEXT or {0.08, 0.08, 0.10, 0.75}))
     _ssLineTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[1] or 0.9), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[2] or 0.9), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[3] or 0.9), addonTable.OAK_COLOR_STICKY_ACCENT and addonTable.OAK_COLOR_STICKY_ACCENT[4] or 1.0)
     if scrollBar then
-        local thumb = scrollBar:GetThumbTexture()
-        if thumb then
-            thumb:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+        if addonTable.ApplyScrollBarChrome then
+            addonTable.ApplyScrollBarChrome(scrollBar)
         end
         scrollBar:ClearAllPoints()
-        scrollBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", scrollRightOffset, SCROLL_TOP_OFFSET - 1)
-        scrollBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", scrollRightOffset, scrollBottomOffset)
+        scrollBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", scrollRightOffset, SCROLL_TOP_OFFSET - (isClassic and 4 or 1))
+        scrollBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", scrollRightOffset, isClassic and (scrollBottomOffset + 4) or scrollBottomOffset)
     end
     _bsepTex:SetColorTexture(addonTable.ClassColor.r * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[1] or 0.7), addonTable.ClassColor.g * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[2] or 0.7), addonTable.ClassColor.b * (addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[3] or 0.7), addonTable.OAK_COLOR_STICKY_ACCENT_SOFT and addonTable.OAK_COLOR_STICKY_ACCENT_SOFT[4] or 0.9)
     UpdateNotesToggleVisual()
@@ -1762,6 +1864,7 @@ local PopulateBrowserRow
 local rows = {}
 local browserRenderGeneration = 0
 local BROWSER_RENDER_BATCH_SIZE = 18
+local currentBrowserLayoutToken
 
 local function QueueBrowserRowRender(normalResults, startIndex, generation)
     if browserRenderGeneration ~= generation or not OAK_LFG:IsShown() or not IsBrowserMode() then
@@ -1788,18 +1891,19 @@ local function QueueBrowserRowRender(normalResults, startIndex, generation)
 end
 
 local function SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
-    local minWidth = targetWidth
-    local maxWidth = targetWidth
+    local minWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and COLLAPSED_FRAME_WIDTH or FULL_FRAME_WIDTH
+    local maxWidth = MAX_FRAME_WIDTH
     if IsBrowserMode() then
         minWidth = (OakLFGSorterDB and OakLFGSorterDB.hideNotes) and BROWSER_COLLAPSED_WIDTH or FULL_FRAME_WIDTH
-        maxWidth = MAX_FRAME_WIDTH
+    elseif OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+        maxWidth = minWidth
     end
     OAK_LFG:SetResizeBounds(minWidth, 444, maxWidth, 800)
     if preserveLeftEdge then
         local oldLeft = OAK_LFG:GetLeft()
         local oldBottom = OAK_LFG:GetBottom()
 
-        if not IsBrowserMode() or (OAK_LFG:GetWidth() or 0) < minWidth then
+        if math.abs((OAK_LFG:GetWidth() or 0) - targetWidth) > 0.5 then
             OAK_LFG:SetWidth(targetWidth)
         end
         if oldLeft and oldBottom then
@@ -1967,6 +2071,103 @@ local function GetBrowserRatingDisplay(result)
     return ratingText
 end
 
+local function OpenBlizzardSearchResultContextMenu(searchResultID, owner)
+    if not searchResultID then
+        return false
+    end
+
+    if MenuUtil and MenuUtil.CreateContextMenu and C_LFGList and C_LFGList.GetSearchResultInfo then
+        local ok = pcall(MenuUtil.CreateContextMenu, owner or UIParent, function(ownerRegion, rootDescription)
+            rootDescription:SetTag("MENU_LFG_FRAME_SEARCH_ENTRY")
+
+            local searchResultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
+            if not searchResultInfo then
+                return
+            end
+
+            rootDescription:CreateTitle(searchResultInfo.name or "")
+
+            local whisperButton = rootDescription:CreateButton(WHISPER_LEADER or WHISPER or "Whisper Leader", function()
+                if searchResultInfo.leaderName then
+                    if ChatFrameUtil and ChatFrameUtil.SendTell then
+                        ChatFrameUtil.SendTell(searchResultInfo.leaderName)
+                    elseif ChatFrame_SendTell then
+                        ChatFrame_SendTell(searchResultInfo.leaderName)
+                    end
+                end
+            end)
+            if not searchResultInfo.leaderName and whisperButton and whisperButton.SetEnabled then
+                whisperButton:SetEnabled(false)
+            end
+
+            rootDescription:CreateButton(LFG_LIST_REPORT_GROUP_FOR or "Report Group", function()
+                if LFGList_ReportListing then
+                    LFGList_ReportListing(searchResultID, searchResultInfo.leaderName)
+                end
+            end)
+
+            rootDescription:CreateButton(REPORT_GROUP_FINDER_ADVERTISEMENT or "Report Advertisement", function()
+                if LFGList_ReportAdvertisement then
+                    LFGList_ReportAdvertisement(searchResultID)
+                end
+            end)
+        end)
+        if ok then
+            return true
+        end
+    end
+    return false
+end
+
+local function OpenBlizzardApplicantMemberContextMenu(applicantID, memberIdx, owner)
+    if not (applicantID and memberIdx and MenuUtil and MenuUtil.CreateContextMenu and C_LFGList and C_LFGList.GetApplicantMemberInfo) then
+        return false
+    end
+
+    local ok = pcall(MenuUtil.CreateContextMenu, owner or UIParent, function(ownerRegion, rootDescription)
+        rootDescription:SetTag("MENU_LFG_FRAME_MEMBER_APPLY")
+
+        local name = C_LFGList.GetApplicantMemberInfo(applicantID, memberIdx)
+        rootDescription:CreateTitle(name or "")
+
+        local whisperButton = rootDescription:CreateButton(WHISPER or "Whisper", function()
+            if name then
+                if ChatFrameUtil and ChatFrameUtil.SendTell then
+                    ChatFrameUtil.SendTell(name)
+                elseif ChatFrame_SendTell then
+                    ChatFrame_SendTell(name)
+                end
+            end
+        end)
+
+        rootDescription:CreateButton(LFG_LIST_REPORT_PLAYER or "Report Player", function()
+            if LFGList_ReportApplicant then
+                LFGList_ReportApplicant(applicantID, name or "")
+            end
+        end)
+
+        local ignoreButton = rootDescription:CreateButton(IGNORE_PLAYER or "Ignore Player", function()
+            if name and C_FriendList and C_FriendList.AddIgnore then
+                C_FriendList.AddIgnore(name)
+            end
+            if C_LFGList and C_LFGList.DeclineApplicant then
+                C_LFGList.DeclineApplicant(applicantID)
+            end
+        end)
+
+        if not name then
+            if whisperButton and whisperButton.SetEnabled then
+                whisperButton:SetEnabled(false)
+            end
+            if ignoreButton and ignoreButton.SetEnabled then
+                ignoreButton:SetEnabled(false)
+            end
+        end
+    end)
+
+    return ok and true or false
+end
+
 local function GetColoredRaidDifficultyLabel(label)
     local text = tostring(label or "")
     local lowered = strlower(text)
@@ -2097,21 +2298,131 @@ local function ConfigureApplicantRowLayout(row)
     ConfigureTextColumn(row.noteText, row, GetCurrentRowNoteColumn(), 5)
 end
 
+local function RefreshSingleBrowserRowLayout(row, isRaidBrowser, isPvpBrowser, isCustomBrowser, hideNotes)
+    if not (row and row.searchResult) then
+        return
+    end
+
+    if currentBrowserLayoutToken and row._oakBrowserLayoutToken == currentBrowserLayoutToken then
+        return
+    end
+
+    local result = row.searchResult
+    local memberCount = tonumber(result.numMembers) or #(result.players or {})
+    local isRbgRow = isPvpBrowser and IsRatedBattlegroundResult(result)
+    local usesSummaryComp = isRaidBrowser or (isCustomBrowser and memberCount > 5) or isRbgRow
+
+    if isRaidBrowser then
+        ConfigureRaidBrowserRowLayout(row)
+    elseif isCustomBrowser then
+        if memberCount <= 5 then
+            ConfigureBrowserRowLayout(row)
+        else
+            ConfigureCustomBrowserRowLayout(row)
+        end
+    elseif isRbgRow then
+        ConfigureRbgBrowserRowLayout(row)
+    elseif isPvpBrowser then
+        ConfigurePvpBrowserRowLayout(row)
+    else
+        ConfigureBrowserRowLayout(row)
+    end
+
+    if row.noteText then
+        if hideNotes then row.noteText:Hide() else row.noteText:Show() end
+    end
+    if row.dungeonText then row.dungeonText:Show() end
+    if row.roleIcon then row.roleIcon:Hide() end
+    if row.ageText then row.ageText:Show() end
+    if row.keyText then row.keyText:Hide() end
+    if row.specText then
+        if isRaidBrowser then row.specText:Show() else row.specText:Hide() end
+    end
+    if row.ilvlText then
+        if usesSummaryComp then row.ilvlText:Show() else row.ilvlText:Hide() end
+    end
+    if row.compSlots then
+        for _, slot in pairs(row.compSlots) do
+            if usesSummaryComp then slot:Hide() else slot:Show() end
+        end
+    end
+    if row.inviteBtn then
+        row.inviteBtn:ClearAllPoints()
+        row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+    end
+
+    row._oakBrowserLayoutToken = currentBrowserLayoutToken
+end
+
+local function BuildBrowserLayoutToken()
+    local browserCols = GetCurrentBrowserColumns()
+    local noteColumn = GetCurrentNoteColumn()
+    return table.concat({
+        tostring(math.floor((OAK_LFG:GetWidth() or 0) + 0.5)),
+        tostring(math.floor((scrollFrame:GetWidth() or 0) + 0.5)),
+        tostring((OakLFGSorterDB and OakLFGSorterDB.hideNotes) and 1 or 0),
+        tostring(IsRaidBrowserMode() and 1 or 0),
+        tostring(IsPvpBrowserMode() and 1 or 0),
+        tostring(IsCustomCategoryBrowserMode() and 1 or 0),
+        tostring(noteColumn and noteColumn.x or 0),
+        tostring(noteColumn and noteColumn.w or 0),
+        tostring(browserCols and browserCols.title and browserCols.title.x or 0),
+        tostring(browserCols and browserCols.title and browserCols.title.w or 0),
+    }, ":")
+end
+
+local function RefreshVisibleBrowserRows(layoutToken)
+    if not IsBrowserMode() then
+        return
+    end
+
+    currentBrowserLayoutToken = layoutToken or BuildBrowserLayoutToken()
+    local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
+    local isRaidBrowser = IsRaidBrowserMode()
+    local isPvpBrowser = IsPvpBrowserMode()
+    local isCustomBrowser = IsCustomCategoryBrowserMode()
+
+    for _, row in ipairs(rows) do
+        if row:IsShown() and row.searchResult then
+            RefreshSingleBrowserRowLayout(row, isRaidBrowser, isPvpBrowser, isCustomBrowser, hideNotes)
+        end
+    end
+
+    for _, row in ipairs(stickyRows) do
+        if row:IsShown() and row.searchResult then
+            RefreshSingleBrowserRowLayout(row, isRaidBrowser, isPvpBrowser, isCustomBrowser, hideNotes)
+        end
+    end
+
+    currentBrowserLayoutToken = nil
+end
+
 local function GetBrowserInviteRightInset()
     return -5
 end
 
-RefreshBrowserResponsiveLayout = function()
+RefreshBrowserResponsiveLayout = function(options)
+    options = options or {}
+    local layoutToken = BuildBrowserLayoutToken()
+    local layoutChanged = OAK_LFG._oakLastBrowserLayoutToken ~= layoutToken
+    OAK_LFG._oakLastBrowserLayoutToken = layoutToken
+
     if addonTable.UpdateHeaderVisuals then
         addonTable.UpdateHeaderVisuals()
     end
     UpdateNotesToggleLayout()
     UpdateNotesToggleVisual()
-    if addonTable.UpdateTopBarLayout then
+    if options.liveResize then
+        return
+    end
+    if not options.liveResize and addonTable.UpdateTopBarLayout then
         addonTable.UpdateTopBarLayout()
     end
-    if addonTable.UpdateBrowserFilterPanel and addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() then
+    if (not options.liveResize) and (not OAK_LFG.isOakResizing) and addonTable.UpdateBrowserFilterPanel and addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() then
         addonTable.UpdateBrowserFilterPanel()
+    end
+    if layoutChanged or not options.liveResize then
+        RefreshVisibleBrowserRows(layoutToken)
     end
 end
 addonTable.RefreshBrowserResponsiveLayout = RefreshBrowserResponsiveLayout
@@ -2237,39 +2548,138 @@ function addonTable.AppendRIOMilestonesNoHeader(tooltip, rioProfile)
     end
 end
 
-local function NormalizeFriendMatchName(name, realm)
-    local fullName = tostring(name or "")
-    if tostring(realm or "") ~= "" and not fullName:find("-", 1, true) then
-        fullName = fullName .. "-" .. tostring(realm)
-    end
-    if Ambiguate then
-        fullName = Ambiguate(fullName, "mail")
-    end
-    return strlower(fullName)
-end
-
-local function BuildSearchResultFriendNameList(result)
+function addonTable.BuildSearchResultFriendNameList(result)
     if type(result) ~= "table" or type(result.players) ~= "table" or #result.players == 0 then
         return {}
     end
 
+    local function NormalizeFriendMatchName(name, realm)
+        local fullName = tostring(name or "")
+        if tostring(realm or "") ~= "" and not fullName:find("-", 1, true) then
+            fullName = fullName .. "-" .. tostring(realm)
+        end
+        if Ambiguate then
+            fullName = Ambiguate(fullName, "mail")
+        end
+        return strlower(fullName)
+    end
+
+    local function NormalizeFriendClassToken(className)
+        if not className or className == "" then
+            return nil
+        end
+
+        local normalized = strlower(tostring(className):gsub("%s+", ""))
+        for _, classToken in ipairs(addonTable.ValidClasses or {}) do
+            local token = tostring(classToken or "")
+            if normalized == strlower(token) then
+                return token
+            end
+            local maleName = LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[token]
+            local femaleName = LOCALIZED_CLASS_NAMES_FEMALE and LOCALIZED_CLASS_NAMES_FEMALE[token]
+            if maleName and normalized == strlower(tostring(maleName):gsub("%s+", "")) then
+                return token
+            end
+            if femaleName and normalized == strlower(tostring(femaleName):gsub("%s+", "")) then
+                return token
+            end
+        end
+
+        return strupper(tostring(className):gsub("%s+", ""))
+    end
+
+    local function GetBattleNetFriendDisplayName(accountInfo)
+        local accountName = accountInfo and (accountInfo.accountName or accountInfo.bnetAccountName)
+        if accountName and accountName ~= "" then
+            return accountName
+        end
+
+        local battleTag = accountInfo and accountInfo.battleTag
+        if battleTag and battleTag ~= "" then
+            return tostring(battleTag):gsub("#%d+$", "")
+        end
+
+        return nil
+    end
+
+    local function BattleNetGameAccountMatchesResult(gameInfo, resultClassTokens)
+        if not gameInfo or not resultClassTokens then
+            return false
+        end
+
+        local client = tostring(gameInfo.clientProgram or gameInfo.client or "")
+        if client ~= "" and client ~= "WoW" and client ~= "WoW1" then
+            return false
+        end
+
+        local classToken = NormalizeFriendClassToken(gameInfo.classFilename or gameInfo.classFileName or gameInfo.className)
+        return classToken and resultClassTokens[classToken] == true
+    end
+
     local playerNames = {}
+    local resultClassTokens = {}
     for _, player in ipairs(result.players) do
         local normalized = NormalizeFriendMatchName(player and player.name)
         if normalized ~= "" then
             playerNames[normalized] = player.name or normalized
         end
+        local classToken = NormalizeFriendClassToken(player and player.class)
+        if classToken then
+            resultClassTokens[classToken] = true
+        end
     end
 
     local matches = {}
     local seen = {}
+    local bnetFallbacks = {}
+    local bnetFallbackSeen = {}
+    local resolvedBNetNames = 0
+
+    local function AddDisplayMatch(displayName)
+        displayName = tostring(displayName or "")
+        if displayName == "" then
+            return false
+        end
+
+        local normalized = strlower(displayName)
+        if seen[normalized] then
+            return false
+        end
+
+        seen[normalized] = true
+        matches[#matches + 1] = displayName
+        return true
+    end
 
     local function AddMatch(name, realm)
         local normalized = NormalizeFriendMatchName(name, realm)
         local displayName = playerNames[normalized]
-        if displayName and not seen[normalized] then
-            seen[normalized] = true
-            matches[#matches + 1] = displayName
+        if displayName then
+            return AddDisplayMatch(displayName)
+        end
+        return false
+    end
+
+    local function AddBNetFallback(accountInfo, gameInfo)
+        if (tonumber(result.numBNetFriends) or 0) <= resolvedBNetNames then
+            return
+        end
+        if not BattleNetGameAccountMatchesResult(gameInfo, resultClassTokens) then
+            return
+        end
+
+        local displayName = GetBattleNetFriendDisplayName(accountInfo)
+        if not displayName or displayName == "" then
+            displayName = gameInfo and gameInfo.characterName
+        end
+        if not displayName or displayName == "" then
+            return
+        end
+
+        local normalized = strlower(tostring(displayName))
+        if not bnetFallbackSeen[normalized] and not seen[normalized] then
+            bnetFallbackSeen[normalized] = true
+            bnetFallbacks[#bnetFallbacks + 1] = displayName
         end
     end
 
@@ -2291,7 +2701,11 @@ local function BuildSearchResultFriendNameList(result)
             if accountInfo then
                 local gameInfo = accountInfo.gameAccountInfo
                 if gameInfo then
-                    AddMatch(gameInfo.characterName, gameInfo.realmName)
+                    if AddMatch(gameInfo.characterName, gameInfo.realmName) then
+                        resolvedBNetNames = resolvedBNetNames + 1
+                    else
+                        AddBNetFallback(accountInfo, gameInfo)
+                    end
                 end
 
                 if C_BattleNet.GetFriendNumGameAccounts and C_BattleNet.GetFriendGameAccountInfo then
@@ -2299,10 +2713,29 @@ local function BuildSearchResultFriendNameList(result)
                     for gameIndex = 1, numGameAccounts do
                         local extraGameInfo = C_BattleNet.GetFriendGameAccountInfo(i, gameIndex)
                         if extraGameInfo then
-                            AddMatch(extraGameInfo.characterName, extraGameInfo.realmName)
+                            if AddMatch(extraGameInfo.characterName, extraGameInfo.realmName) then
+                                resolvedBNetNames = resolvedBNetNames + 1
+                            else
+                                AddBNetFallback(accountInfo, extraGameInfo)
+                            end
                         end
                     end
                 end
+            end
+        end
+    end
+
+    local missingBNetNames = math.max(0, (tonumber(result.numBNetFriends) or 0) - resolvedBNetNames)
+    if missingBNetNames > 0 then
+        table.sort(bnetFallbacks, function(a, b)
+            return strlower(tostring(a or "")) < strlower(tostring(b or ""))
+        end)
+        for _, displayName in ipairs(bnetFallbacks) do
+            if missingBNetNames <= 0 then
+                break
+            end
+            if AddDisplayMatch(displayName) then
+                missingBNetNames = missingBNetNames - 1
             end
         end
     end
@@ -2578,7 +3011,7 @@ function addonTable.BuildBrowserGroupTooltip(result)
     if (result.numBNetFriends or 0) > 0 or (result.numCharFriends or 0) > 0 then
         GameTooltip:AddLine(" ")
         GameTooltip:AddDoubleLine("Friends:", string.format("%d BNet / %d WoW", result.numBNetFriends or 0, result.numCharFriends or 0), 0.6, 0.85, 1, 0.6, 0.85, 1)
-        local friendNames = BuildSearchResultFriendNameList(result)
+        local friendNames = addonTable.BuildSearchResultFriendNameList and addonTable.BuildSearchResultFriendNameList(result) or {}
         if #friendNames > 0 then
             GameTooltip:AddLine(table.concat(friendNames, ", "), 0.85, 0.85, 0.85, true)
         end
@@ -2806,9 +3239,23 @@ CreateRow = function(index, parentOverride, prevRowOverride)
         GameTooltip:Hide()
     end)
 
-    row:RegisterForClicks("LeftButtonUp")
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:SetScript("OnClick", function(self, button)
+        if button == "RightButton" and self.searchResultID then
+            if OpenBlizzardSearchResultContextMenu(self.searchResultID, self) then
+                return
+            end
+        elseif button == "RightButton" and self.applicantID and self.memberIdx then
+            if OpenBlizzardApplicantMemberContextMenu(self.applicantID, self.memberIdx, self) then
+                return
+            end
+        end
+    end)
     row:SetScript("OnDoubleClick", function(self)
         if self.searchResultID then
+            if self.searchResult and self.searchResult.isUnavailable then
+                return
+            end
             if addonTable.ApplyToSearchResult then
                 addonTable.ApplyToSearchResult(self.searchResultID)
             end
@@ -2816,7 +3263,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
             C_LFGList.InviteApplicant(self.groupID)
             if self.inviteBtn then
                 if self.searchResult == nil and self.bg then
-                    self.bg:SetColorTexture(0.12, 0.32, 0.16, 0.55)
+            self.bg:SetColorTexture(0.14, 0.22, 0.14, 0.82)
                 end
                 self.applicationStatus = "invited"
                 self.groupApplicationStatus = "invited"
@@ -2833,17 +3280,17 @@ CreateRow = function(index, parentOverride, prevRowOverride)
     row.roleIcon:SetPoint("CENTER", row, "LEFT", R_ROLE.x + (R_ROLE.w / 2), 0)
     row.roleIcon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
 
-    row.nameText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    row.nameText = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     row.regionText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.regionText:SetJustifyH("RIGHT")
     row.regionText:Hide()
-    row.dungeonText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontSmall")
-    row.specText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    row.dungeonText = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
+    row.specText = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     row.specText:SetJustifyH("CENTER")
-    row.ilvlText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    row.ratingText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    row.keyText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
-    row.noteText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    row.ilvlText = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+    row.ratingText = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+    row.keyText = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+    row.noteText = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     row.noteText:SetTextColor(0.7, 0.7, 0.7) 
     if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
         row.noteText:Hide()
@@ -2867,7 +3314,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
         row.compSlots[index] = slot
     end
 
-    row.ageText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    row.ageText = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     row.ageText:SetJustifyH("CENTER")
     row.ageText:Hide()
 
@@ -2903,6 +3350,9 @@ CreateRow = function(index, parentOverride, prevRowOverride)
         if r.searchResult then
             -- Browser mode
             local result = r.searchResult
+            if result.isUnavailable then
+                return
+            end
             if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
                 C_LFGList.CancelApplication(result.id)
             else
@@ -2918,7 +3368,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
             -- Applicant mode
             C_LFGList.InviteApplicant(r.groupID)
             if r.searchResult == nil and r.bg then
-                r.bg:SetColorTexture(0.12, 0.32, 0.16, 0.55)
+        r.bg:SetColorTexture(0.14, 0.22, 0.14, 0.82)
             end
             r.applicationStatus = "invited"
             r.groupApplicationStatus = "invited"
@@ -2955,7 +3405,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
     end)
     row.inviteBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
 
-    row.statusText = row:CreateFontString(nil, "OVERLAY", "OakLFG_FontRegular")
+    row.statusText = row:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     row.statusText:SetPoint("RIGHT", row, "RIGHT", -5, 0)
     row.statusText:SetTextColor(0.2, 1, 0.2)
     row.statusText:Hide()
@@ -2967,7 +3417,6 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
     local hideNotes = OakLFGSorterDB and OakLFGSorterDB.hideNotes
     local targetWidth = GetTargetFrameWidth()
     local showSecondaryMetric = UsesSecondaryMetricColumn()
-    local rowNoteColumn = GetCurrentRowNoteColumn()
     local isBrowser = IsBrowserMode()
 
     if not showSecondaryMetric and addonTable.CurrentSortBy == "key" then
@@ -2978,7 +3427,9 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
     local isRaidBrowser = IsRaidBrowserMode()
     local isPvpBrowser = IsPvpBrowserMode()
     local isCustomBrowser = IsCustomCategoryBrowserMode()
-    for _, row in ipairs(rows) do
+    OAK_LFG._oakLastBrowserLayoutToken = nil
+    local function ApplyRowVisibilityAndLayout(row)
+        local rowResult = row.searchResult
         if row.keyText then
             if showSecondaryMetric then row.keyText:Show() else row.keyText:Hide() end
         end
@@ -3069,41 +3520,29 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         end
     end
 
-    -- Also update sticky rows (always browser-mode layout)
-    for _, row in ipairs(stickyRows) do
-        if row.keyText then row.keyText:Hide() end
-        if row.noteText then
-            if isRaidBrowser then
-                ConfigureRaidBrowserRowLayout(row)
-            elseif isCustomBrowser then
-                ConfigureCustomBrowserRowLayout(row)
-            else
-                ConfigureBrowserRowLayout(row)
-            end
-            if hideNotes then row.noteText:Hide() else row.noteText:Show() end
-        end
-        if row.dungeonText then row.dungeonText:Show() end
-        if row.roleIcon then row.roleIcon:Hide() end
-        if row.ilvlText then
-            if isRaidBrowser then row.ilvlText:Show() else row.ilvlText:Hide() end
-        end
-        if row.specText then
-            if isRaidBrowser then row.specText:Show() else row.specText:Hide() end
-        end
-        if row.ageText then row.ageText:Show() end
-        if row.compSlots then
-            for _, slot in pairs(row.compSlots) do
-                if isRaidBrowser then slot:Hide() else slot:Show() end
-            end
-        end
-        if row.inviteBtn then
-            row.inviteBtn:ClearAllPoints()
-            row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", GetBrowserInviteRightInset(), 0)
+    SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
+    scrollChild:SetWidth(scrollFrame:GetWidth())
+    if addonTable.RefreshBrowserResponsiveLayout then
+        addonTable.RefreshBrowserResponsiveLayout()
+    end
+    if addonTable.UpdateHeaderVisuals then
+        addonTable.UpdateHeaderVisuals()
+    end
+
+    for _, row in ipairs(rows) do
+        row._oakBrowserLayoutToken = nil
+        if row:IsShown() or not isBrowser then
+            ApplyRowVisibilityAndLayout(row)
         end
     end
 
-    SetFrameWidthPreservingLeft(targetWidth, preserveLeftEdge)
-    scrollChild:SetWidth(scrollFrame:GetWidth())
+    -- Also update sticky rows (always browser-mode layout)
+    for _, row in ipairs(stickyRows) do
+        row._oakBrowserLayoutToken = nil
+        if row:IsShown() then
+            ApplyRowVisibilityAndLayout(row)
+        end
+    end
     UpdateNotesToggleLayout()
     UpdateNotesToggleVisual()
 
@@ -3111,7 +3550,7 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
         addonTable.UpdateTopBarLayout()
     end
 
-    if addonTable.UpdateDisplay then
+    if addonTable.UpdateDisplay and not isBrowser then
         addonTable.UpdateDisplay()
     end
 end
@@ -3133,6 +3572,7 @@ addonTable.ApplyHideNotesLayout()
 PopulateBrowserRow = function(row, result, isAltColor)
     row.searchResultID = result.id
     row.searchResult = result
+    row._isAltColor = isAltColor and true or false
     row.groupID = nil
     row.applicantID = nil
     row.memberIdx = nil
@@ -3144,7 +3584,11 @@ PopulateBrowserRow = function(row, result, isAltColor)
     row.memberRaidProgress = result.raidProgress  -- non-nil only for raid/legacy_raid mode
     row.regionInfo = result.regionInfo
 
-    row.bg:SetColorTexture(GetBrowserRowColor(result, isAltColor))
+    if result.isUnavailable then
+        row.bg:SetColorTexture(0.22, 0.08, 0.08, 0.72)
+    else
+        row.bg:SetColorTexture(GetBrowserRowColor(result, isAltColor))
+    end
 
     -- Use the search context mode to determine layout: world bosses have result.mode="open_world"
     -- but should still render with the raid column layout when searched in a raid context.
@@ -3312,7 +3756,10 @@ PopulateBrowserRow = function(row, result, isAltColor)
     end
 
     if row.ageText then
-        if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
+        if result.isUnavailable then
+            row.ageText:SetText("Delisted")
+            row.ageText:SetTextColor(1, 0.35, 0.25)
+        elseif addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
             row.ageText:SetText("Declined")
             row.ageText:SetTextColor(1, 0.2, 0.2)
         elseif result.applicationStatus == "invited" or result.applicationStatus == "inviteaccepted" then
@@ -3330,7 +3777,13 @@ PopulateBrowserRow = function(row, result, isAltColor)
         end
     end
 
-    row.noteText:SetText(result.comment or "")
+    if result.isUnavailable then
+        row.noteText:SetText("Delisted")
+        row.noteText:SetTextColor(1, 0.35, 0.25)
+    else
+        row.noteText:SetText(result.comment or "")
+        row.noteText:SetTextColor(1, 1, 1)
+    end
     if isPvpMode then
         local bracketText
         if isRbgMode then
@@ -3353,9 +3806,11 @@ PopulateBrowserRow = function(row, result, isAltColor)
 
     row.statusText:Hide()
     row.declineBtn:Hide()
-    row.inviteBtn:Show()
+    row.inviteBtn:SetShown(not result.isUnavailable)
     -- Texture only — OnClick/OnEnter/OnLeave are static handlers set once in CreateRow
-    if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+    if result.isUnavailable then
+        row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
+    elseif addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
         row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
     else
         row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
@@ -3363,7 +3818,7 @@ PopulateBrowserRow = function(row, result, isAltColor)
     local inviteTexture = row.inviteBtn:GetNormalTexture()
     if inviteTexture then
         local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
-        local canApply = isApplied or CanApplyToSearchResult()
+        local canApply = (not result.isUnavailable) and (isApplied or CanApplyToSearchResult())
         inviteTexture:SetDesaturated(not isApplied and not canApply)
         inviteTexture:SetAlpha((isApplied or canApply) and 1 or 0.55)
     end
@@ -3423,13 +3878,15 @@ function addonTable.UpdateDisplay()
 
     if isBrowser then
         addonTable._browserRuntimeFilters = addonTable.BuildBrowserRuntimeFilters and addonTable.BuildBrowserRuntimeFilters() or nil
+        local browserFilters = addonTable._browserRuntimeFilters and addonTable._browserRuntimeFilters.filters or {}
+        local keepGoneRows = browserFilters.keepUnavailable ~= false
         local activeResults = {}
         for _, result in ipairs(addonTable.SearchResults or {}) do
             result.isRoleFilled = addonTable.IsAppliedRoleFilled and addonTable.IsAppliedRoleFilled(result) or false
             -- Groups the player has applied to are always shown regardless of filters
             -- so the user can always see and cancel their pending sign-ups.
             local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
-            if isApplied or not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result) then
+            if result.isUnavailable or isApplied or not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result) then
                 table.insert(activeResults, result)
             end
         end
@@ -3441,9 +3898,31 @@ function addonTable.UpdateDisplay()
             addonTable.groupCountText:SetText(string.format("Showing %d of %d groups", shown, total))
         end
 
-        table.sort(activeResults, function(a, b)
+        local pinnedGoneResults = {}
+        local sortableResults = {}
+        for _, result in ipairs(activeResults) do
+            local isDeclined = addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus)
+            if result.isUnavailable or (keepGoneRows and isDeclined) then
+                table.insert(pinnedGoneResults, result)
+            else
+                table.insert(sortableResults, result)
+            end
+        end
+
+        table.sort(sortableResults, function(a, b)
             return SortGroups(a, b, addonTable.CurrentSortBy, addonTable.CurrentIsAscending)
         end)
+        table.sort(pinnedGoneResults, function(a, b)
+            return (a._oakStableIndex or a.id or 0) < (b._oakStableIndex or b.id or 0)
+        end)
+        activeResults = sortableResults
+        for _, result in ipairs(pinnedGoneResults) do
+            local insertIndex = math.max(1, math.min(result._oakStableIndex or (#activeResults + 1), #activeResults + 1))
+            table.insert(activeResults, insertIndex, result)
+        end
+        for index, result in ipairs(activeResults) do
+            result._oakStableIndex = index
+        end
 
         -- Hide all sticky rows before re-rendering (data already cleared by the top-of-display loop)
         for _, row in ipairs(stickyRows) do row:Hide() end

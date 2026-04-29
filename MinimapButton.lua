@@ -185,7 +185,7 @@ local function CreateMinimapButton()
         return
     end
 
-    local button = CreateFrame("Button", "OakLFGSorterMinimapButton", Minimap)
+    local button = CreateFrame("Button", "SorterClassicMinimapButton", Minimap)
     minimapButton = button
     addonTable.MinimapButton = button
 
@@ -240,7 +240,7 @@ local function CreateMinimapButton()
 
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:SetText("Oakensoul LFG Sorter", 1, 1, 1)
+        GameTooltip:SetText("OAK LFG Sorter", 1, 1, 1)
         GameTooltip:AddLine("Left-click to open Oak's browser.", 1, 1, 1, true)
         GameTooltip:AddLine("Right-click to open Oak's options.", 1, 1, 1, true)
         GameTooltip:AddLine("Drag to move this button around the minimap.", 0.8, 0.8, 0.8, true)
