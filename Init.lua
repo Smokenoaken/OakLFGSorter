@@ -62,6 +62,7 @@ if OakLFGSorterDB.showRegions == nil then OakLFGSorterDB.showRegions = false end
 if OakLFGSorterDB.showRegionFlags == nil then OakLFGSorterDB.showRegionFlags = false end
 if OakLFGSorterDB.lowLatencyOnly == nil then OakLFGSorterDB.lowLatencyOnly = false end
 if OakLFGSorterDB.showPartyKeys == nil then OakLFGSorterDB.showPartyKeys = true end
+if OakLFGSorterDB.attachBrowserTooltipToCursor == nil then OakLFGSorterDB.attachBrowserTooltipToCursor = false end
 if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "Friz Quadrata TT" end
 if OakLFGSorterDB.fontSize == nil then OakLFGSorterDB.fontSize = 12 end
 if OakLFGSorterDB.windowOpacity == nil then OakLFGSorterDB.windowOpacity = 0.85 end
@@ -112,6 +113,9 @@ end
 if type(charDB.regionFilters) ~= "table" then
     charDB.regionFilters = CopyBooleanMap(OakLFGSorterDB.regionFilters)
 end
+if type(charDB.hiddenDeclinedGroups) ~= "table" then
+    charDB.hiddenDeclinedGroups = {}
+end
 if type(charDB.applicantClassFilters) ~= "table" then
     charDB.applicantClassFilters = {}
 end
@@ -151,6 +155,12 @@ function addonTable.GetApplicantClassFilters()
     local db = addonTable.GetCharacterDB()
     db.applicantClassFilters = db.applicantClassFilters or {}
     return db.applicantClassFilters
+end
+
+function addonTable.GetHiddenDeclinedGroups()
+    local db = addonTable.GetCharacterDB()
+    db.hiddenDeclinedGroups = db.hiddenDeclinedGroups or {}
+    return db.hiddenDeclinedGroups
 end
 
 function addonTable.GetApplicantRoleFilters()
@@ -437,6 +447,49 @@ function addonTable.UpdateAuxPanelAnchors()
     AnchorOakSidePanel(addonTable.BrowserFilterPanel)
     AnchorOakSidePanel(addonTable.SupportersPanel)
     AnchorOakSidePanel(addonTable.OptionsPanel)
+end
+
+function addonTable.GetRightmostOakPanel()
+    local candidates = {
+        addonTable.OAK_LFG,
+        addonTable.MythicPlusPanel,
+        addonTable.FilterPanel,
+        addonTable.BrowserFilterPanel,
+        addonTable.SupportersPanel,
+        addonTable.OptionsPanel,
+        addonTable.SearchFilterPanel,
+    }
+
+    local bestFrame = addonTable.OAK_LFG
+    local bestRight = nil
+    for _, frame in ipairs(candidates) do
+        if frame and frame.IsShown and frame:IsShown() and frame.GetRight then
+            local right = frame:GetRight()
+            if right and (not bestRight or right > bestRight) then
+                bestRight = right
+                bestFrame = frame
+            end
+        end
+    end
+
+    return bestFrame or addonTable.OAK_LFG
+end
+
+function addonTable.AnchorBrowserTooltip(tooltip, owner)
+    if not tooltip then
+        return
+    end
+
+    local tooltipOwner = owner or UIParent
+    if OakLFGSorterDB and OakLFGSorterDB.attachBrowserTooltipToCursor then
+        tooltip:SetOwner(tooltipOwner, "ANCHOR_CURSOR_RIGHT")
+        return
+    end
+
+    local anchorTarget = addonTable.GetRightmostOakPanel and addonTable.GetRightmostOakPanel() or addonTable.OAK_LFG or tooltipOwner
+    tooltip:SetOwner(tooltipOwner, "ANCHOR_NONE")
+    tooltip:ClearAllPoints()
+    tooltip:SetPoint("TOPLEFT", anchorTarget, "TOPRIGHT", 8, -8)
 end
 
 local ROLE_REMAINING_KEYS = {

@@ -3197,7 +3197,11 @@ CreateRow = function(index, parentOverride, prevRowOverride)
         self.hoverBg:Show() 
 
         if self.searchResultID and self.searchResult then
-            GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
+            if addonTable.AnchorBrowserTooltip then
+                addonTable.AnchorBrowserTooltip(GameTooltip, self)
+            else
+                GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
+            end
             GameTooltip:ClearLines()
             self._oakShiftTooltipState = IsShiftKeyDown and IsShiftKeyDown() or false
             self:SetScript("OnUpdate", function(widget)
@@ -3471,6 +3475,11 @@ CreateRow = function(index, parentOverride, prevRowOverride)
                 if GameTooltip:NumLines() > 0 then GameTooltip:AddLine(" ") end
                 GameTooltip:AddLine("Applicant Note:", 1, 0.8, 0)
                 GameTooltip:AddLine(self.fullComment, 0.85, 0.85, 0.85, true) 
+            end
+
+            if RaiderIO and RaiderIO.ShowProfile and name and name ~= "" then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Hold Shift for full Raider.IO profile", 0.50, 0.50, 0.50)
             end
             
             GameTooltip:Show()

@@ -698,7 +698,7 @@ function addonTable.ResultPassesBrowserFilters(result)
 
     local runtime = addonTable._browserRuntimeFilters
     local filters = (runtime and runtime.filters) or BrowserFilterState()
-    if filters.hideDeclined and string.find(result.applicationStatus or "", "declined", 1, true) then
+    if filters.hideDeclined and addonTable.IsSearchResultHiddenByDeclineMemory and addonTable.IsSearchResultHiddenByDeclineMemory(result) then
         return false
     end
     if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(result) then
@@ -3965,16 +3965,24 @@ local optionsPartyKeysLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "Sor
 optionsPartyKeysLabel:SetPoint("LEFT", optionsPartyKeysBox, "RIGHT", 8, 0)
 optionsPartyKeysLabel:SetText("Show Party Keys")
 
+local optionsBrowserTooltipBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
+optionsBrowserTooltipBox:SetSize(16, 16)
+optionsBrowserTooltipBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+optionsBrowserTooltipBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -152)
+local optionsBrowserTooltipLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+optionsBrowserTooltipLabel:SetPoint("LEFT", optionsBrowserTooltipBox, "RIGHT", 8, 0)
+optionsBrowserTooltipLabel:SetText("Tooltip on Cursor")
+
 local optionsKeepGoneBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
 optionsKeepGoneBox:SetSize(16, 16)
 optionsKeepGoneBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-optionsKeepGoneBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -152)
+optionsKeepGoneBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -174)
 local optionsKeepGoneLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsKeepGoneLabel:SetPoint("LEFT", optionsKeepGoneBox, "RIGHT", 8, 0)
 optionsKeepGoneLabel:SetText("Keep Gone")
 
 local optionsThemeModeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
-optionsThemeModeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -176)
+optionsThemeModeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -198)
 optionsThemeModeLabel:SetText("Theme")
 local optionsThemeModeNotice = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 optionsThemeModeNotice:SetPoint("LEFT", optionsThemeModeLabel, "RIGHT", 8, 0)
@@ -4293,6 +4301,22 @@ optionsPartyKeysBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
+optionsBrowserTooltipBox:SetScript("OnClick", function()
+    OakLFGSorterDB.attachBrowserTooltipToCursor = not (OakLFGSorterDB.attachBrowserTooltipToCursor == true)
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end)
+optionsBrowserTooltipBox:SetScript("OnEnter", function(self)
+    ApplyMinimapToggleVisual(self, optionsBrowserTooltipLabel, OakLFGSorterDB.attachBrowserTooltipToCursor == true)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Tooltip on Cursor", 1, 1, 1)
+    GameTooltip:AddLine("When enabled, browser row tooltips follow the mouse cursor. When disabled, they anchor to the right of Oak's rightmost visible panel.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsBrowserTooltipBox:SetScript("OnLeave", function()
+    ApplyMinimapToggleVisual(optionsBrowserTooltipBox, optionsBrowserTooltipLabel, OakLFGSorterDB.attachBrowserTooltipToCursor == true)
+    GameTooltip:Hide()
+end)
+
 optionsKeepGoneBox:SetScript("OnClick", function()
     local filters = BrowserFilterState()
     filters.keepUnavailable = not (filters.keepUnavailable == true)
@@ -4532,7 +4556,7 @@ function addonTable.UpdateOptionsRegionLayout()
         end
     end
 
-    local y = -176
+    local y = -198
     SetTopLeft(optionsThemeModeLabel, 15, y)
     SetTopLeft(optionsThemeModeButton, 15, y - 18)
     y = y - 44
@@ -4642,6 +4666,7 @@ local function RefreshOptionsPanel()
     ApplySpecToggleVisual(optionsSpecBox, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
     ApplyMinimapToggleVisual(optionsMinimapBox, optionsMinimapLabel, not (OakLFGSorterDB and OakLFGSorterDB.hideMinimapButton == true))
     ApplyMinimapToggleVisual(optionsPartyKeysBox, optionsPartyKeysLabel, OakLFGSorterDB.showPartyKeys == true)
+    ApplyMinimapToggleVisual(optionsBrowserTooltipBox, optionsBrowserTooltipLabel, OakLFGSorterDB.attachBrowserTooltipToCursor == true)
     do
         local filters = BrowserFilterState()
         ApplyNeutralOptionsToggleVisual(optionsKeepGoneBox, optionsKeepGoneLabel, filters.keepUnavailable == true)

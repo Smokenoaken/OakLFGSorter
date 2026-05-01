@@ -417,6 +417,177 @@ addonTable.NormalizeApplicationStatus = NormalizeApplicationStatus
 addonTable.IsAppliedStatus = IsAppliedStatus
 addonTable.IsDeclinedStatus = IsDeclinedStatus
 
+local DECLINED_MEMORY_TTL_SECONDS = 12 * 60 * 60
+local DECLINED_MEMORY_MAX_ENTRIES = 200
+
+local function NormalizeDeclinedMemoryToken(value)
+    value = strlower(tostring(value or ""))
+    value = value:gsub("%s+", " ")
+    value = value:gsub("^%s+", "")
+    value = value:gsub("%s+$", "")
+    return value
+end
+
+local function BuildDeclinedMemoryKey(result)
+    if type(result) ~= "table" then
+        return nil
+    end
+
+    local leaderName = NormalizeDeclinedMemoryToken(result.leaderName)
+    local activityID = tonumber(result.activityID) or 0
+    local title = NormalizeDeclinedMemoryToken(result.name ~= "" and result.name or result.displayName)
+    local comment = NormalizeDeclinedMemoryToken(result.comment)
+
+    if leaderName == "" and activityID == 0 and title == "" and comment == "" then
+        return nil
+    end
+
+    return table.concat({
+        leaderName,
+        tostring(activityID),
+        title,
+        comment,
+    }, "|")
+end
+
+function addonTable.GetDeclinedMemoryKey(result)
+    return BuildDeclinedMemoryKey(result)
+end
+
+local function GetDeclinedMemoryNow()
+    if type(time) == "function" then
+        return tonumber(time()) or 0
+    end
+    return 0
+end
+
+local function GetDeclinedMemoryEntryTimestamp(entry)
+    if type(entry) == "number" then
+        return entry
+    end
+    if entry == true then
+        return GetDeclinedMemoryNow()
+    end
+    if type(entry) == "table" then
+        return tonumber(entry.at or entry.time or entry.ts or entry.timestamp) or 0
+    end
+    return 0
+end
+
+local function PruneDeclinedMemory(hidden)
+    if type(hidden) ~= "table" then
+        return hidden
+    end
+
+    local now = GetDeclinedMemoryNow()
+    local entries = {}
+
+    for key, value in pairs(hidden) do
+        local stamp = GetDeclinedMemoryEntryTimestamp(value)
+        if stamp > 0 and (now <= 0 or (now - stamp) <= DECLINED_MEMORY_TTL_SECONDS) then
+            hidden[key] = stamp
+            entries[#entries + 1] = { key = key, stamp = stamp }
+        else
+            hidden[key] = nil
+        end
+    end
+
+    if #entries <= DECLINED_MEMORY_MAX_ENTRIES then
+        return hidden
+    end
+
+    table.sort(entries, function(a, b)
+        return a.stamp > b.stamp
+    end)
+
+    for index = DECLINED_MEMORY_MAX_ENTRIES + 1, #entries do
+        hidden[entries[index].key] = nil
+    end
+
+    return hidden
+end
+
+function addonTable.IsSearchResultHiddenByDeclineMemory(result)
+    local hidden = addonTable.GetHiddenDeclinedGroups and addonTable.GetHiddenDeclinedGroups() or nil
+    if type(hidden) ~= "table" or type(result) ~= "table" then
+        return false
+    end
+
+    PruneDeclinedMemory(hidden)
+
+    if result.id and hidden["id:" .. tostring(result.id)] then
+        return true
+    end
+
+    local memoryKey = result.declinedMemoryKey or BuildDeclinedMemoryKey(result)
+    if memoryKey and hidden["key:" .. memoryKey] then
+        return true
+    end
+
+    return false
+end
+
+function addonTable.RememberDeclinedSearchResult(result)
+    if type(result) ~= "table" then
+        return false
+    end
+
+    local hidden = addonTable.GetHiddenDeclinedGroups and addonTable.GetHiddenDeclinedGroups() or nil
+    if type(hidden) ~= "table" then
+        return false
+    end
+
+    local now = GetDeclinedMemoryNow()
+    PruneDeclinedMemory(hidden)
+
+    local remembered = false
+    if result.id then
+        hidden["id:" .. tostring(result.id)] = now
+        remembered = true
+    end
+
+    local memoryKey = result.declinedMemoryKey or BuildDeclinedMemoryKey(result)
+    if memoryKey and memoryKey ~= "" then
+        hidden["key:" .. memoryKey] = now
+        result.declinedMemoryKey = memoryKey
+        remembered = true
+    end
+
+    result.hiddenByDeclineMemory = remembered or result.hiddenByDeclineMemory
+    return remembered
+end
+
+function addonTable.ClearDeclinedSearchResultMemory(result)
+    if type(result) ~= "table" then
+        return false
+    end
+
+    local hidden = addonTable.GetHiddenDeclinedGroups and addonTable.GetHiddenDeclinedGroups() or nil
+    if type(hidden) ~= "table" then
+        return false
+    end
+
+    PruneDeclinedMemory(hidden)
+
+    local changed = false
+    if result.id then
+        local idKey = "id:" .. tostring(result.id)
+        if hidden[idKey] ~= nil then
+            hidden[idKey] = nil
+            changed = true
+        end
+    end
+
+    local memoryKey = result.declinedMemoryKey or BuildDeclinedMemoryKey(result)
+    if memoryKey and hidden["key:" .. memoryKey] ~= nil then
+        hidden["key:" .. memoryKey] = nil
+        changed = true
+    end
+
+    result.hiddenByDeclineMemory = nil
+    return changed
+end
+
 local function GetSearchResultActivityID(resultInfo, searchResultID)
     if not resultInfo then
         return nil
@@ -1146,6 +1317,13 @@ local function FetchSearchResultData()
                     -- leaderProfile intentionally omitted: fetched lazily at tooltip time via leaderName
                 }
 
+                entry.declinedMemoryKey = BuildDeclinedMemoryKey(entry)
+                entry.hiddenByDeclineMemory = addonTable.IsSearchResultHiddenByDeclineMemory and addonTable.IsSearchResultHiddenByDeclineMemory(entry) or false
+                if entry.isDeclined and addonTable.RememberDeclinedSearchResult then
+                    addonTable.RememberDeclinedSearchResult(entry)
+                    entry.hiddenByDeclineMemory = true
+                end
+
                 liveResultsByID[searchResultID] = entry
                 liveResultOrder[#liveResultOrder + 1] = searchResultID
                 signatureParts[#signatureParts + 1] = table.concat({
@@ -1417,14 +1595,29 @@ addonTable.GetMythicPlusScoreTargets = function()
         end
     end
 
-    if next(targets) == nil and (missingMapNames or missingMapData) and not addonTable.PendingScoreTargetRefresh then
-        addonTable.PendingScoreTargetRefresh = true
-        C_Timer.After(0.5, function()
-            addonTable.PendingScoreTargetRefresh = false
-            if addonTable.UpdateBrowserFilterPanel then
-                addonTable.UpdateBrowserFilterPanel()
-            end
-        end)
+    if next(targets) ~= nil then
+        addonTable.LastGoodMythicPlusScoreTargets = targets
+        addonTable.PendingScoreTargetRefresh = false
+        addonTable.ScoreTargetRefreshAttempts = 0
+        return targets
+    end
+
+    if (missingMapNames or missingMapData) and not addonTable.PendingScoreTargetRefresh then
+        local attempts = tonumber(addonTable.ScoreTargetRefreshAttempts) or 0
+        if attempts < 4 then
+            addonTable.PendingScoreTargetRefresh = true
+            addonTable.ScoreTargetRefreshAttempts = attempts + 1
+            C_Timer.After(0.5 * addonTable.ScoreTargetRefreshAttempts, function()
+                addonTable.PendingScoreTargetRefresh = false
+                if addonTable.UpdateBrowserFilterPanel then
+                    addonTable.UpdateBrowserFilterPanel()
+                end
+            end)
+        end
+    end
+
+    if type(addonTable.LastGoodMythicPlusScoreTargets) == "table" and next(addonTable.LastGoodMythicPlusScoreTargets) ~= nil then
+        return addonTable.LastGoodMythicPlusScoreTargets
     end
 
     return targets
@@ -1435,7 +1628,7 @@ function addonTable.GetAvailableBrowserActivities()
     local seen = {}
 
     local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode or "generic"
-    local scoreTargets = (mode == "mythic_plus") and addonTable.GetMythicPlusScoreTargets and addonTable.GetMythicPlusScoreTargets() or {}
+    local scoreTargets = ((mode == "mythic_plus" or mode == "dungeon") and addonTable.GetMythicPlusScoreTargets and addonTable.GetMythicPlusScoreTargets()) or {}
 
     -- ── M+ and dungeon mode: use C_ChallengeMode's map list as canonical source ──
     -- context.groupID is set to a specific dungeon's activity group (e.g. "Skyreach"),
@@ -2333,8 +2526,12 @@ function addonTable.ApplyToSearchResult(searchResultID)
         addonTable.SearchApplications[searchResultID] = "applied"
         for _, result in ipairs(addonTable.SearchResults or {}) do
             if result.id == searchResultID then
+                if addonTable.ClearDeclinedSearchResultMemory then
+                    addonTable.ClearDeclinedSearchResultMemory(result)
+                end
                 result.applicationStatus = "applied"
                 result.hasSelf = true
+                result.isDeclined = false
                 break
             end
         end
@@ -2346,8 +2543,12 @@ function addonTable.MarkSearchResultApplied(searchResultID)
     addonTable.SearchApplications[searchResultID] = "applied"
     for _, result in ipairs(addonTable.SearchResults or {}) do
         if result.id == searchResultID then
+            if addonTable.ClearDeclinedSearchResultMemory then
+                addonTable.ClearDeclinedSearchResultMemory(result)
+            end
             result.applicationStatus = "applied"
             result.hasSelf = true
+            result.isDeclined = false
             break
         end
     end
@@ -2688,6 +2889,17 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
                 if result.id == searchResultID then
                     result.applicationStatus = normalized
                     result.hasSelf = IsAppliedStatus(normalized)
+                    result.isDeclined = IsDeclinedStatus(normalized)
+                    if result.isDeclined then
+                        if addonTable.RememberDeclinedSearchResult then
+                            addonTable.RememberDeclinedSearchResult(result)
+                        end
+                        result.hiddenByDeclineMemory = true
+                    elseif addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(normalized) then
+                        if addonTable.ClearDeclinedSearchResultMemory then
+                            addonTable.ClearDeclinedSearchResultMemory(result)
+                        end
+                    end
                     break
                 end
             end
