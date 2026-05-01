@@ -34,6 +34,8 @@ addonTable.UtilityRoleOptions = addonTable.UtilityRoleOptions or {
 }
 local applicantRegionToggleBox
 local applicantRegionToggleLabel
+local applicantRegionFilterButtons = {}
+local applicantRegionFilterLabels = {}
 local browserRegionToggleBox
 local browserRegionToggleLabel
 local regionFilterButtons = {}
@@ -75,31 +77,44 @@ end
 
 local function SetQuickFilterButtonState(button, isActive)
     if not button then return end
+    local isModernTheme = addonTable.IsModernTheme and addonTable.IsModernTheme()
+    local textR, textG, textB = 1, 0.82, 0
+    if isModernTheme then
+        textR = addonTable.ClassColor.r or 1
+        textG = addonTable.ClassColor.g or 1
+        textB = addonTable.ClassColor.b or 1
+    end
 
     if isActive then
-        if button.SetButtonState then
+        if (not isModernTheme) and button.SetButtonState then
             button:SetButtonState("PUSHED", true)
         end
-        if button.LockHighlight then
+        if (not isModernTheme) and button.LockHighlight then
             button:LockHighlight()
         end
         button:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
         if button.text then
+            if button.text.SetFontObject then
+                button.text:SetFontObject("SorterClassic_FontRegular")
+            end
             button.text:ClearAllPoints()
-            button.text:SetTextColor(1, 0.82, 0, 1)
-            button.text:SetPoint("CENTER", button, "CENTER", 1, -1)
+            button.text:SetTextColor(textR, textG, textB, 1)
+            button.text:SetPoint("CENTER", button, "CENTER", isModernTheme and 0 or 1, isModernTheme and 0 or -1)
         end
     else
-        if button.SetButtonState then
+        if (not isModernTheme) and button.SetButtonState then
             button:SetButtonState("NORMAL", false)
         end
-        if button.UnlockHighlight then
+        if (not isModernTheme) and button.UnlockHighlight then
             button:UnlockHighlight()
         end
         button:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
         if button.text then
+            if button.text.SetFontObject then
+                button.text:SetFontObject("SorterClassic_FontRegular")
+            end
             button.text:ClearAllPoints()
-            button.text:SetTextColor(1, 0.82, 0, 1)
+            button.text:SetTextColor(textR, textG, textB, 1)
             button.text:SetPoint("CENTER", button, "CENTER", 0, 0)
         end
     end
@@ -315,6 +330,19 @@ local function ResultMatchesDifficulty(result, difficulty)
         return true
     end
 
+    if type(difficulty) == "table" then
+        local hasSelection = false
+        for selectedDifficulty, isEnabled in pairs(difficulty) do
+            if isEnabled and selectedDifficulty ~= "ANY" then
+                hasSelection = true
+                if ResultMatchesDifficulty(result, selectedDifficulty) then
+                    return true
+                end
+            end
+        end
+        return not hasSelection
+    end
+
     if difficulty == "ANY" then
         return true
     end
@@ -329,6 +357,33 @@ local function ResultMatchesDifficulty(result, difficulty)
         return result.difficultyID == 1 or result.difficultyID == 14 or result.difficultyToken == "NORMAL"
     end
 
+    return true
+end
+
+local function ResultMatchesPlaystyle(result, playstyle)
+    if type(playstyle) == "table" then
+        local hasSelection = false
+        for selectedPlaystyle, isEnabled in pairs(playstyle) do
+            if isEnabled and selectedPlaystyle ~= "ANY" then
+                hasSelection = true
+                if ResultMatchesPlaystyle(result, selectedPlaystyle) then
+                    return true
+                end
+            end
+        end
+        return not hasSelection
+    end
+
+    if not playstyle or playstyle == "ANY" then
+        return true
+    end
+
+    local freshInfo = C_LFGList.GetSearchResultInfo and C_LFGList.GetSearchResultInfo(result.id)
+    local rawPS = freshInfo and tonumber(freshInfo.generalPlaystyle) or 0
+    if playstyle == "COMPETITIVE" then return rawPS == 3 end
+    if playstyle == "RELAXED" then return rawPS == 2 end
+    if playstyle == "LEARNING" then return rawPS == 1 end
+    if playstyle == "CARRY" then return rawPS == 4 end
     return true
 end
 
@@ -674,19 +729,8 @@ function addonTable.ResultPassesBrowserFilters(result)
     if not ResultMatchesMinimumRating(result) then
         return false
     end
-    local filterPlaystyle = filters.playstyle
-    if filterPlaystyle and filterPlaystyle ~= "ANY" then
-        -- generalPlaystyle is async (like PVP rating) — re-fetch fresh rather than using cached value.
-        -- Values: 1=Learning, 2=Relaxed, 3=Competitive, 4=Carry
-        local freshInfo = C_LFGList.GetSearchResultInfo and C_LFGList.GetSearchResultInfo(result.id)
-        local rawPS = freshInfo and tonumber(freshInfo.generalPlaystyle) or 0
-        local playstyleMatch = false
-        if filterPlaystyle == "COMPETITIVE" and rawPS == 3 then playstyleMatch = true
-        elseif filterPlaystyle == "RELAXED"  and rawPS == 2 then playstyleMatch = true
-        elseif filterPlaystyle == "LEARNING" and rawPS == 1 then playstyleMatch = true
-        elseif filterPlaystyle == "CARRY"    and rawPS == 4 then playstyleMatch = true
-        end
-        if not playstyleMatch then return false end
+    if not ResultMatchesPlaystyle(result, filters.playstyle) then
+        return false
     end
     if filters.partyFit and not ResultMatchesPartyFit(result, runtime) then
         return false
@@ -972,6 +1016,7 @@ local function SyncBrowserNativeDifficulty()
 
     local filters = BrowserFilterState()
     local diff = filters.difficulty or "ANY"
+    local selected = type(diff) == "table" and diff or nil
 
     local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
     if not ok or type(adv) ~= "table" then adv = {} end
@@ -980,10 +1025,10 @@ local function SyncBrowserNativeDifficulty()
     -- Always write exactly what the user selected — never override based on detected mode,
     -- because isMythicPlusActivity=true on current-season dungeons causes mode detection to
     -- return "mythic_plus" even during a plain Normal/Heroic/Mythic dungeon search.
-    adv.difficultyNormal     = (diff == "NORMAL")      and true or nil
-    adv.difficultyHeroic     = (diff == "HEROIC")      and true or nil
-    adv.difficultyMythic     = (diff == "MYTHIC")      and true or nil
-    adv.difficultyMythicPlus = (diff == "MYTHIC_PLUS") and true or nil
+    adv.difficultyNormal     = ((selected and selected.NORMAL) or diff == "NORMAL") and true or nil
+    adv.difficultyHeroic     = ((selected and selected.HEROIC) or diff == "HEROIC") and true or nil
+    adv.difficultyMythic     = ((selected and selected.MYTHIC) or diff == "MYTHIC") and true or nil
+    adv.difficultyMythicPlus = ((selected and selected.MYTHIC_PLUS) or diff == "MYTHIC_PLUS") and true or nil
 
     pcall(C_LFGList.SaveAdvancedFilter, adv)
     -- Difficulty filter is server-side; the user must click Refresh to apply it.
@@ -998,20 +1043,21 @@ local function SyncBrowserNativePlaystyle()
 
     local filters = BrowserFilterState()
     local ps = filters.playstyle or "ANY"
+    local selected = type(ps) == "table" and ps or nil
 
     local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
     if not ok or type(adv) ~= "table" then adv = {} end
 
-    if ps == "ANY" then
+    if ps == "ANY" or (selected and next(selected) == nil) then
         adv.generalPlaystyle1 = nil
         adv.generalPlaystyle2 = nil
         adv.generalPlaystyle3 = nil
         adv.generalPlaystyle4 = nil
     else
-        adv.generalPlaystyle1 = (ps == "LEARNING")     and true or false
-        adv.generalPlaystyle2 = (ps == "RELAXED")      and true or false
-        adv.generalPlaystyle3 = (ps == "COMPETITIVE")  and true or false
-        adv.generalPlaystyle4 = (ps == "CARRY")        and true or false
+        adv.generalPlaystyle1 = ((selected and selected.LEARNING) or ps == "LEARNING") and true or false
+        adv.generalPlaystyle2 = ((selected and selected.RELAXED) or ps == "RELAXED") and true or false
+        adv.generalPlaystyle3 = ((selected and selected.COMPETITIVE) or ps == "COMPETITIVE") and true or false
+        adv.generalPlaystyle4 = ((selected and selected.CARRY) or ps == "CARRY") and true or false
     end
 
     pcall(C_LFGList.SaveAdvancedFilter, adv)
@@ -1205,6 +1251,12 @@ local function ToggleSharedRegionSetting()
 end
 
 local function SyncSharedLowLatencySetting()
+    for _, regionCode in ipairs(addonTable.GetVisibleRegionFilterOrder and addonTable.GetVisibleRegionFilterOrder()
+        or addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder()
+        or {}) do
+        ApplySharedRegionToggleVisual(regionFilterButtons[regionCode], regionFilterLabels[regionCode], addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+        ApplySharedRegionToggleVisual(applicantRegionFilterButtons[regionCode], applicantRegionFilterLabels[regionCode], addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+    end
     if addonTable.RefreshOptionsPanel then
         addonTable.RefreshOptionsPanel()
     end
@@ -1586,7 +1638,7 @@ end
 
 local filterPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
 addonTable.FilterPanel = filterPanel
-filterPanel:SetSize(190, 444) 
+filterPanel:SetSize(210, 560)
 filterPanel:SetPoint("TOPLEFT", OAK_LFG, "TOPRIGHT", -8, 0)
 filterPanel:Hide()
 filterPanel:SetFrameLevel(OAK_LFG:GetFrameLevel() - 1) 
@@ -1625,7 +1677,7 @@ do
 end
 ApplyFlyoutPanelChrome(filterPanel, addonTable.FilterTitle)
 
-local yOffset = -35
+local yOffset = -45
 local rolesToFilter = { {"TANK", L["Tank"]}, {"HEALER", L["Healer"]}, {"DAMAGER", "DPS"} }
 
 for _, rData in ipairs(rolesToFilter) do
@@ -1741,11 +1793,70 @@ end
 addonTable.FilterBottomDivider = filterPanel:CreateTexture(nil, "ARTWORK")
 addonTable.FilterBottomDivider:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
 addonTable.FilterBottomDivider:SetSize(160, 1)
-addonTable.FilterBottomDivider:SetPoint("BOTTOM", filterPanel, "BOTTOM", 0, 82)
+
+local applicantRegionLabel = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+applicantRegionLabel:SetText("Regions")
+applicantRegionLabel:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
+
+local applicantRegionContainer = CreateFrame("Frame", nil, filterPanel)
+applicantRegionContainer:SetSize(180, 50)
+
+local function CreateApplicantRegionFilterOption(parent, regionCode, xOffset, yOffset)
+    local box = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    box:SetSize(14, 14)
+    box:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+    box:SetPoint("TOPLEFT", parent, "TOPLEFT", xOffset, yOffset)
+
+    local meta = addonTable.GetRegionMeta and addonTable.GetRegionMeta(regionCode) or { shortLabel = regionCode, label = regionCode }
+    local label = parent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
+    label:SetPoint("LEFT", box, "RIGHT", 4, 0)
+    label:SetText(meta.shortLabel or regionCode)
+
+    box:SetScript("OnClick", function()
+        ToggleSharedRegionFilter(regionCode)
+    end)
+    box:SetScript("OnEnter", function(self)
+        ApplySharedRegionToggleVisual(self, label, addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(meta.label or regionCode, 1, 1, 1)
+        GameTooltip:AddLine("Toggle whether Oak shows applicants from this region.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    box:SetScript("OnLeave", function()
+        ApplySharedRegionToggleVisual(box, label, addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+        GameTooltip:Hide()
+    end)
+
+    applicantRegionFilterButtons[regionCode] = box
+    applicantRegionFilterLabels[regionCode] = label
+end
+
+do
+    local regionOrder = addonTable.GetVisibleRegionFilterOrder and addonTable.GetVisibleRegionFilterOrder()
+        or addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder()
+        or {}
+    local regionHeaderY = classYOffset - 28
+    applicantRegionLabel:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, regionHeaderY)
+    applicantRegionContainer:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, regionHeaderY - 18)
+
+    for index, regionCode in ipairs(regionOrder) do
+        local column = (index - 1) % 2
+        local row = math.floor((index - 1) / 2)
+        local xOffset = column == 0 and 0 or 86
+        local yOffset = 0 - (row * 18)
+        CreateApplicantRegionFilterOption(applicantRegionContainer, regionCode, xOffset, yOffset)
+        ApplySharedRegionToggleVisual(applicantRegionFilterButtons[regionCode], applicantRegionFilterLabels[regionCode], addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+    end
+
+    local regionRows = math.max(1, math.ceil(#regionOrder / 2))
+    local containerHeight = 14 + math.max(0, regionRows - 1) * 18
+    applicantRegionContainer:SetHeight(containerHeight)
+    addonTable.FilterBottomDivider:SetPoint("TOP", applicantRegionContainer, "BOTTOM", 0, -12)
+end
 
 -- Decline Filtered Button
 local btnDecline = addonTable.CreateFlatButton(filterPanel, "Decline Filtered", 160)
-btnDecline:SetPoint("BOTTOM", filterPanel, "BOTTOM", 0, 54)
+btnDecline:SetPoint("BOTTOM", filterPanel, "BOTTOM", 0, 72)
 btnDecline:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(1, 0.2, 0.2, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -1794,7 +1905,7 @@ autoHideRolesBox:SetScript("OnClick", function(self)
 end)
 
 local mutePingBox = CreateOakToggleBox(filterPanel, "muteApplicantPing", OakLFGSorterDB)
-mutePingBox:SetPoint("BOTTOMLEFT", filterPanel, "BOTTOMLEFT", 15, 10)
+mutePingBox:SetPoint("BOTTOMLEFT", filterPanel, "BOTTOMLEFT", 15, 8)
 
 local mutePingText = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 mutePingText:SetPoint("LEFT", mutePingBox, "RIGHT", 8, 0)
@@ -1939,14 +2050,30 @@ function BrowserFilterState()
     local validDifficulty = {
         ANY = true, NORMAL = true, HEROIC = true, MYTHIC = true, MYTHIC_PLUS = true,
     }
-    if not validDifficulty[filters.difficulty] then
+    if type(filters.difficulty) == "table" then
+        local normalizedDifficulty = {}
+        for key, value in pairs(filters.difficulty) do
+            if validDifficulty[key] and key ~= "ANY" and value then
+                normalizedDifficulty[key] = true
+            end
+        end
+        filters.difficulty = next(normalizedDifficulty) and normalizedDifficulty or "ANY"
+    elseif not validDifficulty[filters.difficulty] then
         filters.difficulty = "ANY"
     end
 
     local validPlaystyle = {
         ANY = true, COMPETITIVE = true, RELAXED = true, LEARNING = true, CARRY = true,
     }
-    if not validPlaystyle[filters.playstyle] then
+    if type(filters.playstyle) == "table" then
+        local normalizedPlaystyle = {}
+        for key, value in pairs(filters.playstyle) do
+            if validPlaystyle[key] and key ~= "ANY" and value then
+                normalizedPlaystyle[key] = true
+            end
+        end
+        filters.playstyle = next(normalizedPlaystyle) and normalizedPlaystyle or "ANY"
+    elseif not validPlaystyle[filters.playstyle] then
         filters.playstyle = "ANY"
     end
 
@@ -2014,15 +2141,42 @@ local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLa
     button:SetFrameLevel((parent:GetFrameLevel() or 1) + 2)
     table.insert(activeBrowserDropdowns, button)
 
+    local function IsMultiSelectEnabled()
+        return filterKey == "difficulty" or filterKey == "playstyle"
+    end
+
+    local function GetSelectedSet()
+        local filters = BrowserFilterState()
+        local value = filters[filterKey]
+        if type(value) == "table" then
+            return value
+        end
+        return nil
+    end
+
     local function UpdateText()
         local filters = BrowserFilterState()
         local selectedValue = filters[filterKey]
         local selectedLabel = anyLabel
+        if IsMultiSelectEnabled() and type(selectedValue) == "table" then
+            local selectedLabels = {}
+            for _, option in ipairs(getOptions()) do
+                if option.value ~= "ANY" and selectedValue[option.value] then
+                    selectedLabels[#selectedLabels + 1] = option.label
+                end
+            end
+            if #selectedLabels == 1 then
+                selectedLabel = selectedLabels[1]
+            elseif #selectedLabels > 1 then
+                selectedLabel = tostring(#selectedLabels) .. " selected"
+            end
+        else
         for _, option in ipairs(getOptions()) do
             if option.value == selectedValue then
                 selectedLabel = option.label
                 break
             end
+        end
         end
         local textWidget = button.Text or (button.GetFontString and button:GetFontString()) or button.text
         if textWidget and textWidget.SetText then
@@ -2039,12 +2193,33 @@ local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLa
         local filters = BrowserFilterState()
 
         local function IsSelected(option)
+            if IsMultiSelectEnabled() then
+                local selectedSet = GetSelectedSet()
+                if option.value == "ANY" then
+                    return not selectedSet or next(selectedSet) == nil
+                end
+                return selectedSet and selectedSet[option.value] == true or false
+            end
             return filters[button.filterKey] == option.value
         end
 
         local function SelectOption(option)
                 local filters = BrowserFilterState()
-                filters[button.filterKey] = option.value
+                if IsMultiSelectEnabled() then
+                    if option.value == "ANY" then
+                        filters[button.filterKey] = "ANY"
+                    else
+                        local selectedSet = GetSelectedSet() or {}
+                        selectedSet[option.value] = not selectedSet[option.value] or nil
+                        if next(selectedSet) == nil then
+                            filters[button.filterKey] = "ANY"
+                        else
+                            filters[button.filterKey] = selectedSet
+                        end
+                    end
+                else
+                    filters[button.filterKey] = option.value
+                end
                 UpdateText()
                 -- Sync to Blizzard's native advanced filter when relevant dropdowns change.
                 if button.filterKey == "difficulty" then
@@ -2063,11 +2238,18 @@ local function CreateBrowserDropdown(parent, width, getOptions, filterKey, anyLa
                     end
                 end
                 RefreshBrowserFilters()
+                if IsMultiSelectEnabled() then
+                    return nil
+                end
                 return MenuResponse and (MenuResponse.CloseAll or MenuResponse.Close) or nil
         end
 
         for _, option in ipairs(options) do
-            rootDescription:CreateRadio(option.label or "", IsSelected, SelectOption, option)
+            if IsMultiSelectEnabled() then
+                rootDescription:CreateCheckbox(option.label or "", IsSelected, SelectOption, option)
+            else
+                rootDescription:CreateRadio(option.label or "", IsSelected, SelectOption, option)
+            end
         end
     end)
 
@@ -2325,9 +2507,8 @@ for _, toggleInfo in ipairs(browserToggleKeys) do
     local tooltipInfo = browserToggleTooltips[toggleInfo.key]
     if tooltipInfo then
         local function ShowBrowserToggleTooltip(self)
-            if self.SetBackdropBorderColor then
-                self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-            end
+            local filters = BrowserFilterState()
+            self:SetState(filters[toggleInfo.key] == true)
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(tooltipInfo.title, 1, 1, 1)
             GameTooltip:AddLine(tooltipInfo.body, 1, 1, 1, true)
@@ -2338,9 +2519,8 @@ for _, toggleInfo in ipairs(browserToggleKeys) do
         end
 
         local function HideBrowserToggleTooltip(self)
-            if self.SetBackdropBorderColor then
-                self:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
-            end
+            local filters = BrowserFilterState()
+            self:SetState(filters[toggleInfo.key] == true)
             GameTooltip:Hide()
         end
 
@@ -3046,7 +3226,15 @@ function addonTable.UpdateBrowserFilterPanel()
     for _, option in ipairs(GetBrowserDifficultyOptions()) do
         validDifficulty[option.value] = true
     end
-    if not validDifficulty[filters.difficulty] then
+    if type(filters.difficulty) == "table" then
+        local normalizedDifficulty = {}
+        for key, value in pairs(filters.difficulty) do
+            if validDifficulty[key] and key ~= "ANY" and value then
+                normalizedDifficulty[key] = true
+            end
+        end
+        filters.difficulty = next(normalizedDifficulty) and normalizedDifficulty or "ANY"
+    elseif not validDifficulty[filters.difficulty] then
         filters.difficulty = "ANY"
     end
 
@@ -3790,7 +3978,7 @@ optionsThemeModeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -176)
 optionsThemeModeLabel:SetText("Theme")
 local optionsThemeModeNotice = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 optionsThemeModeNotice:SetPoint("LEFT", optionsThemeModeLabel, "RIGHT", 8, 0)
-optionsThemeModeNotice:SetText("|cff888888Changing this will Force a Reload|r")
+optionsThemeModeNotice:SetText("|cffffff00Changing Themes will Force a Reload|r")
 local optionsThemeModeButton = addonTable.CreateThemeModeDropdown(optionsPanel, 170)
 optionsThemeModeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -172)
 
@@ -4271,6 +4459,41 @@ optionsOpacitySlider:SetScript("OnLeave", function()
 end)
 optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWindowOpacity() or 0.85)
 
+local optionsFrameStrataLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+optionsFrameStrataLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -620)
+optionsFrameStrataLabel:SetText("Frame Strata")
+local optionsFrameStrataButton, optionsFrameStrataList = addonTable.CreateSimpleDropdown(
+    optionsPanel,
+    170,
+    function()
+        local current = addonTable.GetFrameStrata and addonTable.GetFrameStrata() or "DIALOG"
+        for _, option in ipairs(addonTable.GetFrameStrataOptions and addonTable.GetFrameStrataOptions() or {}) do
+            if option.id == current then
+                return option.label
+            end
+        end
+        return current
+    end,
+    function()
+        return addonTable.GetFrameStrataOptions and addonTable.GetFrameStrataOptions() or {}
+    end,
+    function(id)
+        if addonTable.SetFrameStrataPreference then
+            addonTable.SetFrameStrataPreference(id)
+        end
+    end
+)
+optionsFrameStrataButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -638)
+optionsFrameStrataButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("Frame Strata", 1, 1, 1)
+    GameTooltip:AddLine("Controls how high Oak sits relative to other UI windows. Lower strata lets other frames appear above it.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsFrameStrataButton:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
 local optionsScaleLabel = addonTable.ScaleLabel
 local optionsScaleSlider = addonTable.ScaleSlider
 local optionsScaleEdit = addonTable.ScaleEdit
@@ -4369,8 +4592,13 @@ function addonTable.UpdateOptionsRegionLayout()
     optionsOpacityValue:SetPoint("LEFT", optionsOpacityLabel, "RIGHT", 12, 0)
     optionsOpacitySlider:ClearAllPoints()
     optionsOpacitySlider:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, opacityTop - 18)
+    local strataTop = opacityTop - 42
+    optionsFrameStrataLabel:ClearAllPoints()
+    optionsFrameStrataLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, strataTop)
+    optionsFrameStrataButton:ClearAllPoints()
+    optionsFrameStrataButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, strataTop - 18)
     if optionsScaleLabel and optionsScaleSlider and optionsScaleEdit and optionsScaleReset then
-        local scaleTop = opacityTop - 42
+        local scaleTop = strataTop - 52
         optionsScaleLabel:ClearAllPoints()
         optionsScaleLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, scaleTop)
         if optionsScaleValue then
@@ -4386,7 +4614,7 @@ function addonTable.UpdateOptionsRegionLayout()
         local panelHeight = math.max(560, math.abs(scaleTop - 18) + 74)
         optionsPanel:SetHeight(panelHeight)
     else
-        local panelHeight = math.max(500, math.abs(opacityTop - 18) + 56)
+        local panelHeight = math.max(500, math.abs(strataTop - 18) + 56)
         optionsPanel:SetHeight(panelHeight)
     end
 end
@@ -4459,6 +4687,9 @@ local function RefreshOptionsPanel()
     if addonTable.GetWindowOpacity then
         optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity())
     end
+    if optionsFrameStrataButton and optionsFrameStrataButton.RefreshSelection then
+        optionsFrameStrataButton:RefreshSelection()
+    end
     if optionsScaleValue then
         optionsScaleValue:Hide()
     end
@@ -4490,6 +4721,10 @@ addonTable.OptionsBindingsEventFrame:SetScript("OnEvent", function()
         addonTable.RefreshOptionsPanel()
     end
 end)
+
+if addonTable.ApplyFrameStrata then
+    addonTable.ApplyFrameStrata()
+end
 
 addonTable.RegisterThemeRefresh("ui_filters_theme", function()
     if addonTable.ApplyPanelChrome then

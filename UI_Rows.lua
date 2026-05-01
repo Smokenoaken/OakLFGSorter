@@ -2747,6 +2747,139 @@ function addonTable.BuildSearchResultFriendNameList(result)
     return matches
 end
 
+function addonTable.NormalizeDungeonTooltipKey(text)
+    if addonTable.NormalizeSearchScoreTargetLabel then
+        return addonTable.NormalizeSearchScoreTargetLabel(text)
+    end
+    local normalized = strlower(tostring(text or ""))
+    normalized = normalized:gsub("%s*%(.-%)%s*", " ")
+    normalized = normalized:gsub("[^%w%s]", " ")
+    normalized = normalized:gsub("%s+", " ")
+    normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+    return normalized
+end
+
+function addonTable.FindDungeonBestFromRIOProfile(rioProfile, targetName, activityID)
+    local mPlus = rioProfile and rioProfile.mythicKeystoneProfile
+    local sortedDungeons = mPlus and mPlus.sortedDungeons
+    local targetKey = addonTable.NormalizeDungeonTooltipKey(targetName)
+    if type(sortedDungeons) ~= "table" then
+        return nil
+    end
+
+    for _, sortedDungeon in ipairs(sortedDungeons) do
+        local dungeon = sortedDungeon and (sortedDungeon.dungeon or sortedDungeon)
+        local matched = false
+        if dungeon and type(dungeon.lfd_activity_ids) == "table" and activityID then
+            for _, lfdActivityID in ipairs(dungeon.lfd_activity_ids) do
+                if tonumber(lfdActivityID) == tonumber(activityID) then
+                    matched = true
+                    break
+                end
+            end
+        end
+        local candidates = {
+            dungeon and dungeon.name,
+            dungeon and dungeon.mapName,
+            dungeon and dungeon.shortName,
+            dungeon and dungeon.mapShortName,
+            dungeon and dungeon.nameLocale,
+            dungeon and dungeon.shortNameLocale,
+        }
+        if not matched and targetKey ~= "" then
+            for _, candidate in ipairs(candidates) do
+                local candidateKey = addonTable.NormalizeDungeonTooltipKey(candidate)
+                if candidateKey ~= "" and (candidateKey == targetKey or candidateKey:find(targetKey, 1, true) or targetKey:find(candidateKey, 1, true)) then
+                    matched = true
+                    break
+                end
+            end
+        end
+        if matched then
+            return sortedDungeon
+        end
+    end
+
+    return nil
+end
+
+function addonTable.GetActiveListingDungeonName(entryInfo, activityID)
+    local candidates = {}
+    local listingContext = addonTable.CurrentListingContext
+    local contextActivityInfo = listingContext and listingContext.activityInfo or nil
+    if type(contextActivityInfo) == "table" then
+        candidates[#candidates + 1] = contextActivityInfo.shortName
+        candidates[#candidates + 1] = contextActivityInfo.fullName
+    end
+    if activityID and C_LFGList.GetActivityInfoTable then
+        local activityInfo = C_LFGList.GetActivityInfoTable(activityID)
+        if type(activityInfo) == "table" then
+            candidates[#candidates + 1] = activityInfo.shortName
+            candidates[#candidates + 1] = activityInfo.fullName
+        end
+    end
+    if type(entryInfo) == "table" then
+        candidates[#candidates + 1] = entryInfo.activityName
+    end
+
+    for _, candidate in ipairs(candidates) do
+        local key = addonTable.NormalizeDungeonTooltipKey(candidate)
+        if key ~= "" then
+            return candidate
+        end
+    end
+
+    return nil
+end
+
+function addonTable.GetDungeonUpgradeCount(data)
+    if type(data) ~= "table" then
+        return 0
+    end
+
+    local candidates = {
+        data.numChests,
+        data.numChestUpgrades,
+        data.chests,
+        data.upgradeChests,
+        data.numBonusChests,
+        data.bonusChests,
+        data.chestCount,
+        data.upgrades,
+        data.numUpgrades,
+        data.numKeystoneUpgrades,
+        data.keystoneUpgrades,
+        data.numLevelsAbove,
+        data.levelsAbove,
+        data.timewornUpgrade,
+        data.upgradeLevel,
+    }
+    for _, candidate in ipairs(candidates) do
+        local value = tonumber(candidate)
+        if value and value > 0 then
+            return math.floor(value)
+        end
+    end
+
+    return 0
+end
+
+function addonTable.FormatDungeonBestLine(level, mapName, data)
+    local bestLevel = tonumber(level) or 0
+    if bestLevel <= 0 then
+        return nil
+    end
+
+    local bestMapName = tostring(mapName or ""):gsub("%s*%(.-%)%s*$", "")
+    bestMapName = bestMapName:gsub("^%s+", ""):gsub("%s+$", "")
+    local levelText = string.format("|cffffffff%d|r", bestLevel)
+    if bestMapName ~= "" then
+        local mapText = string.format("|cffffa64d%s|r", bestMapName)
+        return levelText .. " " .. mapText
+    end
+    return levelText
+end
+
 -- Build the rich hover tooltip for a browser search-result row (screenshot 1 style).
 -- Shift-held is handled upstream and shows the full RIO profile panel instead.
 function addonTable.BuildBrowserGroupTooltip(result)
@@ -2874,7 +3007,8 @@ function addonTable.BuildBrowserGroupTooltip(result)
                                   or leaderPlayer.class or "?"
                 local specPart = (leaderPlayer.specName and leaderPlayer.specName ~= "")
                                  and (" - " .. leaderPlayer.specName) or ""
-                GameTooltip:AddLine(roleIcon .. className .. specPart .. LEADER_CROWN, r, g, b)
+                local ilvlPart = (tonumber(leaderPlayer.itemLevel) or 0) > 0 and (" - " .. math.floor(leaderPlayer.itemLevel)) or ""
+                GameTooltip:AddLine(roleIcon .. className .. specPart .. ilvlPart .. LEADER_CROWN, r, g, b)
             end
             -- Group remaining members by role+class+spec
             local counts = {}
@@ -2926,6 +3060,9 @@ function addonTable.BuildBrowserGroupTooltip(result)
                     line = roleIcon .. className .. " - " .. player.specName
                 else
                     line = roleIcon .. className
+                end
+                if (tonumber(player.itemLevel) or 0) > 0 then
+                    line = line .. " - " .. math.floor(player.itemLevel)
                 end
                 if isLeader then line = line .. LEADER_CROWN end
                 GameTooltip:AddLine(line, r, g, b)
@@ -3106,8 +3243,37 @@ CreateRow = function(index, parentOverride, prevRowOverride)
             end
             
             if name then
+                local tooltipRioProfile = self.rioProfile
+                if RaiderIO and RaiderIO.GetProfile then
+                    local charName, charRealm = strsplit("-", name)
+                    if not charRealm or charRealm == "" then
+                        charRealm = GetNormalizedRealmName() or ""
+                    else
+                        charRealm = charRealm:gsub("%s+", "")
+                    end
+                    local freshRioProfile = RaiderIO.GetProfile(charName, charRealm)
+                    if freshRioProfile then
+                        tooltipRioProfile = freshRioProfile
+                    end
+                end
+                local specName = nil
+                local factionName = nil
+                local memberSpecID = self.memberSpecID or select(16, C_LFGList.GetApplicantMemberInfo(self.applicantID, self.memberIdx))
+                if memberSpecID and GetSpecializationInfoByID then
+                    specName = select(2, GetSpecializationInfoByID(memberSpecID))
+                end
                 GameTooltip:AddLine(addonTable.ApplyClassColor(name, class or ""), 1, 1, 1)
-                GameTooltip:AddLine(string.format("%s - Item Level: %d", localizedClass or "", math.floor(itemLevel or 0)), 1, 1, 1)
+                local classDisplay = localizedClass or class or ""
+                local levelLine = string.format("Level %d ", tonumber(level) or 0)
+                if specName and specName ~= "" then
+                    levelLine = levelLine .. specName .. " "
+                end
+                levelLine = levelLine .. classDisplay
+                if factionName and factionName ~= "" then
+                    levelLine = levelLine .. " (" .. factionName .. ")"
+                end
+                GameTooltip:AddLine(levelLine, 1, 1, 1)
+                GameTooltip:AddLine("Item Level: " .. math.floor(itemLevel or 0), 1, 0.82, 0)
                 if isLeaver then
                     GameTooltip:AddLine("|cffff4040<!>|r Recent M+ leaver flag", 1, 0.25, 0.25)
                 end
@@ -3128,45 +3294,124 @@ CreateRow = function(index, parentOverride, prevRowOverride)
                         GameTooltip:AddDoubleLine("Progress:", "--", 1, 1, 1, 1, 1, 1)
                     end
                 else
-                    GameTooltip:AddLine("Mythic+ Profile", 0.2, 1, 0.2)
-
                     local score = math.floor(self.memberRating or 0)
                     local cR, cG, cB = GetPreferredScoreColor(score, 1, 1, 1)
-
-                    GameTooltip:AddDoubleLine("Overall Rating:", score > 0 and score or "--", 1, 1, 1, cR, cG, cB)
-
-                    if self.rioProfile and type(self.rioProfile.mythicKeystoneProfile) == "table" then
-                        local mPlus = self.rioProfile.mythicKeystoneProfile
-                        local mainScore = math.floor(mPlus.mainCurrentScore or 0)
-                        if mainScore > score then
-                            local mcR, mcG, mcB = GetPreferredScoreColor(mainScore, 0.5, 0.5, 0.5)
-                            GameTooltip:AddDoubleLine("Main Rating:", mainScore, 0.5, 0.5, 0.5, mcR, mcG, mcB)
-                        end
-                    end
-
-                    local entryInfo = C_LFGList.GetActiveEntryInfo()
-                    local activityID = entryInfo and tonumber(entryInfo.activityID)
+                    local listingContext = addonTable.UpdateListingContext and addonTable.UpdateListingContext() or addonTable.CurrentListingContext
+                    local entryInfo = (listingContext and listingContext.entryInfo) or C_LFGList.GetActiveEntryInfo()
+                    local activityID = (listingContext and listingContext.activityID) or (entryInfo and tonumber(entryInfo.activityID))
                     if activityID == 0 then
                         activityID = nil
                     end
+                    local listingDungeonName = addonTable.GetActiveListingDungeonName(entryInfo, activityID)
+                    local listingDungeonBestAdded = false
+                    local listingDungeonBestText = nil
+                    local listingDungeonBestMapName = nil
+                    local listingDungeonBestLevel = nil
                     if activityID then
                         local success, bestForDungeon = pcall(C_LFGList.GetApplicantDungeonScoreForListing, self.applicantID, self.memberIdx, activityID)
                         if success and type(bestForDungeon) == "table" and type(bestForDungeon.bestRunLevel) == "number" and bestForDungeon.bestRunLevel > 0 then
-                            GameTooltip:AddDoubleLine("Best for " .. (bestForDungeon.mapName or "Listing") .. ":", "+" .. bestForDungeon.bestRunLevel, 1, 1, 1, 1, 1, 1)
+                            local bestMapName = bestForDungeon.mapName or listingDungeonName or "Listing"
+                            listingDungeonBestMapName = bestMapName
+                            listingDungeonBestLevel = bestForDungeon.bestRunLevel
+                            listingDungeonBestText = addonTable.FormatDungeonBestLine(bestForDungeon.bestRunLevel, bestMapName, bestForDungeon)
+                            listingDungeonBestAdded = true
+                        end
+                    end
+                    if not listingDungeonBestAdded and tooltipRioProfile then
+                        local rioDungeonBest = addonTable.FindDungeonBestFromRIOProfile(tooltipRioProfile, listingDungeonName, activityID)
+                        if rioDungeonBest and (tonumber(rioDungeonBest.level) or 0) > 0 then
+                            local rioDungeonMeta = rioDungeonBest.dungeon or rioDungeonBest
+                            local bestMapName = rioDungeonMeta.name or rioDungeonMeta.mapName or rioDungeonMeta.shortName or listingDungeonName or "Listing"
+                            listingDungeonBestMapName = listingDungeonBestMapName or bestMapName
+                            listingDungeonBestLevel = listingDungeonBestLevel or rioDungeonBest.level
+                            listingDungeonBestText = addonTable.FormatDungeonBestLine(rioDungeonBest.level, bestMapName, rioDungeonBest)
+                            listingDungeonBestAdded = listingDungeonBestText ~= nil
                         end
                     end
 
                     local successBest, bestOverall = pcall(C_LFGList.GetApplicantBestDungeonScore, self.applicantID, self.memberIdx)
+                    local bestRunText = nil
                     if successBest and type(bestOverall) == "table" and type(bestOverall.bestRunLevel) == "number" and bestOverall.bestRunLevel > 0 then
-                        GameTooltip:AddDoubleLine("Best Run:", "+" .. bestOverall.bestRunLevel .. " (" .. (bestOverall.mapName or "Unknown") .. ")", 1, 1, 1, 1, 1, 1)
+                        bestRunText = addonTable.FormatDungeonBestLine(bestOverall.bestRunLevel, bestOverall.mapName or "Unknown", bestOverall)
                     end
 
-                    if self.rioProfile and addonTable.AppendMythicPlusMilestonesToTooltip then
-                        addonTable.AppendMythicPlusMilestonesToTooltip(GameTooltip, self.rioProfile)
+                    GameTooltip:AddDoubleLine("Mythic+ Rating", score > 0 and score or "--", 1, 0.82, 0, cR, cG, cB)
+                    if listingDungeonBestText then
+                        GameTooltip:AddDoubleLine("Best for Dungeon", listingDungeonBestText, 1, 0.82, 0, 1, 0.82, 0)
+                    end
+                    if bestRunText then
+                        GameTooltip:AddDoubleLine("Best Run", bestRunText, 1, 0.82, 0, 1, 0.82, 0)
+                    end
+
+                    if tooltipRioProfile and type(tooltipRioProfile.mythicKeystoneProfile) == "table" then
+                        local mPlus = tooltipRioProfile.mythicKeystoneProfile
+                        local provingGrounds = mPlus.provingGroundsInfo or mPlus.provingGrounds or tooltipRioProfile.provingGrounds
+                        if type(provingGrounds) == "table" and (provingGrounds.label or provingGrounds.name or provingGrounds.text or provingGrounds.rank) then
+                            local label = provingGrounds.label or provingGrounds.name or "Proving Grounds"
+                            local text = provingGrounds.text or provingGrounds.rank or provingGrounds.level
+                            if text and text ~= "" then
+                                GameTooltip:AddLine(" ")
+                                GameTooltip:AddLine(label .. ":", 1, 1, 1)
+                                GameTooltip:AddLine(tostring(text), 1, 1, 1)
+                            end
+                        end
+                    end
+
+                    if tooltipRioProfile and type(tooltipRioProfile.mythicKeystoneProfile) == "table" then
+                        local mPlus = tooltipRioProfile.mythicKeystoneProfile
+                        local rioScore = math.floor(mPlus.currentScore or score or 0)
+                        GameTooltip:AddLine(" ")
+                        if rioScore > 0 then
+                            local rcR, rcG, rcB = GetPreferredScoreColor(rioScore, 1, 0.82, 0)
+                            GameTooltip:AddDoubleLine("Raider.IO M+ Score", tostring(rioScore), 1, 0.82, 0, rcR, rcG, rcB)
+                        else
+                            GameTooltip:AddLine("Raider.IO M+ Score", 1, 0.82, 0)
+                        end
+                        local rioLookupDungeonName = listingDungeonBestMapName or listingDungeonName
+                        local rioBestRun, rioBestForDungeon = addonTable.GetRIOBestRunLineData and addonTable.GetRIOBestRunLineData(tooltipRioProfile, rioLookupDungeonName, activityID)
+                        if rioBestRun and rioBestRun ~= "" then
+                            GameTooltip:AddDoubleLine("Best Run", rioBestRun, 1, 1, 1, 1, 1, 1)
+                        end
+                        if not rioBestForDungeon or rioBestForDungeon == "" then
+                            local rioDungeonBest = addonTable.FindDungeonBestFromRIOProfile and addonTable.FindDungeonBestFromRIOProfile(tooltipRioProfile, rioLookupDungeonName, activityID)
+                            if rioDungeonBest and (tonumber(rioDungeonBest.level) or 0) > 0 then
+                                local rioDungeonMeta = rioDungeonBest.dungeon or rioDungeonBest
+                                local fallbackShortName = rioDungeonMeta.shortNameLocale or rioDungeonMeta.shortName or rioDungeonMeta.nameLocale or rioDungeonMeta.name or listingDungeonBestMapName or rioLookupDungeonName or ""
+                                local bestPrefix = addonTable.GetRIOChestPrefix and addonTable.GetRIOChestPrefix(rioDungeonBest.chests)
+                                rioBestForDungeon = string.format("%s|cffffffff%d|r %s", bestPrefix or "", tonumber(rioDungeonBest.level) or 0, fallbackShortName)
+                            elseif listingDungeonBestLevel and listingDungeonBestMapName then
+                                local fallbackShortName = tostring(listingDungeonBestMapName):gsub("^The%s+", "")
+                                fallbackShortName = fallbackShortName:gsub("^Seat of the Triumvirate$", "SEAT")
+                                fallbackShortName = fallbackShortName:gsub("^Maisara Caverns$", "MC")
+                                fallbackShortName = fallbackShortName:gsub("^Pit of Saron$", "POS")
+                                fallbackShortName = fallbackShortName:gsub("^Skyreach$", "SR")
+                                fallbackShortName = fallbackShortName:gsub("^Algeth'ar Academy$", "AA")
+                                fallbackShortName = fallbackShortName:gsub("^Magisters' Terrace$", "MT")
+                                fallbackShortName = fallbackShortName:gsub("^Windrunner Spire$", "WS")
+                                fallbackShortName = fallbackShortName:gsub("^Nexus%-Point Xenas$", "NPX")
+                                rioBestForDungeon = string.format("+|cffffffff%d|r %s", tonumber(listingDungeonBestLevel) or 0, fallbackShortName)
+                            end
+                        end
+                        if rioBestForDungeon and rioBestForDungeon ~= "" then
+                            GameTooltip:AddDoubleLine("Best For Dungeon", rioBestForDungeon, 1, 1, 1, 1, 1, 1)
+                        end
+                        local milestoneOrder = {
+                            "Timed +12-14 Runs",
+                            "Timed +10-11 Runs",
+                            "Timed +7-9 Runs",
+                            "Timed +4-6 Runs",
+                            "Timed +2-3 Runs",
+                        }
+                        for _, milestoneLabel in ipairs(milestoneOrder) do
+                            local milestoneText = addonTable.GetRIOMilestoneTextByLabel and addonTable.GetRIOMilestoneTextByLabel(tooltipRioProfile, milestoneLabel)
+                            if milestoneText and milestoneText ~= "" then
+                                GameTooltip:AddDoubleLine(milestoneLabel, milestoneText, 1, 1, 1, 1, 1, 1)
+                            end
+                        end
                     end
                 end
 
-                if self.rioProfile and listingMode ~= "raid" and listingMode ~= "legacy_raid" then
+                if tooltipRioProfile and listingMode ~= "raid" and listingMode ~= "legacy_raid" then
                     local raidDataFound = {}
                     local function MineRaidData(t, depth)
                         if depth > 8 or type(t) ~= "table" then return end
@@ -3198,7 +3443,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
                             if type(v) == "table" then MineRaidData(v, depth + 1) end
                         end
                     end
-                    MineRaidData(self.rioProfile, 1)
+                    MineRaidData(tooltipRioProfile, 1)
                     
                     local addedRaidHeader = false
                     for rname, data in pairs(raidDataFound) do
@@ -3553,6 +3798,108 @@ function addonTable.ApplyHideNotesLayout(preserveLeftEdge)
     if addonTable.UpdateDisplay and not isBrowser then
         addonTable.UpdateDisplay()
     end
+end
+
+function addonTable.GetRIOMilestoneTextByLabel(rioProfile, label)
+    local mPlus = rioProfile and rioProfile.mythicKeystoneProfile
+    local milestones = mPlus and mPlus.sortedMilestones
+    if type(milestones) ~= "table" then
+        return nil
+    end
+
+    local function NormalizeMilestoneLabel(text)
+        local normalized = strlower(tostring(text or ""))
+        normalized = normalized:gsub("[^%w%s%+%-]", " ")
+        normalized = normalized:gsub("%s+", " ")
+        normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+        return normalized
+    end
+
+    local aliases = {
+        ["best for dungeon"] = { "best for dungeon", "best for", "bestfordungeon" },
+        ["best run"] = { "best run", "bestrun" },
+        ["timed +12-14 runs"] = { "timed +12-14 runs", "timed 12-14 runs" },
+        ["timed +10-11 runs"] = { "timed +10-11 runs", "timed 10-11 runs" },
+        ["timed +7-9 runs"] = { "timed +7-9 runs", "timed 7-9 runs" },
+        ["timed +4-6 runs"] = { "timed +4-6 runs", "timed 4-6 runs" },
+        ["timed +2-3 runs"] = { "timed +2-3 runs", "timed 2-3 runs" },
+    }
+
+    local wanted = NormalizeMilestoneLabel(label)
+    local wantedAliases = aliases[wanted] or { wanted }
+    for _, milestone in ipairs(milestones) do
+        local milestoneLabel = NormalizeMilestoneLabel(milestone and milestone.label)
+        for _, alias in ipairs(wantedAliases) do
+            local normalizedAlias = NormalizeMilestoneLabel(alias)
+            if milestoneLabel == normalizedAlias or milestoneLabel:find(normalizedAlias, 1, true) or normalizedAlias:find(milestoneLabel, 1, true) then
+                return milestone.text
+            end
+        end
+    end
+
+    return nil
+end
+
+function addonTable.GetRIOChestPrefix(chests)
+    local amount = tonumber(chests) or 0
+    if amount <= 0 then
+        return ""
+    end
+    return string.rep("+", amount)
+end
+
+function addonTable.GetRIOBestRunLineData(rioProfile, listingDungeonName, activityID)
+    local mPlus = rioProfile and rioProfile.mythicKeystoneProfile
+    if type(mPlus) ~= "table" then
+        return nil, nil
+    end
+
+    local overallText = nil
+    if mPlus.maxDungeon and (tonumber(mPlus.maxDungeonLevel) or 0) > 0 then
+        local overallPrefix = addonTable.GetRIOChestPrefix(mPlus.maxDungeonUpgrades or (mPlus.dungeonUpgrades and mPlus.dungeonUpgrades[mPlus.maxDungeonIndex]))
+        local overallShortName = mPlus.maxDungeon.shortNameLocale or mPlus.maxDungeon.shortName or mPlus.maxDungeon.nameLocale or mPlus.maxDungeon.name or ""
+        overallText = string.format("%s|cffffffff%d|r %s", overallPrefix, tonumber(mPlus.maxDungeonLevel) or 0, overallShortName)
+    end
+
+    local bestForDungeonText = nil
+    local wanted = addonTable.NormalizeDungeonTooltipKey and addonTable.NormalizeDungeonTooltipKey(listingDungeonName) or ""
+    if type(mPlus.sortedDungeons) == "table" then
+        for _, sortedDungeon in ipairs(mPlus.sortedDungeons) do
+            local dungeon = sortedDungeon and sortedDungeon.dungeon
+            local matched = false
+            if dungeon and type(dungeon.lfd_activity_ids) == "table" and activityID then
+                for _, lfdActivityID in ipairs(dungeon.lfd_activity_ids) do
+                    if tonumber(lfdActivityID) == tonumber(activityID) then
+                        matched = true
+                        break
+                    end
+                end
+            end
+            local candidates = {
+                dungeon and dungeon.shortNameLocale,
+                dungeon and dungeon.shortName,
+                dungeon and dungeon.nameLocale,
+                dungeon and dungeon.name,
+            }
+            if not matched and wanted ~= "" then
+                for _, candidate in ipairs(candidates) do
+                    local key = addonTable.NormalizeDungeonTooltipKey and addonTable.NormalizeDungeonTooltipKey(candidate) or ""
+                    if key ~= "" and (key == wanted or key:find(wanted, 1, true) or wanted:find(key, 1, true)) then
+                        matched = true
+                        break
+                    end
+                end
+            end
+            if matched and (tonumber(sortedDungeon.level) or 0) > 0 then
+                local bestPrefix = addonTable.GetRIOChestPrefix(sortedDungeon.chests)
+                local bestShortName = (dungeon and (dungeon.shortNameLocale or dungeon.shortName or dungeon.nameLocale or dungeon.name)) or ""
+                bestForDungeonText = string.format("%s|cffffffff%d|r %s", bestPrefix, tonumber(sortedDungeon.level) or 0, bestShortName)
+                break
+            end
+        end
+    end
+
+    return overallText, bestForDungeonText
 end
 
 notesToggleBtn:SetScript("OnClick", function()

@@ -65,6 +65,7 @@ if OakLFGSorterDB.showPartyKeys == nil then OakLFGSorterDB.showPartyKeys = true 
 if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "Friz Quadrata TT" end
 if OakLFGSorterDB.fontSize == nil then OakLFGSorterDB.fontSize = 12 end
 if OakLFGSorterDB.windowOpacity == nil then OakLFGSorterDB.windowOpacity = 0.85 end
+if OakLFGSorterDB.frameStrata == nil then OakLFGSorterDB.frameStrata = "DIALOG" end
 if OakLFGSorterDB.theme ~= "modern" then OakLFGSorterDB.theme = "classic" end
 if OakLFGSorterDB.themeStyle == nil then OakLFGSorterDB.themeStyle = "MODERN_CLEAN" end
 if OakLFGSorterDB.themePreset == nil then OakLFGSorterDB.themePreset = "OAK_TEAL" end
@@ -744,9 +745,21 @@ local function EnsureModernHoverFeedback(button)
         return
     end
 
+    if not button.OakDefaultTextColor then
+        button.OakDefaultTextColor = {
+            addonTable.ClassColor.r or 1,
+            addonTable.ClassColor.g or 1,
+            addonTable.ClassColor.b or 1,
+            1,
+        }
+    end
+
     button:HookScript("OnEnter", function(self)
         if addonTable.IsModernTheme and addonTable.IsModernTheme() then
             ApplyModernInteractiveBorder(self, true)
+            if self.text and self.text.SetFontObject then
+                self.text:SetFontObject("SorterClassic_FontRegular")
+            end
             if self.text and self.text.SetTextColor then
                 self.text:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
             end
@@ -755,8 +768,12 @@ local function EnsureModernHoverFeedback(button)
     button:HookScript("OnLeave", function(self)
         if addonTable.IsModernTheme and addonTable.IsModernTheme() then
             ApplyModernInteractiveBorder(self, false)
+            if self.text and self.text.SetFontObject then
+                self.text:SetFontObject("SorterClassic_FontRegular")
+            end
             if self.text and self.text.SetTextColor then
-                self.text:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+                local color = self.OakDefaultTextColor or { 1, 0.82, 0, 1 }
+                self.text:SetTextColor(color[1], color[2], color[3], color[4])
             end
         end
     end)
@@ -915,6 +932,12 @@ local function ApplyExplicitModernButtonSkin(button, flatButtonFill)
         if button.text.SetShadowColor then
             button.text:SetShadowColor(0, 0, 0, 0)
         end
+        button.OakDefaultTextColor = {
+            addonTable.ClassColor.r or 1,
+            addonTable.ClassColor.g or 1,
+            addonTable.ClassColor.b or 1,
+            1,
+        }
     end
 end
 
@@ -1521,6 +1544,13 @@ function addonTable.ApplyToggleVisual(box, label, isActive)
     end
 end
 
+function addonTable.ApplyToggleHoverVisual(box, label, isActive)
+    addonTable.ApplyToggleVisual(box, label, isActive)
+    if box and box.SetBackdropBorderColor then
+        box:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
+    end
+end
+
 function addonTable.ApplySliderChrome(slider, width, thumbWidth, thumbHeight)
     if not slider then
         return nil
@@ -2081,10 +2111,10 @@ function addonTable.CreateSimpleDropdown(parent, width, labelProvider, optionLis
         dropdownButton:HookScript("OnLeave", function(self)
             ApplyModernInteractiveBorder(self, false)
             if self.text then
-                self.text:SetTextColor(1, 0.82, 0, 1)
+                self.text:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
             end
             if self.arrow then
-                self.arrow:SetVertexColor(1, 0.82, 0, 1)
+                self.arrow:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
             end
         end)
 

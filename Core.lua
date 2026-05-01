@@ -563,6 +563,7 @@ local function GetSearchResultPlayers(searchResultID, numMembers)
                 class = classFile or "UNKNOWN",
                 specID = specID,
                 specName = specName,
+                itemLevel = tonumber(playerInfo and (playerInfo.itemLevel or playerInfo.ilvl or playerInfo.averageItemLevel or playerInfo.playerItemLevel)) or 0,
             })
         end
     end

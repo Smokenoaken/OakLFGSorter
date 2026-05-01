@@ -1,6 +1,44 @@
 local addonName, addonTable = ...
 local L = addonTable.L
 local NormalizeFrameAnchorForMovement
+local VALID_FRAME_STRATA = {
+    BACKGROUND = true,
+    LOW = true,
+    MEDIUM = true,
+    HIGH = true,
+    DIALOG = true,
+    FULLSCREEN = true,
+    FULLSCREEN_DIALOG = true,
+    TOOLTIP = true,
+}
+local FRAME_STRATA_ORDER = {
+    "BACKGROUND",
+    "LOW",
+    "MEDIUM",
+    "HIGH",
+    "DIALOG",
+    "FULLSCREEN",
+    "FULLSCREEN_DIALOG",
+    "TOOLTIP",
+}
+
+local function NormalizeOakFrameStrata(strata)
+    local normalized = tostring(strata or ""):upper()
+    if VALID_FRAME_STRATA[normalized] then
+        return normalized
+    end
+    return "DIALOG"
+end
+
+local function GetNextOakFrameStrata(strata)
+    local resolved = NormalizeOakFrameStrata(strata)
+    for index, value in ipairs(FRAME_STRATA_ORDER) do
+        if value == resolved then
+            return FRAME_STRATA_ORDER[math.min(index + 1, #FRAME_STRATA_ORDER)]
+        end
+    end
+    return "FULLSCREEN_DIALOG"
+end
 
 local OAK_LFG = CreateFrame("Frame", "SorterClassicFrame", UIParent, "ButtonFrameTemplate")
 addonTable.OAK_LFG = OAK_LFG 
@@ -18,7 +56,7 @@ OAK_LFG:SetScript("OnDragStart", function(self)
     self.isOakDragging = true
     self:StartMoving()
 end)
-OAK_LFG:SetFrameStrata("DIALOG")
+OAK_LFG:SetFrameStrata(NormalizeOakFrameStrata(OakLFGSorterDB and OakLFGSorterDB.frameStrata))
 -- Avoid Blizzard's live drag clamp, which makes the frame feel "bouncy"
 -- near screen edges. We clamp only after drag/resize completes.
 OAK_LFG:SetClampedToScreen(false)
@@ -51,6 +89,61 @@ if OAK_LFG.CloseButton then
     end)
 end
 addonTable.BlizzardChrome = OAK_LFG
+
+function addonTable.GetFrameStrata()
+    return NormalizeOakFrameStrata(OakLFGSorterDB and OakLFGSorterDB.frameStrata)
+end
+
+function addonTable.GetFrameStrataOptions()
+    return {
+        { id = "MEDIUM", label = "Medium" },
+        { id = "HIGH", label = "High" },
+        { id = "DIALOG", label = "Default (Dialog)" },
+        { id = "LOW", label = "Low" },
+        { id = "BACKGROUND", label = "Background" },
+        { id = "FULLSCREEN", label = "Fullscreen" },
+        { id = "FULLSCREEN_DIALOG", label = "Fullscreen Dialog" },
+        { id = "TOOLTIP", label = "Tooltip" },
+    }
+end
+
+function addonTable.ApplyFrameStrata(strata)
+    local resolved = NormalizeOakFrameStrata(strata or (OakLFGSorterDB and OakLFGSorterDB.frameStrata))
+    local logoStrata = GetNextOakFrameStrata(resolved)
+    if OakLFGSorterDB then
+        OakLFGSorterDB.frameStrata = resolved
+    end
+
+    local frames = {
+        addonTable.OAK_LFG,
+        addonTable.FilterPanel,
+        addonTable.BrowserFilterPanel,
+        addonTable.SupportersPanel,
+        addonTable.OptionsPanel,
+        addonTable.MythicPlusPanel,
+        addonTable.PartyKeysPanel,
+        addonTable.OAK_SEARCH,
+        addonTable.SearchFilterPanel,
+        addonTable.SearchSupportersPanel,
+        addonTable.SearchOptionsPanel,
+    }
+
+    for _, frame in ipairs(frames) do
+        if frame and frame.SetFrameStrata then
+            frame:SetFrameStrata(resolved)
+        end
+    end
+    if addonTable.HeaderLogo and addonTable.HeaderLogo.SetFrameStrata then
+        addonTable.HeaderLogo:SetFrameStrata(logoStrata)
+    end
+end
+
+function addonTable.SetFrameStrataPreference(strata)
+    addonTable.ApplyFrameStrata(strata)
+    if addonTable.RefreshOptionsPanel then
+        addonTable.RefreshOptionsPanel()
+    end
+end
 
 _G["SorterClassicFrame"] = OAK_LFG
 tinsert(UISpecialFrames, "SorterClassicFrame")
@@ -164,6 +257,9 @@ headerLogo.ring:SetAtlas("auctionhouse-itemicon-border-artifact", true)
 headerLogo.ring:SetSize(88, 88)
 headerLogo.ring:SetPoint("CENTER", headerLogo, "CENTER", 0, 0)
 addonTable.HeaderLogo = headerLogo
+if addonTable.ApplyFrameStrata then
+    addonTable.ApplyFrameStrata()
+end
 
 local controlsRow = CreateFrame("Frame", nil, OAK_LFG)
 addonTable.ControlsRow = controlsRow
@@ -440,61 +536,7 @@ function addonTable.AutoPosition()
 end
 
 function addonTable.AnchorRIOPanelToOak(ownerFrame)
-    if not (ownerFrame and RaiderIO_ProfileTooltip and RaiderIO_ProfileTooltip:IsShown()) then
-        return
-    end
-
-    local rioAnchor = _G["RaiderIO_ProfileTooltipAnchor"]
-    if rioAnchor then
-        if rioAnchor:GetParent() ~= UIParent then
-            rioAnchor:SetParent(UIParent)
-        end
-        rioAnchor:SetFrameStrata("TOOLTIP")
-        rioAnchor:SetToplevel(true)
-    end
-
-    local anchorTarget = ownerFrame
-    if ownerFrame == addonTable.OAK_LFG then
-        if addonTable.MythicPlusPanel and addonTable.MythicPlusPanel:IsShown() then
-            anchorTarget = addonTable.MythicPlusPanel
-        elseif addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() then
-            anchorTarget = addonTable.BrowserFilterPanel
-        elseif addonTable.FilterPanel and addonTable.FilterPanel:IsShown() then
-            anchorTarget = addonTable.FilterPanel
-        elseif addonTable.OptionsPanel and addonTable.OptionsPanel:IsShown() then
-            anchorTarget = addonTable.OptionsPanel
-        elseif addonTable.SupportersPanel and addonTable.SupportersPanel:IsShown() then
-            anchorTarget = addonTable.SupportersPanel
-        end
-    elseif ownerFrame == addonTable.OAK_SEARCH then
-        if addonTable.SearchFilterPanel and addonTable.SearchFilterPanel:IsShown() then
-            anchorTarget = addonTable.SearchFilterPanel
-        elseif addonTable.SearchOptionsPanel and addonTable.SearchOptionsPanel:IsShown() then
-            anchorTarget = addonTable.SearchOptionsPanel
-        elseif addonTable.SearchSupportersPanel and addonTable.SearchSupportersPanel:IsShown() then
-            anchorTarget = addonTable.SearchSupportersPanel
-        end
-    end
-
-    local targetFrameLevel = math.max(anchorTarget:GetFrameLevel() or 0, ownerFrame:GetFrameLevel() or 0) + 80
-    if rioAnchor then
-        rioAnchor:SetFrameLevel(targetFrameLevel)
-        rioAnchor:ClearAllPoints()
-        rioAnchor:SetPoint("TOPLEFT", anchorTarget, "TOPRIGHT", 2, 0)
-        rioAnchor:Show()
-        rioAnchor:Raise()
-    end
-    RaiderIO_ProfileTooltip:SetParent(UIParent)
-    RaiderIO_ProfileTooltip:SetFrameStrata("TOOLTIP")
-    RaiderIO_ProfileTooltip:SetToplevel(true)
-    RaiderIO_ProfileTooltip:SetFrameLevel(targetFrameLevel)
-    RaiderIO_ProfileTooltip:ClearAllPoints()
-    if rioAnchor then
-        RaiderIO_ProfileTooltip:SetPoint("TOPLEFT", rioAnchor, "TOPRIGHT", 0, 0)
-    else
-        RaiderIO_ProfileTooltip:SetPoint("TOPLEFT", anchorTarget, "TOPRIGHT", 2, 0)
-    end
-    RaiderIO_ProfileTooltip:Raise()
+    return
 end
 
 function addonTable.ClampFrameToScreen(frame, dbTable, positionKey)
@@ -543,49 +585,12 @@ function addonTable.ClampFrameToScreen(frame, dbTable, positionKey)
 end
 
 function addonTable.RefreshRIOAnchor()
-    if addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() and RaiderIO_ProfileTooltip and RaiderIO_ProfileTooltip._oakPinned and not RaiderIO_ProfileTooltip:IsShown() then
-        local pinnedName = RaiderIO_ProfileTooltip._oakPinnedName
-        local pinnedRealm = RaiderIO_ProfileTooltip._oakPinnedRealm
-        local pinnedPreset = RaiderIO_ProfileTooltip._oakPinnedPreset or 16056
-        if RaiderIO and RaiderIO.ShowProfile and pinnedName and pinnedName ~= "" then
-            local ok, shown = pcall(RaiderIO.ShowProfile, RaiderIO_ProfileTooltip, pinnedName, pinnedRealm, pinnedPreset)
-            if ok and shown then
-                -- continue into normal anchor logic below
-            end
-        end
-    end
-    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
-        addonTable.AnchorRIOPanelToOak(addonTable.OAK_SEARCH)
-    elseif addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
-        addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
-    elseif RaiderIO_ProfileTooltip and RaiderIO_ProfileTooltip:IsShown() then
-        local fallback = nil
-        if LFGListFrame and LFGListFrame:IsShown() then
-            fallback = LFGListFrame
-        elseif PVEFrame and PVEFrame:IsShown() then
-            fallback = PVEFrame
-        end
-        if fallback then
-            RaiderIO_ProfileTooltip:SetFrameStrata("TOOLTIP")
-            RaiderIO_ProfileTooltip:SetToplevel(true)
-            RaiderIO_ProfileTooltip:SetFrameLevel((fallback:GetFrameLevel() or 0) + 80)
-            RaiderIO_ProfileTooltip:ClearAllPoints()
-            RaiderIO_ProfileTooltip:SetPoint("TOPLEFT", fallback, "TOPRIGHT", 2, 0)
-            RaiderIO_ProfileTooltip:Raise()
-        end
-    end
+    return
 end
 
 function addonTable.TryShowRaiderIOProfileTooltip(tooltip, name, realm)
     if not (tooltip and RaiderIO and RaiderIO.ShowProfile and IsShiftKeyDown and IsShiftKeyDown()) then
         return false
-    end
-
-    if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.LoadAddOn and not C_AddOns.IsAddOnLoaded("Blizzard_GroupFinder") then
-        pcall(C_AddOns.LoadAddOn, "Blizzard_GroupFinder")
-        if addonTable.CheckRIOHook then
-            addonTable.CheckRIOHook()
-        end
     end
 
     local fullName = tostring(name or "")
@@ -607,13 +612,10 @@ function addonTable.TryShowRaiderIOProfileTooltip(tooltip, name, realm)
     local RIO_PROFILE_PRESET = 16056
     local ok, shown = pcall(RaiderIO.ShowProfile, tooltip, charName, charRealm, RIO_PROFILE_PRESET)
     if ok and shown then
-        if RaiderIO_ProfileTooltip then
-            RaiderIO_ProfileTooltip._oakPinned = true
-            RaiderIO_ProfileTooltip._oakPinnedName = charName
-            RaiderIO_ProfileTooltip._oakPinnedRealm = charRealm
-            RaiderIO_ProfileTooltip._oakPinnedPreset = RIO_PROFILE_PRESET
-        end
-        addonTable.RefreshRIOAnchor()
+        return true
+    end
+    ok, shown = pcall(RaiderIO.ShowProfile, charName, charRealm)
+    if ok and shown then
         return true
     end
 
@@ -622,56 +624,18 @@ end
 
 local rioHooked = false
 function addonTable.CheckRIOHook()
-    if not rioHooked and RaiderIO_ProfileTooltip then
+    if not rioHooked then
         rioHooked = true
-        RaiderIO_ProfileTooltip:HookScript("OnHide", function()
-            if addonTable.OAK_LFG:IsShown() and RaiderIO_ProfileTooltip._oakPinned and C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    if addonTable.OAK_LFG:IsShown() and RaiderIO_ProfileTooltip and not RaiderIO_ProfileTooltip:IsShown() and RaiderIO_ProfileTooltip._oakPinned then
-                        local pinnedName = RaiderIO_ProfileTooltip._oakPinnedName
-                        local pinnedRealm = RaiderIO_ProfileTooltip._oakPinnedRealm
-                        local pinnedPreset = RaiderIO_ProfileTooltip._oakPinnedPreset or 16056
-                        local ok, shown = false, false
-                        if RaiderIO and RaiderIO.ShowProfile and pinnedName and pinnedName ~= "" then
-                            ok, shown = pcall(RaiderIO.ShowProfile, RaiderIO_ProfileTooltip, pinnedName, pinnedRealm, pinnedPreset)
-                        end
-                        if ok and shown and addonTable.RefreshRIOAnchor then
-                            addonTable.RefreshRIOAnchor()
-                        end
-                    end
-                end)
-            elseif addonTable.OAK_LFG:IsShown() and addonTable.RefreshRIOAnchor then
-                addonTable.RefreshRIOAnchor()
-            end
-        end)
-        RaiderIO_ProfileTooltip:HookScript("OnShow", function()
-            addonTable.RefreshRIOAnchor()
-        end)
-        if PVEFrame and PVEFrame.HookScript then
-            PVEFrame:HookScript("OnHide", function()
-                if addonTable.OAK_LFG:IsShown() and RaiderIO_ProfileTooltip and RaiderIO_ProfileTooltip._oakPinned and C_Timer and C_Timer.After then
-                    C_Timer.After(0, function()
-                        if addonTable.OAK_LFG:IsShown() and RaiderIO_ProfileTooltip and RaiderIO_ProfileTooltip._oakPinned then
-                            local pinnedName = RaiderIO_ProfileTooltip._oakPinnedName
-                            local pinnedRealm = RaiderIO_ProfileTooltip._oakPinnedRealm
-                            local pinnedPreset = RaiderIO_ProfileTooltip._oakPinnedPreset or 16056
-                            local ok, shown = false, false
-                            if RaiderIO and RaiderIO.ShowProfile and pinnedName and pinnedName ~= "" then
-                                ok, shown = pcall(RaiderIO.ShowProfile, RaiderIO_ProfileTooltip, pinnedName, pinnedRealm, pinnedPreset)
-                            end
-                            if ok and shown and addonTable.RefreshRIOAnchor then
-                                addonTable.RefreshRIOAnchor()
-                            end
-                        end
-                    end)
-                end
-            end)
-        end
     end
 end
 
 OAK_LFG:HookScript("OnShow", function()
-    addonTable.RefreshRIOAnchor()
+    if RaiderIO_ProfileTooltip then
+        RaiderIO_ProfileTooltip._oakPinned = false
+        RaiderIO_ProfileTooltip._oakPinnedName = nil
+        RaiderIO_ProfileTooltip._oakPinnedRealm = nil
+        RaiderIO_ProfileTooltip._oakPinnedPreset = nil
+    end
 end)
 
 OAK_LFG:HookScript("OnHide", function()
@@ -681,7 +645,6 @@ OAK_LFG:HookScript("OnHide", function()
         RaiderIO_ProfileTooltip._oakPinnedRealm = nil
         RaiderIO_ProfileTooltip._oakPinnedPreset = nil
     end
-    addonTable.RefreshRIOAnchor()
 end)
 
 OAK_LFG:HookScript("OnSizeChanged", function(self)
@@ -728,7 +691,7 @@ addonTable.ModernCloseButton = modernCloseBtn
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", titleHeader, "RIGHT", -8, 0)
-VersionText:SetText("|cff888888v4.0.2|r")
+VersionText:SetText("|cff888888v4.0.3|r")
 
 addonTable.RegisterThemeRefresh("ui_header_theme", function()
     local isClassic = addonTable.IsClassicTheme and addonTable.IsClassicTheme()

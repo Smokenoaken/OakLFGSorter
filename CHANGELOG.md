@@ -1,3 +1,16 @@
+## v4.0.3
+
+- Added an Options control for Oak's frame strata, allowing users to lower or raise the addon relative to other UI windows while keeping the default as `Default (Dialog)`.
+- Improved Oak badge/logo layering so the badge remains visible when users change the addon's frame strata.
+- Stopped Oak from reanchoring or pinning the Raider.IO profile panel, leaving Raider.IO's expanded profile tooltip under Raider.IO/Blizzard control while preserving Shift-hover profile access.
+- Added compact region filters to the applicant filter panel and adjusted applicant filter spacing so region controls, class filters, utility buttons, and bottom toggles no longer overlap.
+- Added multi-select support for browser difficulty and playstyle filters, including synchronization with Blizzard's native advanced filter state.
+- Improved applicant Mythic+ tooltips with Blizzard/Raider.IO-style ordering for Mythic+ rating, listing-specific dungeon best, best run, Raider.IO score details, timed run buckets, raid progress, and applicant notes.
+- Improved Raider.IO dungeon-best matching for applicant tooltips so listing-specific Best For Dungeon data can resolve by activity ID or dungeon metadata and display chest upgrade prefixes such as `+12`, `++12`, and `+++12`.
+- Improved browse-group tooltips to include party member item level where Blizzard exposes that data.
+- Fixed Modern theme button hover and repaint behavior so button text keeps the active accent color instead of reverting to Blizzard yellow after filter changes.
+- Fixed Modern theme checkbox/toggle hover cleanup so selection boxes restore their normal checked or unchecked visual state after mouseout.
+
 ## v4.0.2
 
 - Fixed the browser Reset button so it also restores the shared region filters instead of leaving users stuck with no regions selected and no results.
