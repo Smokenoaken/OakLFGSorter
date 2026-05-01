@@ -1,3 +1,9 @@
+## v4.0.4
+
+- Added a Tooltip on Cursor option and anchored browser tooltips to the rightmost visible Oak panel by default
+- Fixed the dungeon filter Gives Score column so score targets load for dungeon-mode searches and recover better when Blizzard data arrives late
+- Improved Hide Declined so declined groups stay hidden across refreshes without storing an unbounded permanent history
+
 ## v4.0.3
 
 - Added an Options control for Oak's frame strata, allowing users to lower or raise the addon relative to other UI windows while keeping the default as `Default (Dialog)`.
