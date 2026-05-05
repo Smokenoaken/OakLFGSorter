@@ -1,3 +1,10 @@
+## v4.0.5
+
+- Fixed signup limit handling and oldest application cancellation.
+- Fixed the double red X action buttons in applicant view.
+- Fixed secret-number taint handling.
+- Updated the Blizzard auto-open sorter button.
+
 ## v4.0.4
 
 - Added a Tooltip on Cursor option and anchored browser tooltips to the rightmost visible Oak panel by default
