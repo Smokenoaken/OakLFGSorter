@@ -121,6 +121,7 @@ local quickSignupState = {
     originalDialogShow = nil,
     suppressNoteFallback = false,
     noteFallbackWarnedForDialog = false,
+    applicationTimes = {},
 }
 local EnsureQueueRoleSelectorHooks
 local GetSignupNoteEditBox
@@ -161,6 +162,7 @@ local function ConfirmSearchResultApplied(searchResultID, onConfirmed)
         end
 
         if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(status) then
+            quickSignupState.applicationTimes[searchResultID] = quickSignupState.applicationTimes[searchResultID] or GetTime()
             if onConfirmed then
                 onConfirmed()
             end
@@ -508,6 +510,7 @@ local function ApplyQuickSignupDirect(searchResultID)
     if not ok then
         return false
     end
+    quickSignupState.applicationTimes[searchResultID] = quickSignupState.applicationTimes[searchResultID] or GetTime()
 
     ConfirmSearchResultApplied(searchResultID, function()
         if addonTable.MarkSearchResultApplied then
@@ -578,7 +581,13 @@ local function RaiseSignupDialogAboveOak(dialog)
 end
 
 local function RaiseApplicationViewerAboveOak()
-    if LFGListFrame and LFGListFrame.ApplicationViewer then
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if LFGListFrame and LFGListFrame.ApplicationViewer and LFGListFrame.ApplicationViewer:IsShown() then
+                RaiseFrameAboveOak(LFGListFrame.ApplicationViewer)
+            end
+        end)
+    elseif LFGListFrame and LFGListFrame.ApplicationViewer then
         RaiseFrameAboveOak(LFGListFrame.ApplicationViewer)
     end
 end
@@ -902,7 +911,7 @@ signupLimitNote:SetText("Note: You can only sign up for a total of 5 groups at a
 signupLimitNote:SetTextColor(0.85, 0.85, 0.85)
 signupLimitNote:SetJustifyH("LEFT")
 signupLimitNote:SetWordWrap(false)
-signupLimitNote:SetScale(0.9)
+signupLimitNote:SetScale(0.82)
 
 local cooldownLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 cooldownLabel:SetTextColor(1, 0.6, 0.1, 1)
@@ -1023,16 +1032,24 @@ function addonTable.StartSignupCooldown()
 end
 
 local function FindAndCancelOldestApplication()
-    if not (C_LFGList and C_LFGList.GetSearchResults and C_LFGList.GetApplicationInfo) then return end
-    local first, second = C_LFGList.GetSearchResults()
-    local results = type(first) == "table" and first or (type(second) == "table" and second) or {}
-    local oldestDuration = -1
+    if not (C_LFGList and C_LFGList.GetApplications and C_LFGList.GetApplicationInfo) then return end
+    local results = C_LFGList.GetApplications()
+    if type(results) ~= "table" then return end
+
+    local oldestStartedAt = math.huge
+    local oldestDuration = math.huge
     local oldestResultID = nil
     for _, resultID in ipairs(results) do
-        local _, appStatus, _, appDuration = C_LFGList.GetApplicationInfo(resultID)
-        if appStatus == "applied" then
+        local appA, appB, _, appDuration = C_LFGList.GetApplicationInfo(resultID)
+        local appStatus = type(appA) == "table" and (appA.applicationStatus or appA.status or appA.pendingStatus) or appB or appA
+        appStatus = addonTable.NormalizeApplicationStatus and addonTable.NormalizeApplicationStatus(appStatus or "none") or tostring(appStatus or "none")
+        if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(appStatus) then
+            local startedAt = quickSignupState.applicationTimes[resultID]
             local dur = tonumber(appDuration) or 0
-            if dur > oldestDuration then
+            if startedAt and startedAt < oldestStartedAt then
+                oldestStartedAt = startedAt
+                oldestResultID = resultID
+            elseif not startedAt and oldestStartedAt == math.huge and dur < oldestDuration then
                 oldestDuration = dur
                 oldestResultID = resultID
             end
@@ -1040,6 +1057,7 @@ local function FindAndCancelOldestApplication()
     end
     if oldestResultID then
         C_LFGList.CancelApplication(oldestResultID)
+        quickSignupState.applicationTimes[oldestResultID] = nil
         if addonTable.MarkSearchResultCanceled then
             addonTable.MarkSearchResultCanceled(oldestResultID)
         end
@@ -1098,10 +1116,21 @@ end
 -- Refresh limit display whenever an application status changes (accepted, declined, cancelled)
 local signupStatusEventFrame = CreateFrame("Frame")
 signupStatusEventFrame:RegisterEvent("LFG_LIST_APPLICATION_STATUS_UPDATED")
-signupStatusEventFrame:SetScript("OnEvent", function()
+signupStatusEventFrame:SetScript("OnEvent", function(_, _, searchResultID, status)
+    if searchResultID then
+        local normalized = addonTable.NormalizeApplicationStatus and addonTable.NormalizeApplicationStatus(status or "none") or tostring(status or "none")
+        if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(normalized) then
+            quickSignupState.applicationTimes[searchResultID] = quickSignupState.applicationTimes[searchResultID] or GetTime()
+        else
+            quickSignupState.applicationTimes[searchResultID] = nil
+        end
+    end
     C_Timer.After(0.3, function()
         if addonTable.UpdateSignupLimitDisplay then
             addonTable.UpdateSignupLimitDisplay()
+        end
+        if addonTable.UpdateDisplay and addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
+            addonTable.UpdateDisplay()
         end
     end)
 end)
@@ -1254,6 +1283,7 @@ function addonTable.EnsureSearchSignupHooks()
                         and dialog.SignUpButton and dialog.SignUpButton:IsEnabled()
                         and dialog.resultID == expectedResultID then
                     hasClicked = true
+                    quickSignupState.applicationTimes[expectedResultID] = quickSignupState.applicationTimes[expectedResultID] or GetTime()
                     dialog.SignUpButton:Click()
                     if addonTable.StartSignupCooldown then
                         addonTable.StartSignupCooldown()

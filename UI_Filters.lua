@@ -5110,48 +5110,121 @@ end)
 SyncSharedRegionToggleBoxes()
 
 local lfgToggleBox
+local lfgToggleIcon
+local lfgToggleHighlight
+local pendingApplicationViewerAutoOpen = false
+
+local function ApplyBlizzardAutoOpenButtonVisual()
+    if not lfgToggleBox then
+        return
+    end
+
+    local active = OakLFGSorterDB and OakLFGSorterDB.autoOpen == true
+    local color = addonTable.ClassColor or { r = 0.8, g = 0.55, b = 0.9 }
+
+    if active then
+        lfgToggleBox:SetBackdropColor(color.r * 0.28, color.g * 0.28, color.b * 0.28, 0.95)
+        lfgToggleBox:SetBackdropBorderColor(color.r, color.g, color.b, 1)
+    else
+        lfgToggleBox:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
+        lfgToggleBox:SetBackdropBorderColor(0, 0, 0, 1)
+    end
+
+    if lfgToggleIcon then
+        lfgToggleIcon:SetDesaturated(not active)
+        lfgToggleIcon:SetAlpha(active and 1 or 0.35)
+    end
+
+    if lfgToggleHighlight then
+        lfgToggleHighlight:SetVertexColor(color.r, color.g, color.b, active and 0.25 or 0.12)
+    end
+
+end
+
+local function QueueApplicationViewerAutoOpen()
+    if pendingApplicationViewerAutoOpen then
+        return
+    end
+
+    pendingApplicationViewerAutoOpen = true
+    C_Timer.After(0, function()
+        pendingApplicationViewerAutoOpen = false
+        if not (OakLFGSorterDB and OakLFGSorterDB.autoOpen) then
+            return
+        end
+        if addonTable.userExplicitlyClosed then
+            return
+        end
+        if not (LFGListFrame and LFGListFrame.ApplicationViewer and LFGListFrame.ApplicationViewer:IsShown()) then
+            return
+        end
+        if addonTable.OAK_LFG then
+            addonTable.OAK_LFG:Show()
+        end
+    end)
+end
+
 function addonTable.SetupBlizzardLFGHook()
     if LFGListFrame and LFGListFrame.ApplicationViewer then
         if not lfgToggleBox then
             lfgToggleBox = CreateFrame("Button", nil, LFGListFrame.ApplicationViewer, "BackdropTemplate")
             addonTable.LFGToggleBox = lfgToggleBox
-            lfgToggleBox:SetSize(16, 16)
+            lfgToggleBox:SetSize(22, 22)
             lfgToggleBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
-            lfgToggleBox:SetBackdropBorderColor(0, 0, 0, 1)
+            lfgToggleBox:RegisterForClicks("LeftButtonUp")
             
-            if LFGListFrame.ApplicationViewer.NameColumnHeader then
-                lfgToggleBox:SetPoint("BOTTOMLEFT", LFGListFrame.ApplicationViewer.NameColumnHeader, "TOPLEFT", 15, 15)
+            if LFGListFrame.ApplicationViewer.RefreshButton then
+                lfgToggleBox:SetPoint("RIGHT", LFGListFrame.ApplicationViewer.RefreshButton, "LEFT", -6, 0)
+            elseif LFGListFrame.ApplicationViewer.NameColumnHeader then
+                lfgToggleBox:SetPoint("BOTTOMLEFT", LFGListFrame.ApplicationViewer.NameColumnHeader, "TOPLEFT", 15, 12)
             else
                 lfgToggleBox:SetPoint("TOPLEFT", LFGListFrame.ApplicationViewer, "TOPLEFT", 25, 5)
             end
-            
-            local text = LFGListFrame.ApplicationViewer:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
-            text:SetPoint("LEFT", lfgToggleBox, "RIGHT", 8, 0)
-            text:SetText(L["Auto-Open Sorter"])
+
+            lfgToggleHighlight = lfgToggleBox:CreateTexture(nil, "BACKGROUND")
+            lfgToggleHighlight:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
+            lfgToggleHighlight:SetPoint("TOPLEFT", 1, -1)
+            lfgToggleHighlight:SetPoint("BOTTOMRIGHT", -1, 1)
+
+            lfgToggleIcon = lfgToggleBox:CreateTexture(nil, "ARTWORK")
+            lfgToggleIcon:SetSize(16, 16)
+            lfgToggleIcon:SetPoint("CENTER")
+            lfgToggleIcon:SetTexture("Interface\\AddOns\\OakLFGSorter\\Media\\icon.png")
+            lfgToggleBox.icon = lfgToggleIcon
+
+            lfgToggleBox:SetHighlightTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8", "ADD")
+            local highlight = lfgToggleBox:GetHighlightTexture()
+            if highlight then
+                highlight:SetVertexColor(1, 1, 1, 0.15)
+            end
             
             lfgToggleBox:SetScript("OnClick", function(self)
                 OakLFGSorterDB.autoOpen = not OakLFGSorterDB.autoOpen
+                ApplyBlizzardAutoOpenButtonVisual()
                 if OakLFGSorterDB.autoOpen then
-                    self:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1) 
-                    self:SetBackdropBorderColor(0, 0, 0, 1)
                     OAK_LFG:Show()
                 else
-                    self:SetBackdropColor(0.08, 0.08, 0.10, 0.95) 
-                    self:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
                     OAK_LFG:Hide()
                 end
             end)
-            
-            if OakLFGSorterDB.autoOpen then
-                lfgToggleBox:SetBackdropColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-                lfgToggleBox:SetBackdropBorderColor(0, 0, 0, 1)
-            else
-                lfgToggleBox:SetBackdropColor(0.08, 0.08, 0.10, 0.95)
-                lfgToggleBox:SetBackdropBorderColor(addonTable.ClassColor.r * 0.65, addonTable.ClassColor.g * 0.65, addonTable.ClassColor.b * 0.65, 1)
-            end
+
+            lfgToggleBox:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(L["Auto-Open Sorter"], 1, 1, 1)
+                GameTooltip:AddLine("Automatically open Oak when Blizzard's applicant viewer opens.", 1, 1, 1, true)
+                GameTooltip:Show()
+            end)
+
+            lfgToggleBox:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+            end)
+
+            ApplyBlizzardAutoOpenButtonVisual()
 
             LFGListFrame.ApplicationViewer:HookScript("OnShow", function()
-                if OakLFGSorterDB and OakLFGSorterDB.autoOpen then OAK_LFG:Show() end
+                if OakLFGSorterDB and OakLFGSorterDB.autoOpen then
+                    QueueApplicationViewerAutoOpen()
+                end
             end)
         end
     end
@@ -5160,7 +5233,11 @@ function addonTable.SetupBlizzardLFGHook()
         addonTable.SearchPanelHooked = true
         LFGListFrame.SearchPanel:HookScript("OnShow", function()
             if OakLFGSorterDB and OakLFGSorterDB.autoOpen and not addonTable.userExplicitlyClosed then
-                OAK_LFG:Show()
+                C_Timer.After(0, function()
+                    if OakLFGSorterDB and OakLFGSorterDB.autoOpen and not addonTable.userExplicitlyClosed and LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel:IsShown() then
+                        OAK_LFG:Show()
+                    end
+                end)
             end
         end)
         LFGListFrame.SearchPanel:HookScript("OnHide", function()

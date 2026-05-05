@@ -1974,6 +1974,15 @@ local function CanApplyToSearchResult()
     return not (C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo())
 end
 
+local function IsAtApplicationLimit()
+    if not (C_LFGList and C_LFGList.GetNumApplications) then
+        return false
+    end
+    local _, numActive = C_LFGList.GetNumApplications()
+    local maxApps = MAX_LFG_LIST_APPLICATIONS or 5
+    return (tonumber(numActive) or 0) >= maxApps
+end
+
 local function GetPreferredScoreColor(score, defaultR, defaultG, defaultB)
     if RaiderIO and RaiderIO.GetScoreColor then
         local r, g, b = RaiderIO.GetScoreColor(score)
@@ -3610,6 +3619,9 @@ CreateRow = function(index, parentOverride, prevRowOverride)
             if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
                 C_LFGList.CancelApplication(result.id)
             else
+                if IsAtApplicationLimit() then
+                    return
+                end
                 if not CanApplyToSearchResult() then
                     return
                 end
@@ -3645,7 +3657,10 @@ CreateRow = function(index, parentOverride, prevRowOverride)
                     GameTooltip:SetText("Cancel", 1, 0.2, 0.2)
                 end
             else
-                if CanApplyToSearchResult() then
+                if IsAtApplicationLimit() then
+                    GameTooltip:SetText("Cannot Apply", 1.0, 0.35, 0.35)
+                    GameTooltip:AddLine("You have already signed up to the maximum number of groups.", 1, 1, 1, true)
+                elseif CanApplyToSearchResult() then
                     GameTooltip:SetText("Apply", 0.2, 1, 0.2)
                 else
                     GameTooltip:SetText(L["Cannot Apply While Listing"], 1.0, 0.82, 0.30)
@@ -4174,7 +4189,7 @@ PopulateBrowserRow = function(row, result, isAltColor)
     local inviteTexture = row.inviteBtn:GetNormalTexture()
     if inviteTexture then
         local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
-        local canApply = (not result.isUnavailable) and (isApplied or CanApplyToSearchResult())
+        local canApply = (not result.isUnavailable) and (isApplied or (CanApplyToSearchResult() and not IsAtApplicationLimit()))
         inviteTexture:SetDesaturated(not isApplied and not canApply)
         inviteTexture:SetAlpha((isApplied or canApply) and 1 or 0.55)
     end
@@ -4436,6 +4451,8 @@ function addonTable.UpdateDisplay()
                         row.statusText:Show()
                     else
                         row.statusText:Hide()
+                        row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
+                        row.declineBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
                         row.inviteBtn:Show()
                         row.declineBtn:Show()
                         local inviteTexture = row.inviteBtn:GetNormalTexture()
