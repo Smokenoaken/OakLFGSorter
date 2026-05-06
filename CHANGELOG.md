@@ -1,3 +1,9 @@
+## v4.0.6
+
+- Preserved filter settings and refreshed checkbox visuals after group join and leave transitions.
+- Updated the current supporter list.
+- Reworked the Supporters panel so supporter names fit without scrolling.
+
 ## v4.0.5
 
 - Fixed signup limit handling and oldest application cancellation.
