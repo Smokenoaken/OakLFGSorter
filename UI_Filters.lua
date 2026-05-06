@@ -15,6 +15,7 @@ for _, role in ipairs({ "TANK", "HEALER", "DAMAGER" }) do
     end
 end
 local classToggleBoxes = {} 
+local roleToggleBoxes = {}
 local quickFilterButtons = {}
 local browserFilterButtons = {}
 local browserActivityButtons = {}
@@ -49,6 +50,9 @@ local optionsThemeColorButton
 local categoryDropdownButton
 local categoryDropdownList
 local ResetSharedRegionFilters
+local SyncApplicantFilterPanelControls
+local autoHideRolesBox
+local mutePingBox
 
 local function GetBrowserMode()
     local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode
@@ -1654,6 +1658,9 @@ filterPanel:HookScript("OnShow", function()
     if addonTable.UpdateAuxPanelAnchors then
         addonTable.UpdateAuxPanelAnchors()
     end
+    if SyncApplicantFilterPanelControls then
+        SyncApplicantFilterPanelControls()
+    end
     if addonTable.RefreshRIOAnchor then
         addonTable.RefreshRIOAnchor()
     elseif addonTable.AnchorRIOPanelToOak then
@@ -1684,6 +1691,7 @@ for _, rData in ipairs(rolesToFilter) do
     local rKey, rLabel = rData[1], rData[2]
     local box = CreateOakToggleBox(filterPanel, rKey, addonTable.RoleFilters)
     box:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, yOffset)
+    roleToggleBoxes[rKey] = box
     local text = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     text:SetPoint("LEFT", box, "RIGHT", 8, 0)
     text:SetText(rLabel)
@@ -1854,6 +1862,34 @@ do
     addonTable.FilterBottomDivider:SetPoint("TOP", applicantRegionContainer, "BOTTOM", 0, -12)
 end
 
+SyncApplicantFilterPanelControls = function()
+    for class, box in pairs(classToggleBoxes) do
+        if box and box.SetState then
+            box:SetState(addonTable.ClassFilters and addonTable.ClassFilters[class])
+        end
+    end
+
+    for role, box in pairs(roleToggleBoxes) do
+        if box and box.SetState then
+            box:SetState(addonTable.RoleFilters and addonTable.RoleFilters[role])
+        end
+    end
+
+    if autoHideRolesBox and autoHideRolesBox.SetState then
+        autoHideRolesBox:SetState(OakLFGSorterDB and OakLFGSorterDB.autoHideFilledRoles == true)
+    end
+    if mutePingBox and mutePingBox.SetState then
+        mutePingBox:SetState(OakLFGSorterDB and OakLFGSorterDB.muteApplicantPing == true)
+    end
+
+    for _, regionCode in ipairs(addonTable.GetVisibleRegionFilterOrder and addonTable.GetVisibleRegionFilterOrder()
+        or addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder()
+        or {}) do
+        ApplySharedRegionToggleVisual(applicantRegionFilterButtons[regionCode], applicantRegionFilterLabels[regionCode], addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+    end
+end
+addonTable.SyncApplicantFilterPanelControls = SyncApplicantFilterPanelControls
+
 -- Decline Filtered Button
 local btnDecline = addonTable.CreateFlatButton(filterPanel, "Decline Filtered", 160)
 btnDecline:SetPoint("BOTTOM", filterPanel, "BOTTOM", 0, 72)
@@ -1880,7 +1916,7 @@ btnDecline:SetScript("OnClick", function()
     end
 end)
 
-local autoHideRolesBox = CreateOakToggleBox(filterPanel, "autoHideFilledRoles", OakLFGSorterDB)
+autoHideRolesBox = CreateOakToggleBox(filterPanel, "autoHideFilledRoles", OakLFGSorterDB)
 autoHideRolesBox:SetPoint("BOTTOMLEFT", filterPanel, "BOTTOMLEFT", 15, 30)
 
 local autoHideRolesText = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
@@ -1904,7 +1940,7 @@ autoHideRolesBox:SetScript("OnClick", function(self)
     RefreshFilters()
 end)
 
-local mutePingBox = CreateOakToggleBox(filterPanel, "muteApplicantPing", OakLFGSorterDB)
+mutePingBox = CreateOakToggleBox(filterPanel, "muteApplicantPing", OakLFGSorterDB)
 mutePingBox:SetPoint("BOTTOMLEFT", filterPanel, "BOTTOMLEFT", 15, 8)
 
 local mutePingText = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
@@ -2006,36 +2042,30 @@ end
 
 function BrowserFilterState()
     local characterFilters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
-    if characterFilters.version ~= BROWSER_FILTER_VERSION then
-        characterFilters = {
-            version = BROWSER_FILTER_VERSION,
-            difficulty = "ANY",
-            playstyle = "ANY",
-            keyMin = "",
-            keyMax = "",
-            hasTank = false,
-            needsTank = false,
-            hasHealer = false,
-            needsHealer = false,
-            needsDPS = false,
-            needsMyClass = false,
-            minRating = "",
-            partyFit = false,
-            needsLust = false,
-            needsBrez = false,
-            hasLust = false,
-            hasBrez = false,
-            hideDeclined = false,
-            raidBossesMin = "ANY",
-            matchMyRaidLockout = false,
-            bountifulOnly = false,
-            selectedActivities = {},
-        }
+    if type(characterFilters) ~= "table" then
+        characterFilters = {}
     end
     -- Ensure new fields exist for upgrades
     local f = characterFilters
+    if f.difficulty == nil then f.difficulty = "ANY" end
+    if f.playstyle == nil then f.playstyle = "ANY" end
+    if f.keyMin == nil then f.keyMin = "" end
+    if f.keyMax == nil then f.keyMax = "" end
+    if f.hasTank == nil then f.hasTank = false end
+    if f.needsTank == nil then f.needsTank = false end
+    if f.hasHealer == nil then f.hasHealer = false end
+    if f.needsHealer == nil then f.needsHealer = false end
+    if f.needsDPS == nil then f.needsDPS = false end
     if f.needsMyClass == nil then f.needsMyClass = false end
     if f.minRating == nil then f.minRating = "" end
+    if f.partyFit == nil then f.partyFit = false end
+    if f.needsLust == nil then f.needsLust = false end
+    if f.needsBrez == nil then f.needsBrez = false end
+    if f.hasLust == nil then f.hasLust = false end
+    if f.hasBrez == nil then f.hasBrez = false end
+    if f.hideDeclined == nil then f.hideDeclined = false end
+    if f.raidBossesMin == nil then f.raidBossesMin = "ANY" end
+    if f.matchMyRaidLockout == nil then f.matchMyRaidLockout = false end
     if f.raidBossKills == nil then f.raidBossKills = "" end
     if f.raidTanks     == nil then f.raidTanks     = "" end
     if f.raidHealers   == nil then f.raidHealers   = "" end
@@ -4889,23 +4919,9 @@ fontPickerLabel:SetText("Addon Font")
 fontPickerLabel:SetTextColor(1, 1, 1)
 fontPickerLabel:Hide()
 
-local suppScroll = CreateFrame("ScrollFrame", "SorterClassicSupportersScroll", supportersPanel)
-suppScroll:SetPoint("TOPLEFT", supportersPanel, "TOPLEFT", 12, -42)
-suppScroll:SetPoint("BOTTOMRIGHT", supportersPanel, "BOTTOMRIGHT", -12, 128)
-if not suppScroll.RegisterCallback then
-    Mixin(suppScroll, CallbackRegistryMixin)
-    suppScroll:OnLoad()
-end
-local suppScrollBar = CreateFrame("EventFrame", "SorterClassicSupportersMinimalScrollBar", supportersPanel, "MinimalScrollBar")
-suppScrollBar:SetPoint("TOPRIGHT", supportersPanel, "TOPRIGHT", -8, -42)
-suppScrollBar:SetPoint("BOTTOMRIGHT", supportersPanel, "BOTTOMRIGHT", -8, 128)
-ScrollUtil.InitScrollFrameWithScrollBar(suppScroll, suppScrollBar)
-suppScrollBar:Hide()
-suppScrollBar:SetAlpha(0)
-
-local suppScrollChild = CreateFrame("Frame")
-suppScrollChild:SetSize(suppScroll:GetWidth(), 1)
-suppScroll:SetScrollChild(suppScrollChild)
+local suppContent = CreateFrame("Frame", nil, supportersPanel)
+suppContent:SetPoint("TOPLEFT", supportersPanel, "TOPLEFT", 14, -42)
+suppContent:SetPoint("BOTTOMRIGHT", supportersPanel, "BOTTOMRIGHT", -14, 58)
 
 local supporterNames = addonTable.Patreons or {}
 local topSupporters = {}
@@ -4919,8 +4935,8 @@ for _, name in ipairs(supporterNames) do
     end
 end
 
-local topSectionLabel = suppScrollChild:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
-topSectionLabel:SetPoint("TOP", suppScrollChild, "TOP", 0, 0)
+local topSectionLabel = suppContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
+topSectionLabel:SetPoint("TOP", suppContent, "TOP", 0, 0)
 topSectionLabel:SetText("Top Supporters")
 topSectionLabel:SetTextColor(0.96, 0.82, 0.36)
 
@@ -4952,34 +4968,34 @@ end
 local topYOffset = -18
 for _, name in ipairs(topSupporters) do
     local estimatedWidth = #tostring(name or "") * 9
-    CreateRainbowSupporterLine(suppScrollChild, name, math.max(6, math.floor((336 - estimatedWidth) / 2)), topYOffset)
+    CreateRainbowSupporterLine(suppContent, name, math.max(6, math.floor((332 - estimatedWidth) / 2)), topYOffset)
     topYOffset = topYOffset - 22
 end
 
-local divider = suppScrollChild:CreateTexture(nil, "ARTWORK")
+local divider = suppContent:CreateTexture(nil, "ARTWORK")
 divider:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
-divider:SetSize(260, 1)
-divider:SetPoint("TOP", suppScrollChild, "TOP", 0, topYOffset)
+divider:SetSize(300, 1)
+divider:SetPoint("TOP", suppContent, "TOP", 0, topYOffset + 4)
 
-local supportersLabel = suppScrollChild:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
-supportersLabel:SetPoint("TOP", suppScrollChild, "TOP", 0, topYOffset - 10)
+local supportersLabel = suppContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
+supportersLabel:SetPoint("TOP", suppContent, "TOP", 0, topYOffset - 5)
 supportersLabel:SetText("Supporters")
 supportersLabel:SetTextColor(0.84, 0.84, 0.84)
 supportersLabel:SetJustifyH("CENTER")
 
-local listStartY = topYOffset - 24
+local listStartY = topYOffset - 17
 local supporterCount = #generalSupporters
-local supporterColumns = 3
+local supporterColumns = 4
 local supporterRows = math.max(1, math.ceil(supporterCount / supporterColumns))
-local columnWidth = 108
-local rowHeight = 15
+local columnWidth = 83
+local rowHeight = 13
 
 for index, name in ipairs(generalSupporters) do
-    local pt = suppScrollChild:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+    local pt = suppContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     local column = math.floor((index - 1) / supporterRows)
     local row = (index - 1) % supporterRows
-    pt:SetPoint("TOPLEFT", suppScrollChild, "TOPLEFT", 6 + (column * columnWidth), listStartY - (row * rowHeight))
-    pt:SetWidth(columnWidth - 6)
+    pt:SetPoint("TOPLEFT", suppContent, "TOPLEFT", 0 + (column * columnWidth), listStartY - (row * rowHeight))
+    pt:SetWidth(columnWidth - 4)
     if pt.SetWordWrap then
         pt:SetWordWrap(false)
     end
@@ -4990,22 +5006,32 @@ for index, name in ipairs(generalSupporters) do
     pt:SetText(name)
     pt:SetTextColor(0.8, 0.8, 0.8)
 end
-suppScrollChild:SetHeight(math.max(1, math.abs(listStartY) + (supporterRows * rowHeight) + 4))
 
-local socialY = -260
 if addonTable.Socials then
-    for _, social in ipairs(addonTable.Socials) do
-        local btn = addonTable.CreateFlatButton(supportersPanel, social.name, 170)
-        btn:SetPoint("TOP", supportersPanel, "TOP", 0, socialY)
+    local buttonWidth = 102
+    local buttonHeight = 20
+    local buttonGap = 6
+    local totalButtons = #addonTable.Socials
+    local firstRowCount = math.min(3, totalButtons)
+    local secondRowCount = math.max(0, totalButtons - firstRowCount)
+    for index, social in ipairs(addonTable.Socials) do
+        local btn = addonTable.CreateFlatButton(supportersPanel, social.name, buttonWidth)
+        btn:SetHeight(buttonHeight)
+        btn:SetAutoWidth(buttonWidth, buttonWidth, buttonHeight)
+        local row = index <= firstRowCount and 0 or 1
+        local column = row == 0 and (index - 1) or (index - firstRowCount - 1)
+        local rowCount = row == 0 and firstRowCount or secondRowCount
+        local rowWidth = (rowCount * buttonWidth) + math.max(0, rowCount - 1) * buttonGap
+        local x = -math.floor(rowWidth / 2) + math.floor(buttonWidth / 2) + column * (buttonWidth + buttonGap)
+        btn:SetPoint("BOTTOM", supportersPanel, "BOTTOM", x, 12 + ((1 - row) * 24))
         btn:SetScript("OnClick", function()
             StaticPopup_Show("OAK_LFG_URL_COPY", "", "", social.url)
         end)
-        socialY = socialY - 25
     end
 end
 
 local fontPickerButton = addonTable.CreateFlatButton(supportersPanel, addonTable.GetActiveFontName and addonTable.GetActiveFontName() or "OakUI Font", 170)
-fontPickerButton:SetPoint("TOP", supportersPanel, "TOP", 0, -300)
+fontPickerButton:SetPoint("BOTTOM", supportersPanel, "BOTTOM", 0, 36)
 fontPickerButton:Hide()
 
 local fontPickerList = CreateFrame("Frame", nil, supportersPanel, "BackdropTemplate")

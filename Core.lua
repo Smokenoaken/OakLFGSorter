@@ -3049,6 +3049,12 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             addonTable.UpdateAuxPanelAnchors()
         end
     elseif event == "GROUP_ROSTER_UPDATE" then
+        if addonTable.FilterPanel and addonTable.FilterPanel:IsShown() and addonTable.SyncApplicantFilterPanelControls then
+            addonTable.SyncApplicantFilterPanelControls()
+        end
+        if addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() and addonTable.SyncSharedLowLatencyToggles then
+            addonTable.SyncSharedLowLatencyToggles()
+        end
         if OAK_LFG:IsShown() and C_LFGList.HasActiveEntryInfo() then
             addonTable.UpdateDisplay()
         end
