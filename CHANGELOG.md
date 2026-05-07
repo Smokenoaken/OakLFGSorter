@@ -1,3 +1,10 @@
+## v4.0.7
+
+- Fixed persisted dungeon filters so Oak applies them through Blizzard-compatible activity filters immediately after login or reload
+- Moved Oak auto-open toggles to the Group Finder title bar to avoid overlapping other filter addons
+- Updated Mythic+ key filter examples to match supported input formats
+- Updated the supporter list
+
 ## v4.0.6
 
 - Preserved filter settings and refreshed checkbox visuals after group join and leave transitions.
