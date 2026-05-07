@@ -11,6 +11,7 @@ addonTable.Socials = {
 addonTable.Patreons = {
     "Mandos",
     "Thomas Valhøj",
+    "Justin Komosky",
     "psykotedy",
     "Brian Ehlers",
     "mglass",
@@ -23,7 +24,6 @@ addonTable.Patreons = {
     "Inuyasha",
     "Emmanuel leroy",
     "Casey",
-    "Mike Ham",
     "Mike Saul",
     "Rob Richardson",
     "Michael Irving",
@@ -33,7 +33,6 @@ addonTable.Patreons = {
     "Deckert Skilso",
     "Noël Léon Dalstein",
     "Romain Herlinvaux",
-    "Omar Elsotouhy",
     "Daniel Girgsdies",
     "Paul Westervelt",
     "Typical Panda",
@@ -49,5 +48,6 @@ addonTable.Patreons = {
     "Jon Jordan",
     "michael arguedas",
     "Devron Lee",
-    "Michael j",
+    "Andreas Rollinger",
+    "Tenelle Mallard",
 }

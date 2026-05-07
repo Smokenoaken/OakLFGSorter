@@ -876,6 +876,9 @@ end
 local SyncBrowserSelectedActivitiesFromNative
 
 function addonTable.BuildBrowserRuntimeFilters()
+    if SyncBrowserSelectedActivitiesFromNative then
+        SyncBrowserSelectedActivitiesFromNative()
+    end
     local filters = BrowserFilterState()
     local runtime = {
         filters = filters,
@@ -1072,9 +1075,6 @@ SyncBrowserSelectedActivitiesFromNative = function()
     if type(filters.selectedActivities) ~= "table" then
         filters.selectedActivities = {}
     end
-    if next(filters.selectedActivities) ~= nil then
-        return
-    end
 
     if not (C_LFGList and C_LFGList.GetAdvancedFilter) then
         return
@@ -1095,6 +1095,10 @@ SyncBrowserSelectedActivitiesFromNative = function()
         end
     end
 
+    -- Blizzard's advanced filter is authoritative when it has activity selections,
+    -- but an empty native activity list is also the normal startup/default state.
+    -- Keep Oak's persisted selections in that case so they can be pushed back into
+    -- Blizzard before the next search instead of being wiped on every refresh.
     if next(selectedIDs) == nil then
         return
     end
@@ -1122,6 +1126,7 @@ SyncBrowserSelectedActivitiesFromNative = function()
         filters.selectedActivities[key] = true
     end
 end
+addonTable.SyncBrowserSelectedActivitiesFromNative = SyncBrowserSelectedActivitiesFromNative
 
 local function SyncBrowserNativeActivities()
     if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then return end
@@ -1130,23 +1135,29 @@ local function SyncBrowserNativeActivities()
     if not success or type(advancedFilter) ~= "table" then advancedFilter = {} end
 
     local groupIDs = {}
+    local activityIDs = {}
     local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
     for _, entry in ipairs(activities) do
         if filters.selectedActivities[entry.filterKey] then
             local gid = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(entry.activityInfo) or nil
             if gid and gid > 0 then
                 table.insert(groupIDs, gid)
-            else
-                local activityID = tonumber(entry.activityID)
-                if activityID and activityID > 0 then
-                    table.insert(groupIDs, activityID)
-                end
+            end
+            local activityID = tonumber(entry.activityID)
+            if activityID and activityID > 0 then
+                table.insert(activityIDs, activityID)
             end
         end
     end
-    advancedFilter.activities = groupIDs
+    -- Blizzard's visible dungeon filter pane stores activity-group IDs, while
+    -- direct search paths have historically consumed concrete activity IDs on
+    -- some clients/builds. Persist both shapes so Oak can seed Blizzard before
+    -- the native panel has been opened.
+    advancedFilter.activities = (#groupIDs > 0 and groupIDs) or activityIDs
+    advancedFilter.activityIDs = activityIDs
     pcall(C_LFGList.SaveAdvancedFilter, advancedFilter)
 end
+addonTable.SyncBrowserNativeActivities = SyncBrowserNativeActivities
 
 local function SetAllClassFilters(isEnabled)
     for class, _ in pairs(addonTable.ClassFilters) do
@@ -2413,7 +2424,7 @@ addonTable.GetNeedsMyClassLabel = GetNeedsMyClassLabel
 local function GetSearchQueryLabel(mode)
     if mode == "mythic_plus" or mode == "dungeon" then
         -- Dungeon and M+ share the same filter panel layout
-        return "Examples: 10-11, <10, <12"
+        return "Examples: 10-11, 15, 15-20"
     elseif mode == "raid" or mode == "legacy_raid" then
         return "Search raid groups..."
     end
@@ -2704,6 +2715,7 @@ local function AttachBrowserNativeSearchBox()
         browserQueryBoxFrame.AutoCompleteFrame = LFGListFrame.SearchPanel.AutoCompleteFrame
     end
     searchBox:SetScript("OnEnterPressed", function(self)
+        SyncBrowserNativeActivities()
         if addonTable.RunBrowserSearch then
             addonTable.RunBrowserSearch()
         end
@@ -2786,6 +2798,7 @@ end
 browserFilterPanel:HookScript("OnHide", function() RestoreBrowserNativeSearchBox() end)
 
 local function ApplyBrowserQueryAndRefresh()
+    SyncBrowserNativeActivities()
     if addonTable.RunBrowserSearch then
         addonTable.RunBrowserSearch()
     end
@@ -5193,19 +5206,14 @@ end
 function addonTable.SetupBlizzardLFGHook()
     if LFGListFrame and LFGListFrame.ApplicationViewer then
         if not lfgToggleBox then
-            lfgToggleBox = CreateFrame("Button", nil, LFGListFrame.ApplicationViewer, "BackdropTemplate")
+            lfgToggleBox = CreateFrame("Button", nil, LFGListFrame, "BackdropTemplate")
             addonTable.LFGToggleBox = lfgToggleBox
             lfgToggleBox:SetSize(22, 22)
             lfgToggleBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
             lfgToggleBox:RegisterForClicks("LeftButtonUp")
-            
-            if LFGListFrame.ApplicationViewer.RefreshButton then
-                lfgToggleBox:SetPoint("RIGHT", LFGListFrame.ApplicationViewer.RefreshButton, "LEFT", -6, 0)
-            elseif LFGListFrame.ApplicationViewer.NameColumnHeader then
-                lfgToggleBox:SetPoint("BOTTOMLEFT", LFGListFrame.ApplicationViewer.NameColumnHeader, "TOPLEFT", 15, 12)
-            else
-                lfgToggleBox:SetPoint("TOPLEFT", LFGListFrame.ApplicationViewer, "TOPLEFT", 25, 5)
-            end
+            lfgToggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -34, -4)
+            lfgToggleBox:SetFrameLevel((LFGListFrame:GetFrameLevel() or 1) + 20)
+            lfgToggleBox:Hide()
 
             lfgToggleHighlight = lfgToggleBox:CreateTexture(nil, "BACKGROUND")
             lfgToggleHighlight:SetTexture(addonTable.FLAT_TEX or "Interface\\Buttons\\WHITE8X8")
@@ -5247,11 +5255,22 @@ function addonTable.SetupBlizzardLFGHook()
 
             ApplyBlizzardAutoOpenButtonVisual()
 
+            local function UpdateApplicationToggleVisibility()
+                if LFGListFrame and LFGListFrame.ApplicationViewer and LFGListFrame.ApplicationViewer:IsShown() then
+                    lfgToggleBox:Show()
+                else
+                    lfgToggleBox:Hide()
+                end
+            end
+
             LFGListFrame.ApplicationViewer:HookScript("OnShow", function()
+                UpdateApplicationToggleVisibility()
                 if OakLFGSorterDB and OakLFGSorterDB.autoOpen then
                     QueueApplicationViewerAutoOpen()
                 end
             end)
+            LFGListFrame.ApplicationViewer:HookScript("OnHide", UpdateApplicationToggleVisibility)
+            UpdateApplicationToggleVisibility()
         end
     end
 

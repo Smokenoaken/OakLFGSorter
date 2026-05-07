@@ -47,18 +47,13 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
     -- Add Oak auto-open toggle on the Blizzard Search panel.
     if LFGListFrame and LFGListFrame.SearchPanel and not LFGListFrame.SearchPanel.OakSearchToggleHooked then
         local searchPanel = LFGListFrame.SearchPanel
-        local toggleBox = CreateFrame("Button", nil, searchPanel, "BackdropTemplate")
+        local toggleBox = CreateFrame("Button", nil, LFGListFrame, "BackdropTemplate")
         toggleBox:SetSize(22, 22)
         toggleBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
         toggleBox:RegisterForClicks("LeftButtonUp")
-
-        if searchPanel.RefreshButton then
-            toggleBox:SetPoint("RIGHT", searchPanel.RefreshButton, "LEFT", -6, 0)
-        elseif searchPanel.FilterButton then
-            toggleBox:SetPoint("RIGHT", searchPanel.FilterButton, "LEFT", -6, 0)
-        else
-            toggleBox:SetPoint("TOPRIGHT", searchPanel, "TOPRIGHT", -46, -34)
-        end
+        toggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -34, -4)
+        toggleBox:SetFrameLevel((LFGListFrame:GetFrameLevel() or 1) + 20)
+        toggleBox:Hide()
 
         local tint = toggleBox:CreateTexture(nil, "BACKGROUND")
         tint:SetTexture(FLAT_TEX)
@@ -97,6 +92,14 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
             end
         end
 
+        local function UpdateVisibility()
+            if searchPanel and searchPanel:IsShown() then
+                toggleBox:Show()
+            else
+                toggleBox:Hide()
+            end
+        end
+
         UpdateState()
         toggleBox:SetScript("OnClick", function()
             OakLFGSorterDB.autoOpenSearch = not OakLFGSorterDB.autoOpenSearch
@@ -122,12 +125,15 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
 
         -- When the Blizzard search panel opens, show OAK_LFG in browser mode
         LFGListFrame.SearchPanel:HookScript("OnShow", function()
+            UpdateVisibility()
             if OakLFGSorterDB.autoOpenSearch then
                 QueueSearchPanelAutoOpen()
             else
                 OAK_LFG:Hide()
             end
         end)
+        LFGListFrame.SearchPanel:HookScript("OnHide", UpdateVisibility)
+        UpdateVisibility()
 
         LFGListFrame.SearchPanel.OakSearchToggleHooked = true
     end

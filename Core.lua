@@ -1913,18 +1913,99 @@ local function BuildSelectedActivityIDFilter()
     end
 
     local selectedActivityIDs = {}
+    local selectedActivityIDSet = {}
+    local selectedGroupIDs = {}
     local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
     for _, entry in ipairs(activities) do
-        if filters.selectedActivities[entry.filterKey] and entry.activityID then
-            table.insert(selectedActivityIDs, entry.activityID)
+        if filters.selectedActivities[entry.filterKey] then
+            local groupID = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(entry.activityInfo) or nil
+            if groupID and groupID > 0 then
+                selectedGroupIDs[groupID] = true
+            end
+
+            local activityID = tonumber(entry.activityID)
+            if activityID and activityID > 0 then
+                selectedActivityIDSet[activityID] = true
+            end
         end
     end
+
+    -- The checkbox list stores one representative activity per dungeon label, but
+    -- Blizzard's Search activityIDsFilter needs concrete activity IDs. Include all
+    -- available activities that belong to each selected dungeon group so the first
+    -- post-login search does not depend on Blizzard's filter panel being opened.
+    local context = addonTable.CurrentSearchContext or {}
+    local categoryID = context.categoryID or context.selectedCategoryID
+    if categoryID and C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetActivityInfoTable then
+        for _, activityID in ipairs(C_LFGList.GetAvailableActivities(categoryID) or {}) do
+            local activityInfo = C_LFGList.GetActivityInfoTable(activityID)
+            local groupID = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(activityInfo) or nil
+            if (groupID and selectedGroupIDs[groupID]) or selectedActivityIDSet[activityID] then
+                selectedActivityIDSet[activityID] = true
+            end
+        end
+    end
+
+    for activityID in pairs(selectedActivityIDSet) do
+        selectedActivityIDs[#selectedActivityIDs + 1] = activityID
+    end
+
+    table.sort(selectedActivityIDs)
 
     if #selectedActivityIDs == 0 then
         return nil
     end
 
     return selectedActivityIDs
+end
+
+local function HasSelectedActivityFilter()
+    local filters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or nil
+    if type(filters) ~= "table" or type(filters.selectedActivities) ~= "table" then
+        return false
+    end
+
+    for _, selected in pairs(filters.selectedActivities) do
+        if selected then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function EnsureBlizzardSearchPanelForCategory(categoryID, selection)
+    if UIParentLoadAddOn then
+        pcall(UIParentLoadAddOn, "Blizzard_GroupFinder")
+    end
+
+    local panel = LFGListFrame and LFGListFrame.SearchPanel
+    if not panel then
+        return nil
+    end
+
+    local filters = (selection and selection.filters) or 0
+    local preferredFilters = (selection and selection.preferredFilters) or 0
+
+    panel.selectedCategory = categoryID
+    panel.categoryID = categoryID
+    panel.selectedFilters = filters
+    panel.filters = filters
+    panel.preferredFilters = preferredFilters
+    panel.languageFilter = selection and selection.languageFilter or panel.languageFilter
+    panel.searchCrossFactionListings = selection and selection.searchCrossFactionListings or panel.searchCrossFactionListings
+
+    if type(panel.SetCategory) == "function" then
+        pcall(panel.SetCategory, panel, categoryID, filters, preferredFilters)
+    end
+    if type(LFGListSearchPanel_SetCategory) == "function" then
+        pcall(LFGListSearchPanel_SetCategory, panel, categoryID, filters, preferredFilters)
+    end
+    if type(panel.UpdateResultList) == "function" then
+        pcall(panel.UpdateResultList, panel)
+    end
+
+    return panel
 end
 
 function addonTable.RunBrowserSearch()
@@ -1954,10 +2035,32 @@ function addonTable.RunBrowserSearch()
         end
     end
 
-    -- When Blizzard is already on the same category, use Blizzard's own search routine.
-    -- This preserves any internal state or locale-specific behavior that Oak may not
-    -- reproduce by reconstructing C_LFGList.Search arguments manually.
-    if panel and (panel.selectedCategory or panel.categoryID) == categoryID and type(LFGListSearchPanel_DoSearch) == "function" then
+    if categoryKey == "DUNGEONS" and addonTable.SyncBrowserNativeActivities then
+        addonTable.SyncBrowserNativeActivities()
+        panel = EnsureBlizzardSearchPanelForCategory(categoryID, selection) or panel
+        if C_LFGList.GetAdvancedFilter then
+            local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+            if ok and type(adv) == "table" then
+                advancedFilter = adv
+            end
+        end
+    end
+
+    -- Use the native Blizzard search-panel path only after that panel is actually
+    -- initialized and when there is no Oak-persisted activity filter to carry.
+    -- On login/reload a hidden panel can exist but still ignore the saved dungeon
+    -- activity filter, which causes Oak to receive all dungeons and post-filter.
+    if panel and categoryKey == "DUNGEONS" and not HasSelectedActivityFilter() and type(LFGListSearchPanel_DoSearch) == "function" then
+        local ok, err = pcall(LFGListSearchPanel_DoSearch, panel)
+        if ok then
+            return true
+        end
+        return false, tostring(err)
+    end
+
+    -- For other categories, prefer Blizzard's own search routine when Blizzard is
+    -- already on the same category. This preserves internal state Oak does not own.
+    if categoryKey ~= "DUNGEONS" and panel and (panel.selectedCategory or panel.categoryID) == categoryID and type(LFGListSearchPanel_DoSearch) == "function" then
         local ok, err = pcall(LFGListSearchPanel_DoSearch, panel)
         if ok then
             return true
@@ -1973,7 +2076,7 @@ function addonTable.RunBrowserSearch()
         selection and selection.languageFilter or nil,
         selection and selection.searchCrossFactionListings or false,
         advancedFilter,
-        nil
+        (categoryKey == "DUNGEONS" and BuildSelectedActivityIDFilter()) or nil
     )
 
     if not success then
