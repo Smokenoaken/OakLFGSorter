@@ -127,7 +127,7 @@ end
 
 local function GroupMatchesRoleFilters(group)
     local effectiveRoleFilters = addonTable.RoleFilters
-    if OakLFGSorterDB and OakLFGSorterDB.autoHideFilledRoles then
+    if addonTable.GetCharacterAutoHideFilledRoles and addonTable.GetCharacterAutoHideFilledRoles() then
         local partyRoles, _ = GetPartyRoleSupply()
         local targets = { TANK = 1, HEALER = 1, DAMAGER = 3 }
         local entryInfo = C_LFGList and C_LFGList.GetActiveEntryInfo and C_LFGList.GetActiveEntryInfo()
@@ -565,11 +565,65 @@ end
 
 addonTable.ResultMatchesRaidLockout = ResultMatchesRaidLockout
 
-local function ResultMatchesRoleNeeds(result, filters)
-    if filters.hasTank and (result.roleCounts.TANK or 0) == 0 then
+local function GetBrowserFilledRoleCounts(result)
+    local counts = { TANK = 0, HEALER = 0, DAMAGER = 0 }
+    if type(result) ~= "table" then
+        return counts, 0
+    end
+
+    local players = result.players
+    if type(players) == "table" and #players > 0 then
+        for _, player in ipairs(players) do
+            local role = player and player.role
+            if role ~= "TANK" and role ~= "HEALER" then
+                role = "DAMAGER"
+            end
+            counts[role] = (counts[role] or 0) + 1
+        end
+    else
+        local roleCounts = result.roleCounts or {}
+        counts.TANK = tonumber(roleCounts.TANK) or 0
+        counts.HEALER = tonumber(roleCounts.HEALER) or 0
+        counts.DAMAGER = tonumber(roleCounts.DAMAGER) or 0
+    end
+
+    local roleTotal = (counts.TANK or 0) + (counts.HEALER or 0) + (counts.DAMAGER or 0)
+    local memberTotal = math.max(tonumber(result.numMembers) or 0, type(players) == "table" and #players or 0, roleTotal)
+    return counts, memberTotal
+end
+
+addonTable.GetBrowserFilledRoleCounts = GetBrowserFilledRoleCounts
+
+function addonTable.IsDungeonBrowserResultFull(result)
+    if type(result) ~= "table" then
         return false
     end
-    if filters.hasHealer and (result.roleCounts.HEALER or 0) == 0 then
+
+    local categoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
+    local isDungeonResult = categoryKey == "DUNGEONS" or result.mode == "mythic_plus" or result.isMythicPlus == true
+    if not isDungeonResult then
+        return false
+    end
+
+    local _, memberTotal = GetBrowserFilledRoleCounts(result)
+    if memberTotal >= 5 then
+        return true
+    end
+
+    local maxPlayers = tonumber(result.maxPlayers)
+    if not maxPlayers or maxPlayers <= 0 then
+        maxPlayers = result.activityInfo and tonumber(result.activityInfo.maxNumPlayers or result.activityInfo.maxPlayers) or 0
+    end
+    return maxPlayers > 0 and memberTotal >= maxPlayers
+end
+
+local function ResultMatchesRoleNeeds(result, filters)
+    local roleCounts, memberTotal = GetBrowserFilledRoleCounts(result)
+
+    if filters.hasTank and (roleCounts.TANK or 0) == 0 then
+        return false
+    end
+    if filters.hasHealer and (roleCounts.HEALER or 0) == 0 then
         return false
     end
 
@@ -582,23 +636,23 @@ local function ResultMatchesRoleNeeds(result, filters)
     end
 
     if maxPlayers == 5 then
-        if filters.needsTank and (result.roleCounts.TANK or 0) >= 1 then
+        if filters.needsTank and (roleCounts.TANK or 0) >= 1 then
             return false
         end
-        if filters.needsHealer and (result.roleCounts.HEALER or 0) >= 1 then
+        if filters.needsHealer and (roleCounts.HEALER or 0) >= 1 then
             return false
         end
-        if filters.needsDPS and (result.roleCounts.DAMAGER or 0) >= 3 then
+        if filters.needsDPS and (roleCounts.DAMAGER or 0) >= 3 then
             return false
         end
     else
-        if filters.needsTank and (result.roleCounts.TANK or 0) > 0 then
+        if filters.needsTank and (roleCounts.TANK or 0) > 0 then
             return false
         end
-        if filters.needsHealer and (result.roleCounts.HEALER or 0) > 0 and result.numMembers >= maxPlayers then
+        if filters.needsHealer and (roleCounts.HEALER or 0) > 0 and memberTotal >= maxPlayers then
             return false
         end
-        if filters.needsDPS and result.numMembers >= maxPlayers then
+        if filters.needsDPS and memberTotal >= maxPlayers then
             return false
         end
     end
@@ -695,6 +749,9 @@ end
 
 function addonTable.ResultPassesBrowserFilters(result)
     -- Hide groups that are completely full (no open slots)
+    if addonTable.IsDungeonBrowserResultFull and addonTable.IsDungeonBrowserResultFull(result) then
+        return false
+    end
     local maxP = result.maxPlayers or 0
     if maxP > 0 and (result.numMembers or 0) >= maxP then
         return false
@@ -1529,6 +1586,7 @@ function addonTable.UpdateTopBarActions()
         refreshBtn:SetLabel(L["Refresh"])
         refreshBtn:SetScript("OnClick", function()
             local ok = false
+            addonTable._manualBrowserRefreshInProgress = true
             if addonTable.RunBrowserSearch then
                 ok = select(1, addonTable.RunBrowserSearch()) == true
             end
@@ -1887,7 +1945,7 @@ SyncApplicantFilterPanelControls = function()
     end
 
     if autoHideRolesBox and autoHideRolesBox.SetState then
-        autoHideRolesBox:SetState(OakLFGSorterDB and OakLFGSorterDB.autoHideFilledRoles == true)
+        autoHideRolesBox:SetState(addonTable.GetCharacterAutoHideFilledRoles and addonTable.GetCharacterAutoHideFilledRoles())
     end
     if mutePingBox and mutePingBox.SetState then
         mutePingBox:SetState(OakLFGSorterDB and OakLFGSorterDB.muteApplicantPing == true)
@@ -1927,7 +1985,7 @@ btnDecline:SetScript("OnClick", function()
     end
 end)
 
-autoHideRolesBox = CreateOakToggleBox(filterPanel, "autoHideFilledRoles", OakLFGSorterDB)
+autoHideRolesBox = CreateOakToggleBox(filterPanel, "autoHideFilledRoles", addonTable.GetCharacterDB and addonTable.GetCharacterDB() or OakLFGSorterCharDB)
 autoHideRolesBox:SetPoint("BOTTOMLEFT", filterPanel, "BOTTOMLEFT", 15, 30)
 
 local autoHideRolesText = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
@@ -1946,8 +2004,10 @@ autoHideRolesBox:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 autoHideRolesBox:SetScript("OnClick", function(self)
-    OakLFGSorterDB.autoHideFilledRoles = not OakLFGSorterDB.autoHideFilledRoles
-    self:SetState(OakLFGSorterDB.autoHideFilledRoles)
+    local db = addonTable.GetCharacterDB and addonTable.GetCharacterDB() or OakLFGSorterCharDB
+    if type(db) ~= "table" then return end
+    db.autoHideFilledRoles = not (db.autoHideFilledRoles == true)
+    self:SetState(db.autoHideFilledRoles)
     RefreshFilters()
 end)
 
@@ -2799,6 +2859,7 @@ browserFilterPanel:HookScript("OnHide", function() RestoreBrowserNativeSearchBox
 
 local function ApplyBrowserQueryAndRefresh()
     SyncBrowserNativeActivities()
+    addonTable._manualBrowserRefreshInProgress = true
     if addonTable.RunBrowserSearch then
         addonTable.RunBrowserSearch()
     end
@@ -4022,7 +4083,7 @@ optionsKeepGoneBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTa
 optionsKeepGoneBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -174)
 local optionsKeepGoneLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsKeepGoneLabel:SetPoint("LEFT", optionsKeepGoneBox, "RIGHT", 8, 0)
-optionsKeepGoneLabel:SetText("Keep Gone")
+optionsKeepGoneLabel:SetText("Keep Delisted/Cancelled")
 
 local optionsThemeModeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsThemeModeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -198)
@@ -4371,9 +4432,8 @@ optionsKeepGoneBox:SetScript("OnEnter", function(self)
     local filters = BrowserFilterState()
     ApplyNeutralOptionsToggleVisual(self, optionsKeepGoneLabel, filters.keepUnavailable == true)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Keep Gone", 1, 1, 1)
-    GameTooltip:AddLine("Keeps a small number of delisted, unavailable, or declined browser results pinned in place so the list does not jump.", 1, 1, 1, true)
-    GameTooltip:AddLine("Oak ignores large result-page changes so a full refresh cannot mark the whole browser as delisted.", 0.85, 0.85, 0.85, true)
+    GameTooltip:SetText("Keep Delisted/Cancelled", 1, 1, 1)
+    GameTooltip:AddLine("Keeps delisted browser rows and cancelled applicant rows stable during live updates. Manual Refresh always loads a fresh list.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsKeepGoneBox:SetScript("OnLeave", function()
@@ -4712,6 +4772,9 @@ local function RefreshOptionsPanel()
     ApplyMinimapToggleVisual(optionsBrowserTooltipBox, optionsBrowserTooltipLabel, OakLFGSorterDB.attachBrowserTooltipToCursor == true)
     do
         local filters = BrowserFilterState()
+        if optionsKeepGoneLabel then
+            optionsKeepGoneLabel:SetText("Keep Delisted/Cancelled")
+        end
         ApplyNeutralOptionsToggleVisual(optionsKeepGoneBox, optionsKeepGoneLabel, filters.keepUnavailable == true)
     end
     if optionsThemeModeButton and optionsThemeModeButton.RefreshSelection then

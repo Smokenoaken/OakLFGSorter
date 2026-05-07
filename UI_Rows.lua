@@ -219,6 +219,54 @@ if not scrollFrame.RegisterCallback then
     scrollFrame:OnLoad()
 end
 
+function addonTable.GetSortMode()
+    return (addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser") and "browser" or "applicant"
+end
+
+function addonTable.IsValidSortKey(sortKey)
+    return sortKey == "role"
+        or sortKey == "region"
+        or sortKey == "class"
+        or sortKey == "spec"
+        or sortKey == "ilvl"
+        or sortKey == "rating"
+        or sortKey == "key"
+        or sortKey == "note"
+end
+
+function addonTable.ApplySavedSortForCurrentMode(force)
+    local mode = addonTable.GetSortMode()
+    if not force and addonTable._lastSortMode == mode then
+        return
+    end
+
+    addonTable._lastSortMode = mode
+    if mode == "browser" then
+        local db = addonTable.GetCharacterDB and addonTable.GetCharacterDB() or OakLFGSorterCharDB or {}
+        if db.browserSortExplicit == true and addonTable.IsValidSortKey(db.browserSortBy) then
+            addonTable.CurrentSortBy = db.browserSortBy
+            addonTable.CurrentIsAscending = db.browserSortAscending == true
+        end
+    end
+end
+
+function addonTable.SaveSortForCurrentMode()
+    if addonTable.GetSortMode() ~= "browser" then
+        return
+    end
+
+    local db = addonTable.GetCharacterDB and addonTable.GetCharacterDB() or OakLFGSorterCharDB
+    if type(db) ~= "table" then
+        return
+    end
+
+    if addonTable.IsValidSortKey(addonTable.CurrentSortBy) then
+        db.browserSortBy = addonTable.CurrentSortBy
+        db.browserSortAscending = addonTable.CurrentIsAscending == true
+        db.browserSortExplicit = true
+    end
+end
+
 local scrollBar = CreateFrame("EventFrame", "SorterClassicMinimalScrollBar", OAK_LFG, "MinimalScrollBar")
 scrollBar:SetPoint("TOPRIGHT", OAK_LFG, "TOPRIGHT", -8, SCROLL_TOP_OFFSET - 4)
 scrollBar:SetPoint("BOTTOMRIGHT", OAK_LFG, "BOTTOMRIGHT", -8, 39)
@@ -765,10 +813,6 @@ local function SortGroups(grpA, grpB, sortBy, isAscending)
     local listingMode = GetListingMode()
     local isBrowser = IsBrowserMode()
 
-    if isBrowser and (grpA.isUnavailable or grpB.isUnavailable) then
-        return (grpA._oakStableIndex or grpA.id or 0) < (grpB._oakStableIndex or grpB.id or 0)
-    end
-
     if isBrowser then
         if sortBy == "role" then valA, valB = grpA.dungeonName or grpA.activityFilterLabel or grpA.activityName or "", grpB.dungeonName or grpB.activityFilterLabel or grpB.activityName or ""
         elseif sortBy == "region" then
@@ -1225,6 +1269,8 @@ end
 local headers = {}
 local keyHeader
 function addonTable.UpdateHeaderVisuals()
+    addonTable.ApplySavedSortForCurrentMode()
+
     local modeConfig = GetModeConfig()
     local showSecondaryMetric = UsesSecondaryMetricColumn()
     local isBrowser = IsBrowserMode()
@@ -1494,6 +1540,8 @@ local function CreateHeader(label, sortKey, column)
     btn:SetScript("OnClick", function()
         if addonTable.CurrentSortBy == sortKey then addonTable.CurrentIsAscending = not addonTable.CurrentIsAscending
         else addonTable.CurrentSortBy = sortKey; addonTable.CurrentIsAscending = false end
+        addonTable.SaveSortForCurrentMode()
+        addonTable._forceBrowserSortOnce = true
         addonTable.UpdateHeaderVisuals(); addonTable.UpdateDisplay()
     end)
     btn:SetScript("OnEnter", function(self)
@@ -4127,8 +4175,11 @@ PopulateBrowserRow = function(row, result, isAltColor)
     end
 
     if row.ageText then
-        if result.isUnavailable then
-            row.ageText:SetText("Delisted")
+        if addonTable.IsCancelledStatus and addonTable.IsCancelledStatus(result.applicationStatus) then
+            row.ageText:SetText("Cancelled")
+            row.ageText:SetTextColor(1, 0.45, 0.25)
+        elseif result.isUnavailable then
+            row.ageText:SetText(result.isDelisted and "Delisted" or "Filtered")
             row.ageText:SetTextColor(1, 0.35, 0.25)
         elseif addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
             row.ageText:SetText("Declined")
@@ -4148,8 +4199,11 @@ PopulateBrowserRow = function(row, result, isAltColor)
         end
     end
 
-    if result.isUnavailable then
-        row.noteText:SetText("Delisted")
+    if addonTable.IsCancelledStatus and addonTable.IsCancelledStatus(result.applicationStatus) then
+        row.noteText:SetText("Cancelled")
+        row.noteText:SetTextColor(1, 0.45, 0.25)
+    elseif result.isUnavailable then
+        row.noteText:SetText(result.isDelisted and "Delisted" or "Filtered")
         row.noteText:SetTextColor(1, 0.35, 0.25)
     else
         row.noteText:SetText(result.comment or "")
@@ -4193,6 +4247,54 @@ PopulateBrowserRow = function(row, result, isAltColor)
         inviteTexture:SetDesaturated(not isApplied and not canApply)
         inviteTexture:SetAlpha((isApplied or canApply) and 1 or 0.55)
     end
+end
+
+local function IsBrowserResultFull(result)
+    if not result then return false end
+    if addonTable.IsDungeonBrowserResultFull and addonTable.IsDungeonBrowserResultFull(result) then
+        return true
+    end
+
+    local maxPlayers = tonumber(result.maxPlayers) or 0
+    local numMembers = tonumber(result.numMembers) or 0
+    if maxPlayers > 0 and numMembers >= maxPlayers then
+        return true
+    end
+
+    local roleCounts = result.roleCounts or {}
+    if addonTable.GetBrowserFilledRoleCounts then
+        roleCounts = addonTable.GetBrowserFilledRoleCounts(result)
+    end
+    local roleTotal = (tonumber(roleCounts.TANK) or 0)
+        + (tonumber(roleCounts.HEALER) or 0)
+        + (tonumber(roleCounts.DAMAGER) or 0)
+    local playerTotal = #(result.players or {})
+    local categoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
+    local isDungeonResult = categoryKey == "DUNGEONS" or result.mode == "mythic_plus"
+    if isDungeonResult and (numMembers >= 5 or playerTotal >= 5 or roleTotal >= 5) then
+        return true
+    end
+
+    if (maxPlayers == 5 or maxPlayers <= 0) then
+        local setupSummary = GetBrowserSetupSummary(result)
+        if type(setupSummary) == "table" and #setupSummary >= 5 then
+            local filledSlots = 0
+            for index = 1, 5 do
+                if setupSummary[index] and setupSummary[index].filled then
+                    filledSlots = filledSlots + 1
+                end
+            end
+            if filledSlots >= 5 then
+                return true
+            end
+        end
+
+        return (tonumber(roleCounts.TANK) or 0) >= 1
+            and (tonumber(roleCounts.HEALER) or 0) >= 1
+            and (tonumber(roleCounts.DAMAGER) or 0) >= 3
+    end
+
+    return false
 end
 
 function addonTable.UpdateDisplay()
@@ -4250,14 +4352,29 @@ function addonTable.UpdateDisplay()
     if isBrowser then
         addonTable._browserRuntimeFilters = addonTable.BuildBrowserRuntimeFilters and addonTable.BuildBrowserRuntimeFilters() or nil
         local browserFilters = addonTable._browserRuntimeFilters and addonTable._browserRuntimeFilters.filters or {}
-        local keepGoneRows = browserFilters.keepUnavailable ~= false
         local activeResults = {}
         for _, result in ipairs(addonTable.SearchResults or {}) do
+            if result.isFilteredOut then
+                result.isFilteredOut = nil
+                result.isUnavailable = nil
+                result.isDelisted = nil
+            end
             result.isRoleFilled = addonTable.IsAppliedRoleFilled and addonTable.IsAppliedRoleFilled(result) or false
             -- Groups the player has applied to are always shown regardless of filters
             -- so the user can always see and cancel their pending sign-ups.
             local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
-            if result.isUnavailable or isApplied or not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result) then
+            local passesBrowserFilters = not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result)
+            if not result.isUnavailable and not isApplied and not passesBrowserFilters and browserFilters.keepUnavailable ~= false and result._oakStableIndex then
+                local isDelisted = IsBrowserResultFull(result)
+                result.isUnavailable = true
+                result.isDelisted = isDelisted or nil
+                if isDelisted then
+                    result.isFilteredOut = nil
+                else
+                    result.isFilteredOut = true
+                end
+            end
+            if result.isUnavailable or isApplied or passesBrowserFilters then
                 table.insert(activeResults, result)
             end
         end
@@ -4269,28 +4386,30 @@ function addonTable.UpdateDisplay()
             addonTable.groupCountText:SetText(string.format("Showing %d of %d groups", shown, total))
         end
 
-        local pinnedGoneResults = {}
         local sortableResults = {}
         for _, result in ipairs(activeResults) do
-            local isDeclined = addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus)
-            if result.isUnavailable or (keepGoneRows and isDeclined) then
-                table.insert(pinnedGoneResults, result)
-            else
-                table.insert(sortableResults, result)
-            end
+            table.insert(sortableResults, result)
         end
 
+        local stabilizeBrowserOrder = browserFilters.keepUnavailable ~= false
+            and addonTable._lastBrowserFetchWasManual ~= true
+            and addonTable._browserHadPreviousResults == true
+            and addonTable._forceBrowserSortOnce ~= true
         table.sort(sortableResults, function(a, b)
+            if stabilizeBrowserOrder then
+                local aIndex = tonumber(a._oakStableIndex) or 0
+                local bIndex = tonumber(b._oakStableIndex) or 0
+                if aIndex > 0 or bIndex > 0 then
+                    if aIndex > 0 and bIndex > 0 then
+                        return aIndex < bIndex
+                    end
+                    return aIndex > 0
+                end
+            end
             return SortGroups(a, b, addonTable.CurrentSortBy, addonTable.CurrentIsAscending)
         end)
-        table.sort(pinnedGoneResults, function(a, b)
-            return (a._oakStableIndex or a.id or 0) < (b._oakStableIndex or b.id or 0)
-        end)
+        addonTable._forceBrowserSortOnce = nil
         activeResults = sortableResults
-        for _, result in ipairs(pinnedGoneResults) do
-            local insertIndex = math.max(1, math.min(result._oakStableIndex or (#activeResults + 1), #activeResults + 1))
-            table.insert(activeResults, insertIndex, result)
-        end
         for index, result in ipairs(activeResults) do
             result._oakStableIndex = index
         end

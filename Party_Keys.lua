@@ -197,7 +197,9 @@ local function ShouldShowPartyKeys()
     end
     local searchContext = addonTable.CurrentSearchContext or {}
     local searchMode = searchContext.mode
-    local categoryKey = searchContext.selectedCategoryKey or (OakLFGSorterDB and OakLFGSorterDB.browserCategoryKey)
+    local categoryKey = searchContext.selectedCategoryKey
+        or (addonTable.GetCharacterBrowserCategoryKey and addonTable.GetCharacterBrowserCategoryKey())
+        or (OakLFGSorterDB and OakLFGSorterDB.browserCategoryKey)
     return searchMode == "mythic_plus" or searchMode == "dungeon" or categoryKey == "DUNGEONS"
 end
 

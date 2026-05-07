@@ -110,6 +110,12 @@ local charDB = OakLFGSorterCharDB
 if type(charDB.browserFilters) ~= "table" then
     charDB.browserFilters = CopyTable(OakLFGSorterDB.browserFilters)
 end
+if charDB.browserCategoryKey == nil then
+    charDB.browserCategoryKey = OakLFGSorterDB.browserCategoryKey or "DUNGEONS"
+end
+if type(charDB.browserCategoryOverrides) ~= "table" then
+    charDB.browserCategoryOverrides = CopyTable(OakLFGSorterDB.browserCategoryOverrides)
+end
 if type(charDB.regionFilters) ~= "table" then
     charDB.regionFilters = CopyBooleanMap(OakLFGSorterDB.regionFilters)
 end
@@ -122,7 +128,9 @@ end
 if type(charDB.applicantRoleFilters) ~= "table" then
     charDB.applicantRoleFilters = {}
 end
-
+if charDB.autoHideFilledRoles == nil then
+    charDB.autoHideFilledRoles = OakLFGSorterDB.autoHideFilledRoles == true
+end
 for _, classToken in ipairs(addonTable.ValidClasses or {}) do
     if charDB.applicantClassFilters[classToken] == nil then
         charDB.applicantClassFilters[classToken] = true
@@ -143,6 +151,18 @@ function addonTable.GetCharacterBrowserFilters()
     local db = addonTable.GetCharacterDB()
     db.browserFilters = db.browserFilters or {}
     return db.browserFilters
+end
+
+function addonTable.GetCharacterBrowserCategoryKey()
+    local db = addonTable.GetCharacterDB()
+    db.browserCategoryKey = db.browserCategoryKey or "DUNGEONS"
+    return db.browserCategoryKey
+end
+
+function addonTable.GetCharacterBrowserCategoryOverrides()
+    local db = addonTable.GetCharacterDB()
+    db.browserCategoryOverrides = db.browserCategoryOverrides or {}
+    return db.browserCategoryOverrides
 end
 
 function addonTable.GetCharacterRegionFilters()
@@ -167,6 +187,11 @@ function addonTable.GetApplicantRoleFilters()
     local db = addonTable.GetCharacterDB()
     db.applicantRoleFilters = db.applicantRoleFilters or {}
     return db.applicantRoleFilters
+end
+
+function addonTable.GetCharacterAutoHideFilledRoles()
+    local db = addonTable.GetCharacterDB()
+    return db.autoHideFilledRoles == true
 end
 
 local browserFilters = addonTable.GetCharacterBrowserFilters()

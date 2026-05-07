@@ -198,11 +198,16 @@ addonTable.BrowserCategoryOptions = {
 }
 
 function addonTable.GetBrowserCategoryConfig(categoryKey)
-    local selectedKey = categoryKey or (OakLFGSorterDB and OakLFGSorterDB.browserCategoryKey) or "DUNGEONS"
+    local selectedKey = categoryKey
+        or (addonTable.GetCharacterBrowserCategoryKey and addonTable.GetCharacterBrowserCategoryKey())
+        or (OakLFGSorterDB and OakLFGSorterDB.browserCategoryKey)
+        or "DUNGEONS"
     for _, option in ipairs(addonTable.BrowserCategoryOptions) do
         if option.id == selectedKey then
             local allowOverride = selectedKey ~= "RAIDS_MIDNIGHT" and selectedKey ~= "RAIDS_LEGACY"
-            local override = allowOverride and OakLFGSorterDB and type(OakLFGSorterDB.browserCategoryOverrides) == "table" and OakLFGSorterDB.browserCategoryOverrides[selectedKey]
+            local overrides = addonTable.GetCharacterBrowserCategoryOverrides and addonTable.GetCharacterBrowserCategoryOverrides()
+                or (OakLFGSorterDB and OakLFGSorterDB.browserCategoryOverrides)
+            local override = allowOverride and type(overrides) == "table" and overrides[selectedKey]
             if type(override) == "table" then
                 local merged = {}
                 for key, value in pairs(option) do
@@ -251,8 +256,10 @@ end
 
 function addonTable.SetBrowserCategory(categoryKey)
     local config = addonTable.GetBrowserCategoryConfig(categoryKey)
-    OakLFGSorterDB = OakLFGSorterDB or {}
-    OakLFGSorterDB.browserCategoryKey = config.id
+    local db = addonTable.GetCharacterDB and addonTable.GetCharacterDB() or OakLFGSorterCharDB
+    if type(db) == "table" then
+        db.browserCategoryKey = config.id
+    end
 
     addonTable.CurrentSearchContext = addonTable.CurrentSearchContext or {}
     addonTable.CurrentSearchContext.useOakCategorySelection = true
@@ -278,9 +285,11 @@ local function SaveObservedBrowserCategorySelection(categoryKey, selection)
         return
     end
 
-    OakLFGSorterDB = OakLFGSorterDB or {}
-    OakLFGSorterDB.browserCategoryOverrides = OakLFGSorterDB.browserCategoryOverrides or {}
-    OakLFGSorterDB.browserCategoryOverrides[categoryKey] = {
+    local overrides = addonTable.GetCharacterBrowserCategoryOverrides and addonTable.GetCharacterBrowserCategoryOverrides() or nil
+    if type(overrides) ~= "table" then
+        return
+    end
+    overrides[categoryKey] = {
         categoryID = selection.categoryID,
         filters = selection.filters or 0,
         preferredFilters = selection.preferredFilters or 0,
@@ -413,9 +422,15 @@ local function IsDeclinedStatus(status)
     return status:find("declined", 1, true) ~= nil or status:find("cancelled", 1, true) ~= nil or status:find("failed", 1, true) ~= nil or status == "none" and false
 end
 
+local function IsCancelledStatus(status)
+    status = NormalizeApplicationStatus(status)
+    return status:find("cancelled", 1, true) ~= nil or status:find("canceled", 1, true) ~= nil
+end
+
 addonTable.NormalizeApplicationStatus = NormalizeApplicationStatus
 addonTable.IsAppliedStatus = IsAppliedStatus
 addonTable.IsDeclinedStatus = IsDeclinedStatus
+addonTable.IsCancelledStatus = IsCancelledStatus
 
 local DECLINED_MEMORY_TTL_SECONDS = 12 * 60 * 60
 local DECLINED_MEMORY_MAX_ENTRIES = 200
@@ -1360,10 +1375,14 @@ local function FetchSearchResultData()
     end
 
     local filters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
+    local isManualBrowserRefresh = addonTable._manualBrowserRefreshInProgress == true
+    addonTable._manualBrowserRefreshInProgress = nil
+    addonTable._lastBrowserFetchWasManual = isManualBrowserRefresh
     local previousCount = #previousResults
+    addonTable._browserHadPreviousResults = previousCount > 0
     local liveCount = #liveResultOrder
     local missingCount = 0
-    if sameSearchScope and filters.keepUnavailable ~= false and previousCount > 0 and liveCount > 0 then
+    if sameSearchScope and filters.keepUnavailable ~= false and not isManualBrowserRefresh and previousCount > 0 then
         for _, previous in ipairs(previousResults) do
             local previousID = previous and previous.id
             if previousID and not liveResultsByID[previousID] then
@@ -1377,8 +1396,8 @@ local function FetchSearchResultData()
     local maxPreservedMissing = math.max(8, math.floor(previousCount * 0.10))
     local preserveMissingResults = sameSearchScope
         and filters.keepUnavailable ~= false
+        and not isManualBrowserRefresh
         and previousCount > 0
-        and liveCount > 0
         and missingCount > 0
         and missingCount <= maxPreservedMissing
 
@@ -1391,12 +1410,14 @@ local function FetchSearchResultData()
                 live._oakStableIndex = previous._oakStableIndex or previousIndex
                 live.isDelisted = nil
                 live.isUnavailable = nil
+                live.isFilteredOut = nil
                 table.insert(addonTable.SearchResults, live)
                 usedLiveResults[previousID] = true
             elseif previousID and previous and not previous.isDeclined and not (addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(previous.applicationStatus)) then
                 previous._oakStableIndex = previous._oakStableIndex or previousIndex
                 previous.isDelisted = true
                 previous.isUnavailable = true
+                previous.isFilteredOut = nil
                 previous.applicationStatus = previous.applicationStatus or "none"
                 table.insert(addonTable.SearchResults, previous)
             end
@@ -2092,7 +2113,7 @@ function addonTable.OpenGroupFinderForOak()
     end
 
     if addonTable.SetBrowserCategory then
-        addonTable.SetBrowserCategory((OakLFGSorterDB and OakLFGSorterDB.browserCategoryKey) or "DUNGEONS")
+        addonTable.SetBrowserCategory((addonTable.GetCharacterBrowserCategoryKey and addonTable.GetCharacterBrowserCategoryKey()) or "DUNGEONS")
     end
 end
 
@@ -3028,10 +3049,13 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         end
         return
     elseif event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
-        -- Blizzard fires this once per individual result row, often in dense bursts while
-        -- the browser is open. Rebuilding Oak's entire result list for each burst causes
-        -- large frame spikes when many rows are visible, so ignore the incremental row
-        -- updates and wait for the batched SEARCH_RESULTS_RECEIVED refresh instead.
+        -- Blizzard fires this once per individual result row. Debounce it, but do
+        -- process it: a filled/delisted group can disappear through this event
+        -- without a paired SEARCH_RESULTS_RECEIVED, and Oak needs that refresh to
+        -- preserve the row until the user manually refreshes.
+        if currentViewMode == "browser" and isShown then
+            ScheduleSearchRefresh()
+        end
         return
     elseif event == "LFG_LIST_ACTIVE_ENTRY_UPDATE" then
         if C_LFGList.HasActiveEntryInfo() then
