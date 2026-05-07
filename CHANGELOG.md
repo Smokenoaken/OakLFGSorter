@@ -1,3 +1,10 @@
+## v4.0.8
+
+- Fixed full dungeon groups showing as Filtered instead of Delisted
+- Kept browser rows stable during live updates while manual Refresh still loads a fresh list
+- Saved browser filters, selected dungeons, browser category, browser sort, region filters, and auto-hide filled roles per character
+- Show cancelled browser applications as Cancelled
+
 ## v4.0.7
 
 - Fixed persisted dungeon filters so Oak applies them through Blizzard-compatible activity filters immediately after login or reload
