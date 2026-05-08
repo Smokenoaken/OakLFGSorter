@@ -1,3 +1,11 @@
+## v4.0.9
+
+- Added Iury Sampaio to the supporter list.
+- Combined Need Lust and Has Lust into a single Lust Match browser filter.
+- Fixed browser rows that failed active filters staying visible as Filtered rows.
+- Fixed cancelled applicants showing and clearing correctly with Keep Delisted/Cancelled.
+- Raised the Blizzard applicant auto-open toggle above skinned LFG borders.
+
 ## v4.0.8
 
 - Fixed full dungeon groups showing as Filtered instead of Delisted
