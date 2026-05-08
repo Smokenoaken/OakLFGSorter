@@ -206,6 +206,7 @@ if browserFilters.needsDPS == nil then browserFilters.needsDPS = false end
 if browserFilters.hasTank == nil then browserFilters.hasTank = false end
 if browserFilters.hasHealer == nil then browserFilters.hasHealer = false end
 if browserFilters.partyFit == nil then browserFilters.partyFit = false end
+if browserFilters.lustMatch == nil then browserFilters.lustMatch = (browserFilters.needsLust == true or browserFilters.hasLust == true) end
 if browserFilters.needsLust == nil then browserFilters.needsLust = false end
 if browserFilters.needsBrez == nil then browserFilters.needsBrez = false end
 if browserFilters.hideDeclined == nil then browserFilters.hideDeclined = false end

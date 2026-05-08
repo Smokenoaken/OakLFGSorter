@@ -50,4 +50,5 @@ addonTable.Patreons = {
     "Devron Lee",
     "Andreas Rollinger",
     "Tenelle Mallard",
+    "Iury Sampaio",
 }

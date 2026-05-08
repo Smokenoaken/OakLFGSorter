@@ -2888,8 +2888,24 @@ local function FetchApplicantData()
     for _, applicantID in ipairs(applicants) do
         local info = C_LFGList.GetApplicantInfo(applicantID)
         
-        local applicantStatus = NormalizeApplicationStatus(info and info.applicationStatus or "none")
-        if info and (applicantStatus == "applied" or applicantStatus == "invited" or applicantStatus == "inviteaccepted") and info.numMembers > 0 then
+        local applicantStatus = NormalizeApplicationStatus(info and (
+            info.applicationStatus
+            or info.status
+            or info.pendingApplicationStatus
+            or info.pendingStatus
+            or info.applicantStatus
+            or "none"
+        ) or "none")
+        if info and (info.cancelled or info.canceled or info.isCancelled or info.isCanceled) then
+            applicantStatus = "cancelled"
+        end
+        local keepCancelledApplicants = addonTable.GetCharacterBrowserFilters
+            and addonTable.GetCharacterBrowserFilters().keepUnavailable ~= false
+        local shouldShowApplicant = applicantStatus == "applied"
+            or applicantStatus == "invited"
+            or applicantStatus == "inviteaccepted"
+            or (keepCancelledApplicants and IsCancelledStatus(applicantStatus))
+        if info and shouldShowApplicant and info.numMembers > 0 then
             
             local group = {
                 id = applicantID,
@@ -2992,6 +3008,8 @@ local function FetchApplicantData()
         end
     end
 end
+
+addonTable.FetchApplicantData = FetchApplicantData
 
 OAK_LFG:RegisterEvent("LFG_LIST_APPLICANT_LIST_UPDATED")
 OAK_LFG:RegisterEvent("LFG_LIST_APPLICANT_UPDATED")

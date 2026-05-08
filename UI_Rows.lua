@@ -1737,6 +1737,12 @@ end
 
 local function GetApplicantStatusText(group)
     local status = addonTable.NormalizeApplicationStatus and addonTable.NormalizeApplicationStatus(group and group.applicationStatus or "none") or tostring(group and group.applicationStatus or "none")
+    if addonTable.IsCancelledStatus and addonTable.IsCancelledStatus(status) then
+        return "Cancelled"
+    end
+    if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(status) then
+        return "Declined"
+    end
     if status == "invited" or status == "inviteaccepted" then
         return "Invited"
     end
@@ -1746,6 +1752,12 @@ end
 local function GetApplicantRowColor(group, isAltColor)
     local opacity = addonTable.GetWindowOpacity and addonTable.GetWindowOpacity() or 1
     local rowAlpha = 0.70 + (math.max(0.35, math.min(1.0, opacity)) * 0.12)
+    if addonTable.IsCancelledStatus and addonTable.IsCancelledStatus(group and group.applicationStatus) then
+        return 0.20, 0.20, 0.20, rowAlpha
+    end
+    if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(group and group.applicationStatus) then
+        return 0.22, 0.10, 0.10, rowAlpha
+    end
     if GetApplicantStatusText(group) then
         return 0.14, 0.22, 0.14, rowAlpha
     end
@@ -4364,15 +4376,11 @@ function addonTable.UpdateDisplay()
             -- so the user can always see and cancel their pending sign-ups.
             local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
             local passesBrowserFilters = not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result)
-            if not result.isUnavailable and not isApplied and not passesBrowserFilters and browserFilters.keepUnavailable ~= false and result._oakStableIndex then
-                local isDelisted = IsBrowserResultFull(result)
+            local isDelisted = IsBrowserResultFull(result)
+            if isDelisted and not result.isUnavailable and not isApplied and not passesBrowserFilters and browserFilters.keepUnavailable ~= false and result._oakStableIndex then
                 result.isUnavailable = true
-                result.isDelisted = isDelisted or nil
-                if isDelisted then
-                    result.isFilteredOut = nil
-                else
-                    result.isFilteredOut = true
-                end
+                result.isDelisted = true
+                result.isFilteredOut = nil
             end
             if result.isUnavailable or isApplied or passesBrowserFilters then
                 table.insert(activeResults, result)
@@ -4566,7 +4574,13 @@ function addonTable.UpdateDisplay()
                         row.inviteBtn:Hide()
                         row.declineBtn:Hide()
                         row.statusText:SetText(applicantStatusText)
-                        row.statusText:SetTextColor(0.2, 1, 0.2)
+                        if addonTable.IsCancelledStatus and addonTable.IsCancelledStatus(group.applicationStatus) then
+                            row.statusText:SetTextColor(1.0, 0.22, 0.18)
+                        elseif addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(group.applicationStatus) then
+                            row.statusText:SetTextColor(1.0, 0.22, 0.18)
+                        else
+                            row.statusText:SetTextColor(0.2, 1, 0.2)
+                        end
                         row.statusText:Show()
                     else
                         row.statusText:Hide()

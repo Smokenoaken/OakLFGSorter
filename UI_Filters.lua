@@ -796,13 +796,10 @@ function addonTable.ResultPassesBrowserFilters(result)
     if filters.partyFit and not ResultMatchesPartyFit(result, runtime) then
         return false
     end
-    if filters.needsLust and not addonTable.ResultCanStillSolveMissingUtility(result, runtime, "LUST") then
+    if filters.lustMatch and not addonTable.ResultMatchesUtilityMatch(result, runtime, "LUST") then
         return false
     end
     if filters.needsBrez and not addonTable.ResultCanStillSolveMissingUtility(result, runtime, "BREZ") then
-        return false
-    end
-    if filters.hasLust and not addonTable.ResultWillHaveUtilityAfterParty(result, runtime, "LUST") then
         return false
     end
     if filters.hasBrez and not addonTable.ResultWillHaveUtilityAfterParty(result, runtime, "BREZ") then
@@ -930,6 +927,38 @@ function addonTable.ResultCanStillSolveMissingUtility(result, runtime, utilityTy
     return addonTable.ResultHasOpenUtilityPathAfterParty(result, runtime, utilityType)
 end
 
+function addonTable.ResultMatchesUtilityMatch(result, runtime, utilityType)
+    if type(result) ~= "table" then
+        return false
+    end
+
+    if utilityType == "LUST" and result.hasLust then
+        return true
+    end
+    if utilityType == "BREZ" and result.hasBrez then
+        return true
+    end
+
+    local partyHasLust = runtime and runtime.partyHasLust
+    local partyHasBrez = runtime and runtime.partyHasBrez
+    if partyHasLust == nil or partyHasBrez == nil then
+        partyHasLust, partyHasBrez = addonTable.GetPartyUtilityCoverage()
+    end
+
+    if utilityType == "LUST" and partyHasLust then
+        return not addonTable.DoesResultFitCurrentParty or addonTable.DoesResultFitCurrentParty(result)
+    end
+    if utilityType == "BREZ" and partyHasBrez then
+        return not addonTable.DoesResultFitCurrentParty or addonTable.DoesResultFitCurrentParty(result)
+    end
+
+    if addonTable.ResultWillHaveUtilityAfterParty(result, runtime, utilityType) then
+        return true
+    end
+
+    return addonTable.ResultCanStillSolveMissingUtility(result, runtime, utilityType)
+end
+
 local SyncBrowserSelectedActivitiesFromNative
 
 function addonTable.BuildBrowserRuntimeFilters()
@@ -968,7 +997,7 @@ function addonTable.BuildBrowserRuntimeFilters()
         runtime.partyRoles, runtime.partySize = GetPartyRoleSupply()
     end
 
-    if filters.partyFit or filters.needsLust or filters.needsBrez or filters.hasLust or filters.hasBrez then
+    if filters.partyFit or filters.lustMatch or filters.needsLust or filters.needsBrez or filters.hasLust or filters.hasBrez then
         if not runtime.partyRoles or not runtime.partySize then
             runtime.partyRoles, runtime.partySize = GetPartyRoleSupply()
         end
@@ -1458,6 +1487,7 @@ local function ResetOakBrowserCategoryFilters()
     filters.keyMin = ""
     filters.keyMax = ""
     filters.partyFit = false
+    filters.lustMatch = false
     filters.needsLust = false
     filters.needsBrez = false
     filters.hideDeclined = false
@@ -2130,6 +2160,7 @@ function BrowserFilterState()
     if f.needsMyClass == nil then f.needsMyClass = false end
     if f.minRating == nil then f.minRating = "" end
     if f.partyFit == nil then f.partyFit = false end
+    if f.lustMatch == nil then f.lustMatch = (f.needsLust == true or f.hasLust == true) end
     if f.needsLust == nil then f.needsLust = false end
     if f.needsBrez == nil then f.needsBrez = false end
     if f.hasLust == nil then f.hasLust = false end
@@ -2562,23 +2593,17 @@ local browserToggleKeys = {
     { key = "needsDPS",    label = "Need Damage",  column = 1 },
     -- column 2 of needsDPS row = "No [class]" handled separately below
     { key = "partyFit",    label = "Party Fit",    column = 1 },
-    { key = "hasLust",     label = "Has Lust",     column = 2 },
+    { key = "lustMatch",   label = "Lust Match",   column = 2 },
     { key = "needsBrez",   label = "Need BRez",    column = 1 },
     { key = "hasBrez",     label = "Has BRez",     column = 2 },
-    { key = "needsLust",   label = "Need Lust",    column = 1 },
     { key = "hideDeclined",label = "Hide Declined",column = 2 },
     { key = "matchMyRaidLockout", label = "Match My Lockout", column = 1, span = 2, raidOnly = true },
 }
 local browserToggleTooltips = {
-    needsLust = {
-        title = "Need Lust",
-        body = "Shows groups that do not currently have Lust, but are still reasonable for your current party to join.",
-        detail = "If your current party already brings Lust, those groups still pass. If your party does not bring Lust, Oak only keeps groups that still have room for a Lust-capable class after your party joins.",
-    },
-    hasLust = {
-        title = "Has Lust",
-        body = "Shows groups that will have Lust once your current party joins.",
-        detail = "A group passes if it already has Lust or your current party brings Lust and the party can actually fit into the group.",
+    lustMatch = {
+        title = "Lust Match",
+        body = "Shows groups where Lust is covered or can still be covered after your party joins.",
+        detail = "A group passes if it already has Lust, your party brings Lust, or there will still be room for a Lust-capable class after inviting your party.",
     },
     needsBrez = {
         title = "Need BRez",
@@ -2885,7 +2910,7 @@ browserResetBtn:SetScript("OnClick", function()
     filters.difficulty = "ANY"
     filters.playstyle  = "ANY"
     filters.keyMin = ""; filters.keyMax = ""
-    filters.partyFit = false; filters.needsLust = false
+    filters.partyFit = false; filters.lustMatch = false; filters.needsLust = false
     filters.needsBrez = false; filters.hasLust = false
     filters.hasBrez = false; filters.hideDeclined = false
     filters.raidBossesMin = "ANY"; filters.matchMyRaidLockout = false; filters.bountifulOnly = false
@@ -3375,7 +3400,7 @@ function addonTable.UpdateBrowserFilterPanel()
             end
         end
         MeasureLeftLabel(browserToggleRows["partyFit"].label)
-        MeasureRightLabel(browserToggleRows["needsLust"].label)
+        MeasureRightLabel(browserToggleRows["lustMatch"].label)
         MeasureLeftLabel(browserToggleRows["needsBrez"].label)
         MeasureRightLabel(browserToggleRows["matchMyRaidLockout"].label)
     else
@@ -3390,8 +3415,7 @@ function addonTable.UpdateBrowserFilterPanel()
         MeasureRightLabel(browserToggleRows["hideDeclined"].label)
         MeasureLeftLabel(browserToggleRows["needsBrez"].label)
         MeasureRightLabel(browserToggleRows["hasBrez"].label)
-        MeasureLeftLabel(browserToggleRows["needsLust"].label)
-        MeasureRightLabel(browserToggleRows["hasLust"].label)
+        MeasureLeftLabel(browserToggleRows["lustMatch"].label)
         if isDelveMode then
             MeasureLeftLabel(browserToggleRows["hideDeclined"].label)
             MeasureRightLabel(L["Bountiful Only"])
@@ -3432,7 +3456,7 @@ function addonTable.UpdateBrowserFilterPanel()
         -- ═══════════════════════════════════════════════════════════════════════
         -- RAID MODE LAYOUT
         -- Shows: Difficulty, Boss Kills/Tanks/Healers/DPS range inputs, search
-        --        box, Refresh/Reset, Party Fit, Need Lust, Need BRez, Match My
+        --        box, Refresh/Reset, Party Fit, Lust Match, Need BRez, Match My
         --        Lockout, and the Filter Raids activity checklist.
         -- Hides: all M+-specific controls (role toggles, Min Rating, playstyle).
         -- ═══════════════════════════════════════════════════════════════════════
@@ -3445,7 +3469,7 @@ function addonTable.UpdateBrowserFilterPanel()
         browserToggleRows["hasHealer"].box:Hide();   browserToggleRows["hasHealer"].text:Hide()
         browserToggleRows["needsDPS"].box:Hide();    browserToggleRows["needsDPS"].text:Hide()
         browserToggleRows["hasBrez"].box:Hide();     browserToggleRows["hasBrez"].text:Hide()
-        browserToggleRows["hasLust"].box:Hide();     browserToggleRows["hasLust"].text:Hide()
+        browserToggleRows["lustMatch"].box:Hide();   browserToggleRows["lustMatch"].text:Hide()
         browserNoClassBox:Hide(); browserNoClassText:Hide()
         browserMinRatingLabel:Hide(); browserMinRatingBox:Hide()
         browserToggleRows["hideDeclined"].box:Hide(); browserToggleRows["hideDeclined"].text:Hide()
@@ -3525,15 +3549,15 @@ function addonTable.UpdateBrowserFilterPanel()
         browserResetBtn:Show()
         y = y - 28
 
-        -- ── 5. Party Fit | Need Lust ─────────────────────────────────────────
+        -- ── 5. Party Fit | Lust Match ────────────────────────────────────────
         do
             local r1 = browserToggleRows["partyFit"]
-            local r2 = browserToggleRows["needsLust"]
+            local r2 = browserToggleRows["lustMatch"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
             r1.box:SetState(filters.partyFit == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
 
             r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-            r2.box:SetState(filters.needsLust == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            r2.box:SetState(filters.lustMatch == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
             y = y - ROW_H
         end
 
@@ -3760,15 +3784,11 @@ function addonTable.UpdateBrowserFilterPanel()
             y = y - ROW_H
         end
 
-        -- Row 7: Need Lust | Has Lust
+        -- Row 7: Lust Match
         do
-            local r1 = browserToggleRows["needsLust"]
-            local r2 = browserToggleRows["hasLust"]
+            local r1 = browserToggleRows["lustMatch"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-            r1.box:SetState(filters.needsLust == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
-
-            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-            r2.box:SetState(filters.hasLust == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            r1.box:SetState(filters.lustMatch == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
             y = y - ROW_H
         end
 
@@ -4425,6 +4445,10 @@ optionsKeepGoneBox:SetScript("OnClick", function()
     local filters = BrowserFilterState()
     filters.keepUnavailable = not (filters.keepUnavailable == true)
     ApplyNeutralOptionsToggleVisual(optionsKeepGoneBox, optionsKeepGoneLabel, filters.keepUnavailable == true)
+    if C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()
+            and addonTable.FetchApplicantData then
+        addonTable.FetchApplicantData()
+    end
     if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
     if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
 end)
@@ -5216,6 +5240,25 @@ local lfgToggleIcon
 local lfgToggleHighlight
 local pendingApplicationViewerAutoOpen = false
 
+local function RaiseBlizzardAutoOpenButton()
+    if not lfgToggleBox then
+        return
+    end
+
+    if UIParent and lfgToggleBox:GetParent() ~= UIParent then
+        lfgToggleBox:SetParent(UIParent)
+    end
+    if LFGListFrame then
+        lfgToggleBox:ClearAllPoints()
+        lfgToggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -34, -4)
+    end
+    lfgToggleBox:SetFrameStrata("TOOLTIP")
+    lfgToggleBox:SetFrameLevel(1000)
+    if lfgToggleBox.SetToplevel then
+        lfgToggleBox:SetToplevel(true)
+    end
+end
+
 local function ApplyBlizzardAutoOpenButtonVisual()
     if not lfgToggleBox then
         return
@@ -5269,13 +5312,12 @@ end
 function addonTable.SetupBlizzardLFGHook()
     if LFGListFrame and LFGListFrame.ApplicationViewer then
         if not lfgToggleBox then
-            lfgToggleBox = CreateFrame("Button", nil, LFGListFrame, "BackdropTemplate")
+            lfgToggleBox = CreateFrame("Button", nil, UIParent or LFGListFrame, "BackdropTemplate")
             addonTable.LFGToggleBox = lfgToggleBox
             lfgToggleBox:SetSize(22, 22)
             lfgToggleBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
             lfgToggleBox:RegisterForClicks("LeftButtonUp")
-            lfgToggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -34, -4)
-            lfgToggleBox:SetFrameLevel((LFGListFrame:GetFrameLevel() or 1) + 20)
+            RaiseBlizzardAutoOpenButton()
             lfgToggleBox:Hide()
 
             lfgToggleHighlight = lfgToggleBox:CreateTexture(nil, "BACKGROUND")
@@ -5319,6 +5361,7 @@ function addonTable.SetupBlizzardLFGHook()
             ApplyBlizzardAutoOpenButtonVisual()
 
             local function UpdateApplicationToggleVisibility()
+                RaiseBlizzardAutoOpenButton()
                 if LFGListFrame and LFGListFrame.ApplicationViewer and LFGListFrame.ApplicationViewer:IsShown() then
                     lfgToggleBox:Show()
                 else
