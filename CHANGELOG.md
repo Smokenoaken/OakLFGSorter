@@ -1,3 +1,7 @@
+## v4.0.10
+
+- Updated supporter list.
+
 ## v4.0.9
 
 - Added Iury Sampaio to the supporter list.
