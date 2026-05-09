@@ -1953,12 +1953,52 @@ local function BuildSelectedActivityIDFilter()
         return nil
     end
 
+    local function GetNativeActivitySelections()
+        local anyIDs = {}
+        local concreteActivityIDs = {}
+        local hasNativeSelection = false
+
+        if not (C_LFGList and C_LFGList.GetAdvancedFilter) then
+            return anyIDs, concreteActivityIDs, false
+        end
+
+        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+        if not ok or type(adv) ~= "table" then
+            return anyIDs, concreteActivityIDs, false
+        end
+
+        if type(adv.activities) == "table" then
+            for _, id in ipairs(adv.activities) do
+                local numericID = tonumber(id)
+                if numericID and numericID > 0 then
+                    anyIDs[numericID] = true
+                    hasNativeSelection = true
+                end
+            end
+        end
+
+        if type(adv.activityIDs) == "table" then
+            for _, id in ipairs(adv.activityIDs) do
+                local numericID = tonumber(id)
+                if numericID and numericID > 0 then
+                    anyIDs[numericID] = true
+                    concreteActivityIDs[numericID] = true
+                    hasNativeSelection = true
+                end
+            end
+        end
+
+        return anyIDs, concreteActivityIDs, hasNativeSelection
+    end
+
     local selectedActivityIDs = {}
     local selectedActivityIDSet = {}
     local selectedGroupIDs = {}
     local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
+    local hasOakActivitySelection = false
     for _, entry in ipairs(activities) do
         if filters.selectedActivities[entry.filterKey] then
+            hasOakActivitySelection = true
             local groupID = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(entry.activityInfo) or nil
             if groupID and groupID > 0 then
                 selectedGroupIDs[groupID] = true
@@ -1968,6 +2008,14 @@ local function BuildSelectedActivityIDFilter()
             if activityID and activityID > 0 then
                 selectedActivityIDSet[activityID] = true
             end
+        end
+    end
+
+    local nativeAnyIDs, nativeConcreteActivityIDs, hasNativeActivitySelection = {}, {}, false
+    if not hasOakActivitySelection then
+        nativeAnyIDs, nativeConcreteActivityIDs, hasNativeActivitySelection = GetNativeActivitySelections()
+        for activityID in pairs(nativeConcreteActivityIDs) do
+            selectedActivityIDSet[activityID] = true
         end
     end
 
@@ -1981,7 +2029,10 @@ local function BuildSelectedActivityIDFilter()
         for _, activityID in ipairs(C_LFGList.GetAvailableActivities(categoryID) or {}) do
             local activityInfo = C_LFGList.GetActivityInfoTable(activityID)
             local groupID = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(activityInfo) or nil
-            if (groupID and selectedGroupIDs[groupID]) or selectedActivityIDSet[activityID] then
+            if (groupID and selectedGroupIDs[groupID])
+                or selectedActivityIDSet[activityID]
+                or (hasNativeActivitySelection and ((groupID and nativeAnyIDs[groupID]) or nativeAnyIDs[activityID]))
+            then
                 selectedActivityIDSet[activityID] = true
             end
         end
@@ -2000,10 +2051,39 @@ local function BuildSelectedActivityIDFilter()
     return selectedActivityIDs
 end
 
+local function HasNativeActivityFilter()
+    if not (C_LFGList and C_LFGList.GetAdvancedFilter) then
+        return false
+    end
+
+    local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+    if not ok or type(adv) ~= "table" then
+        return false
+    end
+
+    if type(adv.activities) == "table" then
+        for _, id in ipairs(adv.activities) do
+            if tonumber(id) and tonumber(id) > 0 then
+                return true
+            end
+        end
+    end
+
+    if type(adv.activityIDs) == "table" then
+        for _, id in ipairs(adv.activityIDs) do
+            if tonumber(id) and tonumber(id) > 0 then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 local function HasSelectedActivityFilter()
     local filters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or nil
     if type(filters) ~= "table" or type(filters.selectedActivities) ~= "table" then
-        return false
+        return HasNativeActivityFilter()
     end
 
     for _, selected in pairs(filters.selectedActivities) do
@@ -2012,7 +2092,7 @@ local function HasSelectedActivityFilter()
         end
     end
 
-    return false
+    return HasNativeActivityFilter()
 end
 
 local function EnsureBlizzardSearchPanelForCategory(categoryID, selection)
@@ -2069,21 +2149,19 @@ function addonTable.RunBrowserSearch()
         return false, "Legacy raid searches must be loaded through Blizzard's panel."
     end
 
+    if categoryKey == "DUNGEONS" then
+        if addonTable.SyncBrowserNativeAdvancedFilters then
+            addonTable.SyncBrowserNativeAdvancedFilters()
+        elseif addonTable.SyncBrowserNativeActivities then
+            addonTable.SyncBrowserNativeActivities()
+        end
+        panel = EnsureBlizzardSearchPanelForCategory(categoryID, selection) or panel
+    end
+
     if C_LFGList.GetAdvancedFilter then
         local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
         if ok and type(adv) == "table" then
             advancedFilter = adv
-        end
-    end
-
-    if categoryKey == "DUNGEONS" and addonTable.SyncBrowserNativeActivities then
-        addonTable.SyncBrowserNativeActivities()
-        panel = EnsureBlizzardSearchPanelForCategory(categoryID, selection) or panel
-        if C_LFGList.GetAdvancedFilter then
-            local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
-            if ok and type(adv) == "table" then
-                advancedFilter = adv
-            end
         end
     end
 

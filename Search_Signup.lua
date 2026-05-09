@@ -908,7 +908,7 @@ quickSignupState.roleButtons.DAMAGER = CreateQuickSignupRoleButton(quickSignupBa
 
 local signupLimitNote = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 signupLimitNote:SetFontObject("SorterClassic_FontRegular")
-signupLimitNote:SetText("0/5 Groups Applied To")
+signupLimitNote:SetText("Applied to 0/5 Groups")
 signupLimitNote:SetTextColor(0.85, 0.85, 0.85)
 signupLimitNote:SetJustifyH("LEFT")
 signupLimitNote:SetWordWrap(false)
@@ -1101,12 +1101,12 @@ function addonTable.UpdateSignupLimitDisplay()
 
     if atMax then
         if not cooldownTimerRunning then   -- don't overwrite cooldown label text when it's active
-            signupLimitNote:SetText(string.format("%d/%d Groups Applied To", tonumber(numActive) or maxApps, maxApps))
+            signupLimitNote:SetText(string.format("Applied to %d/%d Groups", tonumber(numActive) or maxApps, maxApps))
             signupLimitNote:SetTextColor(1, 0.35, 0.35)
             signupLimitNote:Show()
         end
     else
-        signupLimitNote:SetText(string.format("%d/%d Groups Applied To", tonumber(numActive) or 0, maxApps))
+        signupLimitNote:SetText(string.format("Applied to %d/%d Groups", tonumber(numActive) or 0, maxApps))
         signupLimitNote:SetTextColor(0.85, 0.85, 0.85)
         if not cooldownTimerRunning then
             signupLimitNote:Show()

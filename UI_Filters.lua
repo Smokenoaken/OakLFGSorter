@@ -1002,6 +1002,20 @@ end
 
 local SyncBrowserSelectedActivitiesFromNative
 
+local function HasSelectedBrowserActivities(filters)
+    if type(filters) ~= "table" or type(filters.selectedActivities) ~= "table" then
+        return false
+    end
+
+    for _, selected in pairs(filters.selectedActivities) do
+        if selected then
+            return true
+        end
+    end
+
+    return false
+end
+
 function addonTable.BuildBrowserRuntimeFilters()
     if SyncBrowserSelectedActivitiesFromNative then
         SyncBrowserSelectedActivitiesFromNative()
@@ -1220,6 +1234,23 @@ local function SyncBrowserNativePlaystyle()
     pcall(C_LFGList.SaveAdvancedFilter, adv)
 end
 
+local function SyncBrowserNativeMinimumRating()
+    if not (C_LFGList and C_LFGList.GetAdvancedFilter and C_LFGList.SaveAdvancedFilter) then return end
+
+    local filters = BrowserFilterState()
+    local value = filters.minRating
+    if (value == nil or value == "") and browserMinRatingBox then
+        value = browserMinRatingBox:GetText()
+    end
+
+    local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+    if not ok or type(adv) ~= "table" then adv = {} end
+
+    local minR = tonumber(value)
+    adv.minimumRating = (minR and minR > 0) and minR or nil
+    pcall(C_LFGList.SaveAdvancedFilter, adv)
+end
+
 SyncBrowserSelectedActivitiesFromNative = function()
     local filters = BrowserFilterState()
     if type(filters.selectedActivities) ~= "table" then
@@ -1278,9 +1309,14 @@ SyncBrowserSelectedActivitiesFromNative = function()
 end
 addonTable.SyncBrowserSelectedActivitiesFromNative = SyncBrowserSelectedActivitiesFromNative
 
-local function SyncBrowserNativeActivities()
+local function SyncBrowserNativeActivities(forceClear)
     if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then return end
     local filters = BrowserFilterState()
+
+    if not forceClear and not HasSelectedBrowserActivities(filters) and SyncBrowserSelectedActivitiesFromNative then
+        SyncBrowserSelectedActivitiesFromNative()
+    end
+
     local success, advancedFilter = pcall(C_LFGList.GetAdvancedFilter)
     if not success or type(advancedFilter) ~= "table" then advancedFilter = {} end
 
@@ -1299,6 +1335,11 @@ local function SyncBrowserNativeActivities()
             end
         end
     end
+
+    if #groupIDs == 0 and #activityIDs == 0 and not forceClear then
+        return
+    end
+
     -- Blizzard's visible dungeon filter pane stores activity-group IDs, while
     -- direct search paths have historically consumed concrete activity IDs on
     -- some clients/builds. Persist both shapes so Oak can seed Blizzard before
@@ -1308,6 +1349,14 @@ local function SyncBrowserNativeActivities()
     pcall(C_LFGList.SaveAdvancedFilter, advancedFilter)
 end
 addonTable.SyncBrowserNativeActivities = SyncBrowserNativeActivities
+
+function addonTable.SyncBrowserNativeAdvancedFilters(forceClearActivities)
+    SyncBrowserNativeRoleFilters()
+    SyncBrowserNativeDifficulty()
+    SyncBrowserNativePlaystyle()
+    SyncBrowserNativeMinimumRating()
+    SyncBrowserNativeActivities(forceClearActivities)
+end
 
 local function SetAllClassFilters(isEnabled)
     for class, _ in pairs(addonTable.ClassFilters) do
@@ -2776,6 +2825,7 @@ local function CommitMinRating()
     local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
     if not ok or type(adv) ~= "table" then adv = {} end
     local text = browserMinRatingBox:GetText() or ""
+    BrowserFilterState().minRating = text
     local minR = tonumber(text)
     adv.minimumRating = (minR and minR > 0) and minR or nil
     pcall(C_LFGList.SaveAdvancedFilter, adv)
@@ -2944,8 +2994,12 @@ end
 browserFilterPanel:HookScript("OnHide", function() RestoreBrowserNativeSearchBox() end)
 
 local function ApplyBrowserQueryAndRefresh()
-    SyncBrowserNativeRoleFilters()
-    SyncBrowserNativeActivities()
+    if addonTable.SyncBrowserNativeAdvancedFilters then
+        addonTable.SyncBrowserNativeAdvancedFilters()
+    else
+        SyncBrowserNativeRoleFilters()
+        SyncBrowserNativeActivities()
+    end
     addonTable._manualBrowserRefreshInProgress = true
     if addonTable.RunBrowserSearch then
         addonTable.RunBrowserSearch()
@@ -3061,7 +3115,7 @@ activitySelectNoneBtn:SetScript("OnClick", function()
         filters.selectedActivities[k] = nil
     end
     SyncVisibleBrowserActivityButtonStates()
-    SyncBrowserNativeActivities()
+    SyncBrowserNativeActivities(true)
     RefreshBrowserFilters()
 end)
 
@@ -3090,7 +3144,7 @@ activitySelectBountifulBtn:SetScript("OnClick", function()
         end
     end
     SyncVisibleBrowserActivityButtonStates()
-    SyncBrowserNativeActivities()
+    SyncBrowserNativeActivities(not HasSelectedBrowserActivities(filters))
     RefreshBrowserFilters()
 end)
 
@@ -3277,7 +3331,7 @@ local function UpdateBrowserActivityButtons(startY)
         button:SetScript("OnClick", function(self)
             filters.selectedActivities[self.filterKey] = not filters.selectedActivities[self.filterKey]
             self:SetState(filters.selectedActivities[self.filterKey] == true)
-            SyncBrowserNativeActivities()
+            SyncBrowserNativeActivities(not HasSelectedBrowserActivities(filters))
             RefreshBrowserFilters()
         end)
         button.text:Show()
@@ -4236,7 +4290,7 @@ optionsThemeModeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -268)
 optionsThemeModeLabel:SetText("Theme")
 local optionsThemeModeNotice = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 optionsThemeModeNotice:SetPoint("LEFT", optionsThemeModeLabel, "RIGHT", 8, 0)
-optionsThemeModeNotice:SetText("|cffffff00Changing Themes will Force a Reload|r")
+optionsThemeModeNotice:SetText("|cffffff00Will Force Reload|r")
 local optionsThemeModeButton = addonTable.CreateThemeModeDropdown(optionsPanel, 170)
 optionsThemeModeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -172)
 
