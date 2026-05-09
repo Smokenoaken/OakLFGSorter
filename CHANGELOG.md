@@ -1,3 +1,9 @@
+## v4.0.12
+
+- Fixed Oak-only dungeon searches so saved Blizzard advanced filters are rebuilt on login without opening Blizzard's Dungeons & Raids panel
+- Prevented empty Oak activity selections from wiping persisted native dungeon filters unless the user explicitly clears them
+- Updated browser text to 'Applied to X/5 Groups' and shortened the theme reload notice
+
 ## v4.0.11
 
 - Added region filters to current and legacy raid browser filter panels.
