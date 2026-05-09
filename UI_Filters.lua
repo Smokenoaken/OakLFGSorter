@@ -620,6 +620,17 @@ end
 local function ResultMatchesRoleNeeds(result, filters)
     local roleCounts, memberTotal = GetBrowserFilledRoleCounts(result)
 
+    if filters.needsMyClass then
+        local _, playerClass = UnitClass("player")
+        if playerClass then
+            for _, player in ipairs(result.players or {}) do
+                if tostring(player.class or ""):upper() == playerClass then
+                    return false
+                end
+            end
+        end
+    end
+
     if filters.hasTank and (roleCounts.TANK or 0) == 0 then
         return false
     end
@@ -1072,6 +1083,15 @@ local function RefreshBrowserFilters()
     end
 end
 
+local nativeRoleFilterKeys = {
+    needsTank = "needsTank",
+    hasTank = "hasTank",
+    needsHealer = "needsHealer",
+    hasHealer = "hasHealer",
+    needsDamage = "needsDPS",
+    needsMyClass = "needsMyClass",
+}
+
 local function SyncBrowserNativeRoleFilters()
     if not (C_LFGList and C_LFGList.GetAdvancedFilter and C_LFGList.SaveAdvancedFilter) then
         return
@@ -1092,11 +1112,25 @@ local function SyncBrowserNativeRoleFilters()
     advancedFilter.hasHealer = filters.hasHealer and true or nil
     -- "No [player class]" filter (server-side)
     advancedFilter.needsMyClass = filters.needsMyClass and true or nil
-    -- Min rating (server-side)
-    local minR = tonumber(filters.minRating)
-    advancedFilter.minimumRating = (minR and minR > 0) and minR or nil
 
     pcall(C_LFGList.SaveAdvancedFilter, advancedFilter)
+end
+
+local function SetSavedNativeRoleFilter(advKey, isActive)
+    local filterKey = nativeRoleFilterKeys[advKey]
+    if not filterKey then
+        return
+    end
+
+    local filters = BrowserFilterState()
+    filters[filterKey] = isActive == true
+
+    if C_LFGList and C_LFGList.GetAdvancedFilter and C_LFGList.SaveAdvancedFilter then
+        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+        if not ok or type(adv) ~= "table" then adv = {} end
+        adv[advKey] = filters[filterKey] and true or nil
+        pcall(C_LFGList.SaveAdvancedFilter, adv)
+    end
 end
 
 -- Also push selected activities to Blizzard's native filter
@@ -2657,17 +2691,15 @@ for _, toggleInfo in ipairs(browserToggleKeys) do
     end
 end
 
--- Override OnClick for the 5 native-backed role toggles so they write directly to
--- C_LFGList.SaveAdvancedFilter — the same pattern v2.0.12 used in Search.lua.
--- This avoids the BrowserFilterState intermediary and keeps Blizzard's filter as the
--- single source of truth for these keys.
+-- Native-backed role toggles are saved in Oak's per-character filter state, then
+-- mirrored into Blizzard's advanced filter before searches.
 local function MakeNativeAdvToggle(advKey)
     return function(self)
-        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
-        if not ok or type(adv) ~= "table" then adv = {} end
-        adv[advKey] = not (adv[advKey] == true) and true or nil
-        self:SetState(adv[advKey] == true)
-        pcall(C_LFGList.SaveAdvancedFilter, adv)
+        local filters = BrowserFilterState()
+        local filterKey = nativeRoleFilterKeys[advKey]
+        local nextState = not (filterKey and filters[filterKey] == true)
+        SetSavedNativeRoleFilter(advKey, nextState)
+        self:SetState(nextState)
         RefreshBrowserFilters()
     end
 end
@@ -2883,6 +2915,7 @@ end
 browserFilterPanel:HookScript("OnHide", function() RestoreBrowserNativeSearchBox() end)
 
 local function ApplyBrowserQueryAndRefresh()
+    SyncBrowserNativeRoleFilters()
     SyncBrowserNativeActivities()
     addonTable._manualBrowserRefreshInProgress = true
     if addonTable.RunBrowserSearch then
@@ -2910,6 +2943,9 @@ browserResetBtn:SetScript("OnClick", function()
     filters.difficulty = "ANY"
     filters.playstyle  = "ANY"
     filters.keyMin = ""; filters.keyMax = ""
+    filters.needsTank = false; filters.hasTank = false
+    filters.needsHealer = false; filters.hasHealer = false
+    filters.needsDPS = false; filters.needsMyClass = false
     filters.partyFit = false; filters.lustMatch = false; filters.needsLust = false
     filters.needsBrez = false; filters.hasLust = false
     filters.hasBrez = false; filters.hideDeclined = false
@@ -3696,7 +3732,7 @@ function addonTable.UpdateBrowserFilterPanel()
         browserResetBtn:Show()
         y = y - 28
 
-        -- Read the current native Blizzard advanced filter for native-backed toggles.
+        -- Read Blizzard's native advanced filter for fields Oak does not own directly.
         local advOk, adv = pcall(C_LFGList.GetAdvancedFilter)
         if not advOk or type(adv) ~= "table" then adv = {} end
 
@@ -3706,10 +3742,10 @@ function addonTable.UpdateBrowserFilterPanel()
             local r1 = browserToggleRows["needsTank"]
             local r2 = browserToggleRows["hasTank"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-            r1.box:SetState(adv.needsTank == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+            r1.box:SetState(filters.needsTank == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
 
             r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-            r2.box:SetState(adv.hasTank == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            r2.box:SetState(filters.hasTank == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
             y = y - ROW_H
         end
 
@@ -3718,10 +3754,10 @@ function addonTable.UpdateBrowserFilterPanel()
             local r1 = browserToggleRows["needsHealer"]
             local r2 = browserToggleRows["hasHealer"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-            r1.box:SetState(adv.needsHealer == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+            r1.box:SetState(filters.needsHealer == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
 
             r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-            r2.box:SetState(adv.hasHealer == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            r2.box:SetState(filters.hasHealer == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
             y = y - ROW_H
         end
 
@@ -3729,11 +3765,11 @@ function addonTable.UpdateBrowserFilterPanel()
         do
             local r1 = browserToggleRows["needsDPS"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-            r1.box:SetState(adv.needsDamage == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+            r1.box:SetState(filters.needsDPS == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
 
             browserNoClassBox:ClearAllPoints()
             browserNoClassBox:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-            browserNoClassBox:SetState(adv.needsMyClass == true)
+            browserNoClassBox:SetState(filters.needsMyClass == true)
             browserNoClassText:SetText(GetNeedsMyClassLabel())
             browserNoClassBox:Show(); browserNoClassText:Show()
             y = y - ROW_H
@@ -5245,17 +5281,17 @@ local function RaiseBlizzardAutoOpenButton()
         return
     end
 
-    if UIParent and lfgToggleBox:GetParent() ~= UIParent then
-        lfgToggleBox:SetParent(UIParent)
+    if LFGListFrame and lfgToggleBox:GetParent() ~= LFGListFrame then
+        lfgToggleBox:SetParent(LFGListFrame)
     end
     if LFGListFrame then
         lfgToggleBox:ClearAllPoints()
-        lfgToggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -34, -4)
+        lfgToggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -33, -5)
     end
-    lfgToggleBox:SetFrameStrata("TOOLTIP")
-    lfgToggleBox:SetFrameLevel(1000)
+    lfgToggleBox:SetFrameStrata("DIALOG")
+    lfgToggleBox:SetFrameLevel((LFGListFrame and LFGListFrame:GetFrameLevel() or 1) + 35)
     if lfgToggleBox.SetToplevel then
-        lfgToggleBox:SetToplevel(true)
+        lfgToggleBox:SetToplevel(false)
     end
 end
 
@@ -5312,9 +5348,9 @@ end
 function addonTable.SetupBlizzardLFGHook()
     if LFGListFrame and LFGListFrame.ApplicationViewer then
         if not lfgToggleBox then
-            lfgToggleBox = CreateFrame("Button", nil, UIParent or LFGListFrame, "BackdropTemplate")
+            lfgToggleBox = CreateFrame("Button", nil, LFGListFrame, "BackdropTemplate")
             addonTable.LFGToggleBox = lfgToggleBox
-            lfgToggleBox:SetSize(22, 22)
+            lfgToggleBox:SetSize(18, 18)
             lfgToggleBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
             lfgToggleBox:RegisterForClicks("LeftButtonUp")
             RaiseBlizzardAutoOpenButton()
@@ -5326,7 +5362,7 @@ function addonTable.SetupBlizzardLFGHook()
             lfgToggleHighlight:SetPoint("BOTTOMRIGHT", -1, 1)
 
             lfgToggleIcon = lfgToggleBox:CreateTexture(nil, "ARTWORK")
-            lfgToggleIcon:SetSize(16, 16)
+            lfgToggleIcon:SetSize(14, 14)
             lfgToggleIcon:SetPoint("CENTER")
             lfgToggleIcon:SetTexture("Interface\\AddOns\\OakLFGSorter\\Media\\icon.png")
             lfgToggleBox.icon = lfgToggleIcon

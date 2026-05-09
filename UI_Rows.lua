@@ -4311,6 +4311,7 @@ end
 
 function addonTable.UpdateDisplay()
     browserRenderGeneration = browserRenderGeneration + 1
+    local isBrowser = IsBrowserMode()
     if addonTable.RefreshBrowserResponsiveLayout and IsBrowserMode() then
         addonTable.RefreshBrowserResponsiveLayout()
     end
@@ -4322,29 +4323,30 @@ function addonTable.UpdateDisplay()
     addonTable.UpdateHeaderVisuals()
     UpdateNotesToggleLayout()
 
-    -- Hide rows AND clear their data references so stale result entries can be GC'd.
-    -- Without this, hidden rows keep old players/memberCounts/roleCounts tables alive
-    -- even after those results have been removed from addonTable.SearchResults.
-    for _, row in ipairs(rows) do
-        row:Hide()
-        row.searchResult    = nil
-        row.rioProfile      = nil
-        row.memberRaidProgress = nil
-        row.fullComment     = nil
-        row.regionInfo      = nil
+    if not isBrowser then
+        -- Hide rows AND clear their data references so stale result entries can be GC'd.
+        -- Browser updates reuse visible rows until replacement data is painted, avoiding
+        -- a blank-list flicker during live search result refreshes.
+        for _, row in ipairs(rows) do
+            row:Hide()
+            row.searchResult    = nil
+            row.rioProfile      = nil
+            row.memberRaidProgress = nil
+            row.fullComment     = nil
+            row.regionInfo      = nil
+        end
+        for _, row in ipairs(stickyRows) do
+            row:Hide()
+            row.searchResult    = nil
+            row.rioProfile      = nil
+            row.memberRaidProgress = nil
+            row.fullComment     = nil
+            row.regionInfo      = nil
+        end
+        browserAppliedSeparator:Hide()
     end
-    for _, row in ipairs(stickyRows) do
-        row:Hide()
-        row.searchResult    = nil
-        row.rioProfile      = nil
-        row.memberRaidProgress = nil
-        row.fullComment     = nil
-        row.regionInfo      = nil
-    end
-    browserAppliedSeparator:Hide()
     emptyStateText:Hide()
 
-    local isBrowser = IsBrowserMode()
     if addonTable.quickSignupBar then
         if isBrowser then
             addonTable.quickSignupBar:Show()
@@ -4422,8 +4424,6 @@ function addonTable.UpdateDisplay()
             result._oakStableIndex = index
         end
 
-        -- Hide all sticky rows before re-rendering (data already cleared by the top-of-display loop)
-        for _, row in ipairs(stickyRows) do row:Hide() end
         browserAppliedSeparator:Hide()
 
         -- Split activeResults: applied groups go to sticky panel, rest scroll normally
@@ -4455,6 +4455,28 @@ function addonTable.UpdateDisplay()
         UpdateApplicantContextLayout()
 
         scrollChild:SetHeight(math.max(1, #normalResults * ROW_HEIGHT))
+        for index = #normalResults + 1, #rows do
+            local row = rows[index]
+            if row then
+                row:Hide()
+                row.searchResult = nil
+                row.rioProfile = nil
+                row.memberRaidProgress = nil
+                row.fullComment = nil
+                row.regionInfo = nil
+            end
+        end
+        for index = stickyIndex, #stickyRows do
+            local row = stickyRows[index]
+            if row then
+                row:Hide()
+                row.searchResult = nil
+                row.rioProfile = nil
+                row.memberRaidProgress = nil
+                row.fullComment = nil
+                row.regionInfo = nil
+            end
+        end
         if #normalResults > 0 then
             QueueBrowserRowRender(normalResults, 1, browserRenderGeneration)
         end
