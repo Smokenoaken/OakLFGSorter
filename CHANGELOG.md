@@ -1,3 +1,16 @@
+## v4.0.11
+
+- Added region filters to current and legacy raid browser filter panels.
+- Removed dungeon role and utility filters from Delve, Questing, Custom, Arena, and RBG browser modes.
+- Fixed Keep Delisted/Cancelled/Filtered so only rows already visible in Oak are preserved during live updates.
+- Fixed preserved delisted and filtered rows so region and activity filters still apply.
+- Kept applied groups pinned at the top until manual refresh when they become declined, delisted, or filtered.
+- Updated Hide Declined so declined rows remain visible until refresh, then stay hidden across future refreshes until reset.
+- Added left/right placement for the Mythic+ panel and remembered whether the panel was open across reloads.
+- Improved side-panel anchoring when the Mythic+ panel is open on the right.
+- Moved Blizzard Auto-Open Sorter buttons next to the appropriate refresh/PGF controls.
+- Shortened the quick signup application limit text to a compact applied-groups counter.
+
 ## v4.0.10
 
 - Updated supporter list.

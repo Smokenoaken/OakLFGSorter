@@ -51,7 +51,17 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
         toggleBox:SetSize(22, 22)
         toggleBox:SetBackdrop({ bgFile = FLAT_TEX, edgeFile = FLAT_TEX, edgeSize = 1 })
         toggleBox:RegisterForClicks("LeftButtonUp")
-        toggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -34, -4)
+        local function PositionSearchToggle()
+            toggleBox:ClearAllPoints()
+            if UsePGFButton then
+                toggleBox:SetPoint("RIGHT", UsePGFButton, "LEFT", -6, -1)
+            elseif searchPanel.RefreshButton then
+                toggleBox:SetPoint("RIGHT", searchPanel.RefreshButton, "LEFT", -6, -1)
+            else
+                toggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -34, -4)
+            end
+        end
+        PositionSearchToggle()
         toggleBox:SetFrameLevel((LFGListFrame:GetFrameLevel() or 1) + 20)
         toggleBox:Hide()
 
@@ -93,6 +103,7 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
         end
 
         local function UpdateVisibility()
+            PositionSearchToggle()
             if searchPanel and searchPanel:IsShown() then
                 toggleBox:Show()
             else

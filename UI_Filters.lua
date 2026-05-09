@@ -68,7 +68,7 @@ local function GetBrowserMode()
 end
 
 local function BrowserModeUsesDifficulty(mode)
-    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid"
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid" or mode == "legacy_raid"
 end
 
 local function BrowserModeUsesKeyRange(mode)
@@ -76,7 +76,15 @@ local function BrowserModeUsesKeyRange(mode)
 end
 
 local function BrowserModeUsesActivityFilter(mode)
-    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid" or mode == "delve"
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid" or mode == "legacy_raid" or mode == "delve"
+end
+
+local function BrowserModeUsesDungeonRoleFilters(mode)
+    return mode == "mythic_plus" or mode == "dungeon"
+end
+
+local function BrowserModeUsesGroupUtilityFilters(mode)
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid" or mode == "legacy_raid"
 end
 
 local function SetQuickFilterButtonState(button, isActive)
@@ -747,7 +755,7 @@ local function ResultMatchesMinimumRating(result)
         return true
     end
 
-    local mode = result.mode or "generic"
+    local mode = result.mode or GetBrowserMode()
     local ratingValue
     if mode == "rated_pvp" or mode == "pvp" then
         ratingValue = tonumber(result.pvpRating) or tonumber(result.rating) or 0
@@ -758,19 +766,23 @@ local function ResultMatchesMinimumRating(result)
     return ratingValue >= minRating
 end
 
-function addonTable.ResultPassesBrowserFilters(result)
+function addonTable.ResultPassesBrowserFilters(result, options)
+    local allowUnavailable = type(options) == "table" and options.allowUnavailable == true
     -- Hide groups that are completely full (no open slots)
-    if addonTable.IsDungeonBrowserResultFull and addonTable.IsDungeonBrowserResultFull(result) then
+    if not allowUnavailable and addonTable.IsDungeonBrowserResultFull and addonTable.IsDungeonBrowserResultFull(result) then
         return false
     end
     local maxP = result.maxPlayers or 0
-    if maxP > 0 and (result.numMembers or 0) >= maxP then
+    if not allowUnavailable and maxP > 0 and (result.numMembers or 0) >= maxP then
         return false
     end
 
     local runtime = addonTable._browserRuntimeFilters
     local filters = (runtime and runtime.filters) or BrowserFilterState()
-    if filters.hideDeclined and addonTable.IsSearchResultHiddenByDeclineMemory and addonTable.IsSearchResultHiddenByDeclineMemory(result) then
+    if filters.hideDeclined
+            and not result._oakShowDeclinedUntilRefresh
+            and addonTable.IsSearchResultHiddenByDeclineMemory
+            and addonTable.IsSearchResultHiddenByDeclineMemory(result) then
         return false
     end
     if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(result) then
@@ -795,7 +807,7 @@ function addonTable.ResultPassesBrowserFilters(result)
     if not ResultMatchesKeyRange(result, filters) then
         return false
     end
-    if not ResultMatchesRoleNeeds(result, filters) then
+    if BrowserModeUsesDungeonRoleFilters(mode) and not ResultMatchesRoleNeeds(result, filters) then
         return false
     end
     if not ResultMatchesMinimumRating(result) then
@@ -804,22 +816,40 @@ function addonTable.ResultPassesBrowserFilters(result)
     if not ResultMatchesPlaystyle(result, filters.playstyle) then
         return false
     end
-    if filters.partyFit and not ResultMatchesPartyFit(result, runtime) then
+    if BrowserModeUsesGroupUtilityFilters(mode) and filters.partyFit and not ResultMatchesPartyFit(result, runtime) then
         return false
     end
-    if filters.lustMatch and not addonTable.ResultMatchesUtilityMatch(result, runtime, "LUST") then
+    if BrowserModeUsesGroupUtilityFilters(mode) and filters.lustMatch and not addonTable.ResultMatchesUtilityMatch(result, runtime, "LUST") then
         return false
     end
-    if filters.needsBrez and not addonTable.ResultCanStillSolveMissingUtility(result, runtime, "BREZ") then
+    if BrowserModeUsesGroupUtilityFilters(mode) and filters.needsBrez and not addonTable.ResultCanStillSolveMissingUtility(result, runtime, "BREZ") then
         return false
     end
-    if filters.hasBrez and not addonTable.ResultWillHaveUtilityAfterParty(result, runtime, "BREZ") then
+    if BrowserModeUsesDungeonRoleFilters(mode) and filters.hasBrez and not addonTable.ResultWillHaveUtilityAfterParty(result, runtime, "BREZ") then
         return false
     end
     if not ResultMatchesRaidBossCount(result, filters) then return false end
     if not ResultMatchesRaidRoleCounts(result, filters) then return false end
     if not ResultMatchesRaidLockout(result, filters) then return false end
 
+    return true
+end
+
+function addonTable.ResultPassesBrowserPreserveFilters(result)
+    local runtime = addonTable._browserRuntimeFilters
+    local filters = (runtime and runtime.filters) or BrowserFilterState()
+    if filters.hideDeclined
+            and not result._oakShowDeclinedUntilRefresh
+            and addonTable.IsSearchResultHiddenByDeclineMemory
+            and addonTable.IsSearchResultHiddenByDeclineMemory(result) then
+        return false
+    end
+    if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(result) then
+        return false
+    end
+    if not ResultMatchesSelectedActivities(result, filters, runtime) then
+        return false
+    end
     return true
 end
 
@@ -1524,7 +1554,6 @@ local function ResetOakBrowserCategoryFilters()
     filters.lustMatch = false
     filters.needsLust = false
     filters.needsBrez = false
-    filters.hideDeclined = false
     filters.selectedActivities = {}
     filters.raidBossesMin = "ANY"
     filters.matchMyRaidLockout = false
@@ -2948,11 +2977,15 @@ browserResetBtn:SetScript("OnClick", function()
     filters.needsDPS = false; filters.needsMyClass = false
     filters.partyFit = false; filters.lustMatch = false; filters.needsLust = false
     filters.needsBrez = false; filters.hasLust = false
-    filters.hasBrez = false; filters.hideDeclined = false
+    filters.hasBrez = false
     filters.raidBossesMin = "ANY"; filters.matchMyRaidLockout = false; filters.bountifulOnly = false
     filters.raidBossKills = ""; filters.raidTanks = ""
     filters.raidHealers = ""; filters.raidDps = ""
     filters.selectedActivities = {}
+    local hiddenDeclined = addonTable.GetHiddenDeclinedGroups and addonTable.GetHiddenDeclinedGroups() or nil
+    if type(hiddenDeclined) == "table" then
+        wipe(hiddenDeclined)
+    end
     ResetSharedRegionFilters()
     -- Clear raid range input boxes
     for _, key in ipairs({"raidBossKills", "raidTanks", "raidHealers", "raidDps"}) do
@@ -3094,7 +3127,7 @@ givesScoreHeaderHitbox:Hide()
 
 local function GetBrowserActivitySectionTitle()
     local mode = GetBrowserMode()
-    if mode == "raid" then
+    if mode == "raid" or mode == "legacy_raid" then
         return L["Filter Raids"]
     elseif mode == "delve" then
         return L["Filter Delves"]
@@ -3373,6 +3406,7 @@ function addonTable.UpdateBrowserFilterPanel()
     local showActivityFilters = BrowserModeUsesActivityFilter(mode)
     local isRaidMode = (mode == "raid") or (mode == "legacy_raid")
     local isDelveMode = (mode == "delve")
+    local usesDungeonRoleFilters = BrowserModeUsesDungeonRoleFilters(mode)
     local accent = addonTable.GetThemeAccentColor and addonTable.GetThemeAccentColor(addonTable.GetThemePreset and addonTable.GetThemePreset() or nil) or addonTable.ClassColor
 
     if addonTable.BrowserFilterTitle then
@@ -3439,7 +3473,7 @@ function addonTable.UpdateBrowserFilterPanel()
         MeasureRightLabel(browserToggleRows["lustMatch"].label)
         MeasureLeftLabel(browserToggleRows["needsBrez"].label)
         MeasureRightLabel(browserToggleRows["matchMyRaidLockout"].label)
-    else
+    elseif usesDungeonRoleFilters then
         MeasureLeftLabel(browserToggleRows["needsTank"].label)
         MeasureRightLabel(browserToggleRows["hasTank"].label)
         MeasureLeftLabel(browserToggleRows["needsHealer"].label)
@@ -3454,6 +3488,12 @@ function addonTable.UpdateBrowserFilterPanel()
         MeasureLeftLabel(browserToggleRows["lustMatch"].label)
         if isDelveMode then
             MeasureLeftLabel(browserToggleRows["hideDeclined"].label)
+            MeasureRightLabel(L["Bountiful Only"])
+        end
+    else
+        MeasureLeftLabel(browserMinRatingLabel:GetText() or "")
+        MeasureLeftLabel(browserToggleRows["hideDeclined"].label)
+        if isDelveMode then
             MeasureRightLabel(L["Bountiful Only"])
         end
     end
@@ -3487,6 +3527,41 @@ function addonTable.UpdateBrowserFilterPanel()
     browserQueryHint:SetWidth(contentWidth)
 
     local y = 0  -- tracks next available top (goes negative)
+    if browserRegionFilterLabel then browserRegionFilterLabel:Hide() end
+    for _, box in pairs(regionFilterButtons) do box:Hide() end
+    for _, label in pairs(regionFilterLabels) do label:Hide() end
+
+    local function LayoutCompactRegionFilters(startY)
+        local regionOrder = addonTable.GetVisibleRegionFilterOrder and addonTable.GetVisibleRegionFilterOrder()
+            or addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder()
+            or {}
+        if #regionOrder == 0 or not browserRegionFilterLabel then
+            return startY
+        end
+
+        browserRegionFilterLabel:ClearAllPoints()
+        browserRegionFilterLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, startY - 1)
+        browserRegionFilterLabel:Show()
+
+        local regionStartY = startY - 19
+        for index, regionCode in ipairs(regionOrder) do
+            local box = regionFilterButtons[regionCode]
+            local label = regionFilterLabels[regionCode]
+            if box and label then
+                local column = (index - 1) % 3
+                local row = math.floor((index - 1) / 3)
+                box:ClearAllPoints()
+                box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", column * 66, regionStartY - (row * 20))
+                label:ClearAllPoints()
+                label:SetPoint("LEFT", box, "RIGHT", 5, 0)
+                ApplySharedRegionToggleVisual(box, label, addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
+                box:Show()
+                label:Show()
+            end
+        end
+
+        return regionStartY - (math.ceil(#regionOrder / 3) * 20) - 4
+    end
 
     if isRaidMode then
         -- ═══════════════════════════════════════════════════════════════════════
@@ -3509,9 +3584,6 @@ function addonTable.UpdateBrowserFilterPanel()
         browserNoClassBox:Hide(); browserNoClassText:Hide()
         browserMinRatingLabel:Hide(); browserMinRatingBox:Hide()
         browserToggleRows["hideDeclined"].box:Hide(); browserToggleRows["hideDeclined"].text:Hide()
-        if browserRegionFilterLabel then browserRegionFilterLabel:Hide() end
-        for _, box in pairs(regionFilterButtons) do box:Hide() end
-        for _, label in pairs(regionFilterLabels) do label:Hide() end
 
         -- ── 1. Difficulty dropdown (full width) ──────────────────────────────
         if showDifficulty then
@@ -3609,6 +3681,8 @@ function addonTable.UpdateBrowserFilterPanel()
             y = y - ROW_H
         end
 
+        y = LayoutCompactRegionFilters(y)
+
         -- ── 7. Activity section (Filter Raids) ───────────────────────────────
         if showActivityFilters then
             activityDivider:ClearAllPoints()
@@ -3692,6 +3766,8 @@ function addonTable.UpdateBrowserFilterPanel()
             playstyleDropdown.UpdateText()
             playstyleDropdown:Show()
             y = y - 28
+        else
+            playstyleDropdown:Hide()
         end
 
         -- ── 2. "Select Filters then Click Refresh" label + search query hint ─
@@ -3736,9 +3812,18 @@ function addonTable.UpdateBrowserFilterPanel()
         local advOk, adv = pcall(C_LFGList.GetAdvancedFilter)
         if not advOk or type(adv) ~= "table" then adv = {} end
 
+        if not usesDungeonRoleFilters then
+            for _, key in ipairs({"needsTank", "hasTank", "needsHealer", "hasHealer", "needsDPS", "partyFit", "needsBrez", "hasBrez", "lustMatch"}) do
+                browserToggleRows[key].box:Hide()
+                browserToggleRows[key].text:Hide()
+            end
+            browserNoClassBox:Hide()
+            browserNoClassText:Hide()
+        end
+
         -- ── 5. Toggle rows (2-column layout) ──────────────────────────────────
         -- Row 1: Need Tank | Has Tank
-        do
+        if usesDungeonRoleFilters then
             local r1 = browserToggleRows["needsTank"]
             local r2 = browserToggleRows["hasTank"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
@@ -3750,7 +3835,7 @@ function addonTable.UpdateBrowserFilterPanel()
         end
 
         -- Row 2: Need Healer | Has Healer
-        do
+        if usesDungeonRoleFilters then
             local r1 = browserToggleRows["needsHealer"]
             local r2 = browserToggleRows["hasHealer"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
@@ -3762,7 +3847,7 @@ function addonTable.UpdateBrowserFilterPanel()
         end
 
         -- Row 3: Need Damage | No [Class]
-        do
+        if usesDungeonRoleFilters then
             local r1 = browserToggleRows["needsDPS"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
             r1.box:SetState(filters.needsDPS == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
@@ -3795,21 +3880,21 @@ function addonTable.UpdateBrowserFilterPanel()
         do
             local r1 = browserToggleRows["partyFit"]
             local r2 = browserToggleRows["hideDeclined"]
-            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-            r1.box:SetState(filters.partyFit == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
-
-            if isDelveMode then
-                r2.box:Hide()
-                r2.text:Hide()
-            else
+            if usesDungeonRoleFilters then
+                r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+                r1.box:SetState(filters.partyFit == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
                 r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
-                r2.box:SetState(filters.hideDeclined == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            else
+                r1.box:Hide()
+                r1.text:Hide()
+                r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
             end
+            r2.box:SetState(filters.hideDeclined == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
             y = y - ROW_H
         end
 
         -- Row 6: Need BRez | Has BRez
-        do
+        if usesDungeonRoleFilters then
             local r1 = browserToggleRows["needsBrez"]
             local r2 = browserToggleRows["hasBrez"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
@@ -3821,7 +3906,7 @@ function addonTable.UpdateBrowserFilterPanel()
         end
 
         -- Row 7: Lust Match
-        do
+        if usesDungeonRoleFilters then
             local r1 = browserToggleRows["lustMatch"]
             r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
             r1.box:SetState(filters.lustMatch == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
@@ -3829,48 +3914,16 @@ function addonTable.UpdateBrowserFilterPanel()
         end
 
         if isDelveMode then
-            local r1 = browserToggleRows["hideDeclined"]
             local r2 = browserToggleRows["matchMyRaidLockout"]
-            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
-            r1.box:SetState(filters.hideDeclined == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
-
-            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
+            r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y + ROW_H)
             r2.box:SetState(filters.bountifulOnly == true); r2.text:SetText(L["Bountiful Only"]); r2.box:Show(); r2.text:Show()
-            y = y - ROW_H
         else
             browserToggleRows["matchMyRaidLockout"].box:Hide()
             browserToggleRows["matchMyRaidLockout"].text:Hide()
         end
 
         -- Compact region filters: 3 columns x 2 rows for the current visible regions.
-        do
-            local regionOrder = addonTable.GetVisibleRegionFilterOrder and addonTable.GetVisibleRegionFilterOrder()
-                or addonTable.GetRegionFilterOrder and addonTable.GetRegionFilterOrder()
-                or {}
-            if #regionOrder > 0 and browserRegionFilterLabel then
-                browserRegionFilterLabel:ClearAllPoints()
-                browserRegionFilterLabel:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y - 1)
-                browserRegionFilterLabel:Show()
-
-                local startY = y - 19
-                for index, regionCode in ipairs(regionOrder) do
-                    local box = regionFilterButtons[regionCode]
-                    local label = regionFilterLabels[regionCode]
-                    if box and label then
-                        local column = (index - 1) % 3
-                        local row = math.floor((index - 1) / 3)
-                        box:ClearAllPoints()
-                        box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", column * 66, startY - (row * 20))
-                        label:ClearAllPoints()
-                        label:SetPoint("LEFT", box, "RIGHT", 5, 0)
-                        ApplySharedRegionToggleVisual(box, label, addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
-                        box:Show()
-                        label:Show()
-                    end
-                end
-                y = startY - (math.ceil(#regionOrder / 3) * 20) - 4
-            end
-        end
+        y = LayoutCompactRegionFilters(y)
 
         -- ── 6. Activity section ───────────────────────────────────────────────
         if showActivityFilters then
@@ -4139,10 +4192,47 @@ optionsKeepGoneBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTa
 optionsKeepGoneBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -174)
 local optionsKeepGoneLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsKeepGoneLabel:SetPoint("LEFT", optionsKeepGoneBox, "RIGHT", 8, 0)
-optionsKeepGoneLabel:SetText("Keep Delisted/Cancelled")
+optionsKeepGoneLabel:SetText("Keep Delisted/Cancelled/Filtered")
+
+local optionsMythicSideLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+optionsMythicSideLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -198)
+optionsMythicSideLabel:SetText("M+ Panel Side")
+local optionsMythicSideButton, optionsMythicSideList = addonTable.CreateSimpleDropdown(
+    optionsPanel,
+    170,
+    function()
+        return OakLFGSorterDB.mythicPlusPanelSide == "LEFT" and "Left of Oak" or "Right of Oak"
+    end,
+    function()
+        return {
+            { id = "RIGHT", label = "Right of Oak" },
+            { id = "LEFT", label = "Left of Oak" },
+        }
+    end,
+    function(id)
+        OakLFGSorterDB.mythicPlusPanelSide = id == "LEFT" and "LEFT" or "RIGHT"
+        if addonTable.PositionMythicPlusPanel then
+            addonTable.PositionMythicPlusPanel()
+        end
+        if addonTable.UpdateAuxPanelAnchors then
+            addonTable.UpdateAuxPanelAnchors()
+        end
+    end
+)
+optionsMythicSideButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -216)
+
+local optionsKeepMythicBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
+optionsKeepMythicBox:SetSize(16, 16)
+optionsKeepMythicBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTable.FLAT_TEX, edgeSize = 1})
+optionsKeepMythicBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -244)
+local optionsKeepMythicLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
+optionsKeepMythicLabel:SetPoint("LEFT", optionsKeepMythicBox, "RIGHT", 8, 0)
+optionsKeepMythicLabel:SetText("Keep M+ Panel Open")
+optionsKeepMythicBox:Hide()
+optionsKeepMythicLabel:Hide()
 
 local optionsThemeModeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
-optionsThemeModeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -198)
+optionsThemeModeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -268)
 optionsThemeModeLabel:SetText("Theme")
 local optionsThemeModeNotice = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 optionsThemeModeNotice:SetPoint("LEFT", optionsThemeModeLabel, "RIGHT", 8, 0)
@@ -4492,13 +4582,35 @@ optionsKeepGoneBox:SetScript("OnEnter", function(self)
     local filters = BrowserFilterState()
     ApplyNeutralOptionsToggleVisual(self, optionsKeepGoneLabel, filters.keepUnavailable == true)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Keep Delisted/Cancelled", 1, 1, 1)
-    GameTooltip:AddLine("Keeps delisted browser rows and cancelled applicant rows stable during live updates. Manual Refresh always loads a fresh list.", 1, 1, 1, true)
+    GameTooltip:SetText("Keep Delisted/Cancelled/Filtered", 1, 1, 1)
+    GameTooltip:AddLine("Keeps visible browser rows stable during live updates when they become delisted, cancelled, full, or filtered. Manual Refresh loads a fresh list.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsKeepGoneBox:SetScript("OnLeave", function()
     local filters = BrowserFilterState()
     ApplyNeutralOptionsToggleVisual(optionsKeepGoneBox, optionsKeepGoneLabel, filters.keepUnavailable == true)
+    GameTooltip:Hide()
+end)
+
+optionsMythicSideButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText("M+ Panel Side", 1, 1, 1)
+    GameTooltip:AddLine("Choose whether the Mythic+ panel opens to the left or right of Oak.", 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+optionsMythicSideButton:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+optionsKeepMythicBox:SetScript("OnClick", function()
+    optionsKeepMythicBox:Hide()
+    optionsKeepMythicLabel:Hide()
+end)
+optionsKeepMythicBox:SetScript("OnEnter", function(self)
+    self:Hide()
+    optionsKeepMythicLabel:Hide()
+end)
+optionsKeepMythicBox:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 
@@ -4720,6 +4832,9 @@ function addonTable.UpdateOptionsRegionLayout()
     end
 
     local y = -198
+    SetTopLeft(optionsMythicSideLabel, 15, y)
+    SetTopLeft(optionsMythicSideButton, 15, y - 18)
+    y = y - 50
     SetTopLeft(optionsThemeModeLabel, 15, y)
     SetTopLeft(optionsThemeModeButton, 15, y - 18)
     y = y - 44
@@ -4833,10 +4948,15 @@ local function RefreshOptionsPanel()
     do
         local filters = BrowserFilterState()
         if optionsKeepGoneLabel then
-            optionsKeepGoneLabel:SetText("Keep Delisted/Cancelled")
+            optionsKeepGoneLabel:SetText("Keep Delisted/Cancelled/Filtered")
         end
         ApplyNeutralOptionsToggleVisual(optionsKeepGoneBox, optionsKeepGoneLabel, filters.keepUnavailable == true)
     end
+    if optionsMythicSideButton and optionsMythicSideButton.RefreshSelection then
+        optionsMythicSideButton:RefreshSelection()
+    end
+    optionsKeepMythicBox:Hide()
+    optionsKeepMythicLabel:Hide()
     if optionsThemeModeButton and optionsThemeModeButton.RefreshSelection then
         optionsThemeModeButton:RefreshSelection()
     end
@@ -5286,7 +5406,11 @@ local function RaiseBlizzardAutoOpenButton()
     end
     if LFGListFrame then
         lfgToggleBox:ClearAllPoints()
-        lfgToggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -33, -5)
+        if LFGListFrame.ApplicationViewer and LFGListFrame.ApplicationViewer.RefreshButton then
+            lfgToggleBox:SetPoint("RIGHT", LFGListFrame.ApplicationViewer.RefreshButton, "LEFT", -6, 0)
+        else
+            lfgToggleBox:SetPoint("TOPRIGHT", LFGListFrame, "TOPRIGHT", -33, -5)
+        end
     end
     lfgToggleBox:SetFrameStrata("DIALOG")
     lfgToggleBox:SetFrameLevel((LFGListFrame and LFGListFrame:GetFrameLevel() or 1) + 35)

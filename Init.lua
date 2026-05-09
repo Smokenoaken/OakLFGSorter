@@ -62,6 +62,11 @@ if OakLFGSorterDB.showRegions == nil then OakLFGSorterDB.showRegions = false end
 if OakLFGSorterDB.showRegionFlags == nil then OakLFGSorterDB.showRegionFlags = false end
 if OakLFGSorterDB.lowLatencyOnly == nil then OakLFGSorterDB.lowLatencyOnly = false end
 if OakLFGSorterDB.showPartyKeys == nil then OakLFGSorterDB.showPartyKeys = true end
+if OakLFGSorterDB.mythicPlusPanelSide == nil then OakLFGSorterDB.mythicPlusPanelSide = "RIGHT" end
+if OakLFGSorterDB.mythicPlusPanelOpen == nil then
+    OakLFGSorterDB.mythicPlusPanelOpen = OakLFGSorterDB.keepMythicPlusPanelOpen == true
+end
+OakLFGSorterDB.keepMythicPlusPanelOpen = nil
 if OakLFGSorterDB.attachBrowserTooltipToCursor == nil then OakLFGSorterDB.attachBrowserTooltipToCursor = false end
 if OakLFGSorterDB.fontName == nil then OakLFGSorterDB.fontName = "Friz Quadrata TT" end
 if OakLFGSorterDB.fontSize == nil then OakLFGSorterDB.fontSize = 12 end
@@ -459,7 +464,8 @@ local function AnchorOakSidePanel(panel)
 
     local anchorTarget = addonTable.OAK_LFG
     local anchorOffset = -2
-    if addonTable.MythicPlusPanel and addonTable.MythicPlusPanel:IsShown() then
+    if addonTable.MythicPlusPanel and addonTable.MythicPlusPanel:IsShown()
+            and OakLFGSorterDB and OakLFGSorterDB.mythicPlusPanelSide == "RIGHT" then
         anchorTarget = addonTable.MythicPlusPanel
         anchorOffset = 2
     end

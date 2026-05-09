@@ -11,11 +11,11 @@ function addonTable.GetPendingNativeActivityKey(label)
 end
 
 function addonTable.SearchModeUsesDifficulty(mode)
-    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid"
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid" or mode == "legacy_raid"
 end
 
 function addonTable.SearchModeUsesActivityFilters(mode)
-    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid" or mode == "delve"
+    return mode == "mythic_plus" or mode == "dungeon" or mode == "raid" or mode == "legacy_raid" or mode == "delve"
 end
 
 function addonTable.SearchModeUsesHostedSearch(mode)
@@ -47,7 +47,7 @@ function addonTable.SearchDifficultyIsValidForMode(mode, difficultyValue)
 end
 
 function addonTable.GetSearchActivitySectionTitle(mode)
-    if mode == "raid" then
+    if mode == "raid" or mode == "legacy_raid" then
         return L["Filter Raids"]
     elseif mode == "delve" then
         return L["Filter Delves"]

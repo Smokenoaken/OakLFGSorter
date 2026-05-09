@@ -1638,6 +1638,9 @@ GetBrowserApplicationPriority = function(result)
     if result.isRoleFilled then
         return 4
     end
+    if result._oakStickyUntilRefresh then
+        return 3
+    end
     if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
         return 3
     end
@@ -4366,9 +4369,12 @@ function addonTable.UpdateDisplay()
     if isBrowser then
         addonTable._browserRuntimeFilters = addonTable.BuildBrowserRuntimeFilters and addonTable.BuildBrowserRuntimeFilters() or nil
         local browserFilters = addonTable._browserRuntimeFilters and addonTable._browserRuntimeFilters.filters or {}
+        local preserveChangedResults = browserFilters.keepUnavailable ~= false and addonTable._browserLiveUpdatePending == true
         local activeResults = {}
         for _, result in ipairs(addonTable.SearchResults or {}) do
-            if result.isFilteredOut then
+            local wasVisible = result._oakWasVisibleInBrowser == true
+            result._oakVisibleInCurrentDisplay = nil
+            if result.isFilteredOut and not result.isUnavailable then
                 result.isFilteredOut = nil
                 result.isUnavailable = nil
                 result.isDelisted = nil
@@ -4377,17 +4383,32 @@ function addonTable.UpdateDisplay()
             -- Groups the player has applied to are always shown regardless of filters
             -- so the user can always see and cancel their pending sign-ups.
             local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
+            if isApplied then
+                result._oakStickyUntilRefresh = true
+            end
+            local isStickyUntilRefresh = result._oakStickyUntilRefresh == true
+            local isDeclined = addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus)
             local passesBrowserFilters = not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result)
             local isDelisted = IsBrowserResultFull(result)
-            if isDelisted and not result.isUnavailable and not isApplied and not passesBrowserFilters and browserFilters.keepUnavailable ~= false and result._oakStableIndex then
+            local passesPreserveFilters = not addonTable.ResultPassesBrowserPreserveFilters or addonTable.ResultPassesBrowserPreserveFilters(result)
+            local passesUnavailableFilters = result.isUnavailable and passesPreserveFilters
+            if preserveChangedResults and wasVisible and isDelisted and not isDeclined and not result.isUnavailable and not passesBrowserFilters and passesPreserveFilters and result._oakStableIndex then
                 result.isUnavailable = true
                 result.isDelisted = true
                 result.isFilteredOut = nil
+                passesUnavailableFilters = true
+            elseif preserveChangedResults and wasVisible and not isDeclined and not result.isUnavailable and not passesBrowserFilters and passesPreserveFilters and result._oakStableIndex then
+                result.isUnavailable = true
+                result.isDelisted = nil
+                result.isFilteredOut = true
+                passesUnavailableFilters = true
             end
-            if result.isUnavailable or isApplied or passesBrowserFilters then
+            if isStickyUntilRefresh or isApplied or passesBrowserFilters or passesUnavailableFilters then
+                result._oakVisibleInCurrentDisplay = true
                 table.insert(activeResults, result)
             end
         end
+        addonTable._browserLiveUpdatePending = nil
 
         -- Update "Showing X of Y groups" in the footer
         if addonTable.groupCountText then
@@ -4422,6 +4443,13 @@ function addonTable.UpdateDisplay()
         activeResults = sortableResults
         for index, result in ipairs(activeResults) do
             result._oakStableIndex = index
+            result._oakWasVisibleInBrowser = result._oakVisibleInCurrentDisplay == true
+        end
+        for _, result in ipairs(addonTable.SearchResults or {}) do
+            if not result._oakVisibleInCurrentDisplay then
+                result._oakWasVisibleInBrowser = nil
+            end
+            result._oakVisibleInCurrentDisplay = nil
         end
 
         browserAppliedSeparator:Hide()

@@ -450,16 +450,18 @@ local function BuildDeclinedMemoryKey(result)
 
     local leaderName = NormalizeDeclinedMemoryToken(result.leaderName)
     local activityID = tonumber(result.activityID) or 0
+    local activityName = NormalizeDeclinedMemoryToken(result.activityName or result.dungeonName or result.activityFilterLabel)
     local title = NormalizeDeclinedMemoryToken(result.name ~= "" and result.name or result.displayName)
     local comment = NormalizeDeclinedMemoryToken(result.comment)
 
-    if leaderName == "" and activityID == 0 and title == "" and comment == "" then
+    if leaderName == "" and activityID == 0 and activityName == "" and title == "" and comment == "" then
         return nil
     end
 
     return table.concat({
         leaderName,
         tostring(activityID),
+        activityName,
         title,
         comment,
     }, "|")
@@ -1132,6 +1134,7 @@ local function FetchSearchResultData()
     local scopeSignature = table.concat(signatureParts, "|")
     local sameSearchScope = addonTable._lastSearchScopeSignature == scopeSignature
     addonTable._lastSearchScopeSignature = scopeSignature
+    local isManualBrowserRefresh = addonTable._manualBrowserRefreshInProgress == true
     local panel = LFGListFrame and LFGListFrame.SearchPanel
     local categoryLabel = panel and panel.CategoryName and panel.CategoryName.GetText and panel.CategoryName:GetText() or ""
     local loweredCategoryLabel = strlower(tostring(categoryLabel or ""))
@@ -1375,7 +1378,6 @@ local function FetchSearchResultData()
     end
 
     local filters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
-    local isManualBrowserRefresh = addonTable._manualBrowserRefreshInProgress == true
     addonTable._manualBrowserRefreshInProgress = nil
     addonTable._lastBrowserFetchWasManual = isManualBrowserRefresh
     local previousCount = #previousResults
@@ -1403,23 +1405,31 @@ local function FetchSearchResultData()
 
     local usedLiveResults = {}
     if preserveMissingResults then
+        local passesPreservedBrowserFilters = addonTable.ResultPassesBrowserFilters
         for previousIndex, previous in ipairs(previousResults) do
             local previousID = previous and previous.id
             local live = previousID and liveResultsByID[previousID]
             if live then
                 live._oakStableIndex = previous._oakStableIndex or previousIndex
+                live._oakWasVisibleInBrowser = not isManualBrowserRefresh and previous._oakWasVisibleInBrowser == true
+                live._oakStickyUntilRefresh = not isManualBrowserRefresh and previous._oakStickyUntilRefresh == true or nil
+                if live._oakStickyUntilRefresh and live.isDeclined then
+                    live._oakShowDeclinedUntilRefresh = true
+                end
                 live.isDelisted = nil
                 live.isUnavailable = nil
                 live.isFilteredOut = nil
                 table.insert(addonTable.SearchResults, live)
                 usedLiveResults[previousID] = true
-            elseif previousID and previous and not previous.isDeclined and not (addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(previous.applicationStatus)) then
+            elseif previousID and previous and previous._oakWasVisibleInBrowser == true and not (addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(previous.applicationStatus)) then
                 previous._oakStableIndex = previous._oakStableIndex or previousIndex
                 previous.isDelisted = true
                 previous.isUnavailable = true
                 previous.isFilteredOut = nil
                 previous.applicationStatus = previous.applicationStatus or "none"
-                table.insert(addonTable.SearchResults, previous)
+                if not passesPreservedBrowserFilters or passesPreservedBrowserFilters(previous, { allowUnavailable = true }) then
+                    table.insert(addonTable.SearchResults, previous)
+                end
             end
         end
     end
@@ -1430,6 +1440,11 @@ local function FetchSearchResultData()
             if live then
                 local previous = previousResultsByID[searchResultID]
                 live._oakStableIndex = (previous and previous._oakStableIndex) or (#addonTable.SearchResults + 1)
+                live._oakWasVisibleInBrowser = not isManualBrowserRefresh and previous and previous._oakWasVisibleInBrowser == true
+                live._oakStickyUntilRefresh = not isManualBrowserRefresh and previous and previous._oakStickyUntilRefresh == true or nil
+                if live._oakStickyUntilRefresh and live.isDeclined then
+                    live._oakShowDeclinedUntilRefresh = true
+                end
                 table.insert(addonTable.SearchResults, live)
             end
         end
@@ -1472,6 +1487,11 @@ local function FetchSearchResultData()
     local nextSignature = table.concat(signatureParts, "|")
     local changed = addonTable._lastSearchResultsSignature ~= nextSignature
     addonTable._lastSearchResultsSignature = nextSignature
+    addonTable._browserLiveUpdatePending = changed
+        and sameSearchScope
+        and not isManualBrowserRefresh
+        and previousCount > 0
+        or nil
     return changed
 end
 addonTable.FetchSearchResultData = FetchSearchResultData
@@ -2656,6 +2676,8 @@ function addonTable.ApplyToSearchResult(searchResultID)
                 result.applicationStatus = "applied"
                 result.hasSelf = true
                 result.isDeclined = false
+                result._oakStickyUntilRefresh = true
+                result._oakShowDeclinedUntilRefresh = nil
                 break
             end
         end
@@ -2673,6 +2695,8 @@ function addonTable.MarkSearchResultApplied(searchResultID)
             result.applicationStatus = "applied"
             result.hasSelf = true
             result.isDeclined = false
+            result._oakStickyUntilRefresh = true
+            result._oakShowDeclinedUntilRefresh = nil
             break
         end
     end
@@ -3029,6 +3053,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
             addonTable.SearchApplications[searchResultID] = normalized
             for _, result in ipairs(addonTable.SearchResults or {}) do
                 if result.id == searchResultID then
+                    local wasApplied = IsAppliedStatus(result.applicationStatus) or result.hasSelf == true
                     result.applicationStatus = normalized
                     result.hasSelf = IsAppliedStatus(normalized)
                     result.isDeclined = IsDeclinedStatus(normalized)
@@ -3037,10 +3062,16 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
                             addonTable.RememberDeclinedSearchResult(result)
                         end
                         result.hiddenByDeclineMemory = true
+                        if wasApplied or result._oakStickyUntilRefresh then
+                            result._oakStickyUntilRefresh = true
+                            result._oakShowDeclinedUntilRefresh = true
+                        end
                     elseif addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(normalized) then
                         if addonTable.ClearDeclinedSearchResultMemory then
                             addonTable.ClearDeclinedSearchResultMemory(result)
                         end
+                        result._oakStickyUntilRefresh = true
+                        result._oakShowDeclinedUntilRefresh = nil
                     end
                     break
                 end

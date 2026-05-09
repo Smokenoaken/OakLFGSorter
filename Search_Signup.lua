@@ -907,11 +907,12 @@ quickSignupState.roleButtons.HEALER = CreateQuickSignupRoleButton(quickSignupBar
 quickSignupState.roleButtons.DAMAGER = CreateQuickSignupRoleButton(quickSignupBar, "DAMAGER", "Use Damage for Quick Sign Up and preselect Damage in the Blizzard popup")
 
 local signupLimitNote = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
-signupLimitNote:SetText("Note: You can only sign up for a total of 5 groups at a time")
+signupLimitNote:SetFontObject("SorterClassic_FontRegular")
+signupLimitNote:SetText("0/5 Groups Applied To")
 signupLimitNote:SetTextColor(0.85, 0.85, 0.85)
 signupLimitNote:SetJustifyH("LEFT")
 signupLimitNote:SetWordWrap(false)
-signupLimitNote:SetScale(0.82)
+signupLimitNote:SetScale(1.0)
 
 local cooldownLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 cooldownLabel:SetTextColor(1, 0.6, 0.1, 1)
@@ -1100,12 +1101,12 @@ function addonTable.UpdateSignupLimitDisplay()
 
     if atMax then
         if not cooldownTimerRunning then   -- don't overwrite cooldown label text when it's active
-            signupLimitNote:SetText("Signed up to max groups!")
+            signupLimitNote:SetText(string.format("%d/%d Groups Applied To", tonumber(numActive) or maxApps, maxApps))
             signupLimitNote:SetTextColor(1, 0.35, 0.35)
             signupLimitNote:Show()
         end
     else
-        signupLimitNote:SetText("Note: You can only sign up for a total of 5 groups at a time")
+        signupLimitNote:SetText(string.format("%d/%d Groups Applied To", tonumber(numActive) or 0, maxApps))
         signupLimitNote:SetTextColor(0.85, 0.85, 0.85)
         if not cooldownTimerRunning then
             signupLimitNote:Show()

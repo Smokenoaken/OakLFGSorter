@@ -527,11 +527,16 @@ end
 
 local function PositionPanel()
     panel:ClearAllPoints()
-    panel:SetPoint("TOPLEFT", GetAnchorTarget(), "TOPRIGHT", 2, 0)
+    if OakLFGSorterDB and OakLFGSorterDB.mythicPlusPanelSide == "LEFT" then
+        panel:SetPoint("TOPRIGHT", GetAnchorTarget(), "TOPLEFT", -2, 0)
+    else
+        panel:SetPoint("TOPLEFT", GetAnchorTarget(), "TOPRIGHT", 2, 0)
+    end
     if addonTable.UpdateAuxPanelAnchors then
         addonTable.UpdateAuxPanelAnchors()
     end
 end
+addonTable.PositionMythicPlusPanel = PositionPanel
 
 function addonTable.HideMythicPlusPanel()
     panel:Hide()
@@ -704,8 +709,25 @@ addonTable.RefreshMythicPlusPanel = function(immediate)
     ScheduleMythicPlusRefresh(0.05)
 end
 
+function addonTable.ShowMythicPlusPanel()
+    if OakLFGSorterDB then
+        OakLFGSorterDB.mythicPlusPanelOpen = true
+    end
+    if panel:IsShown() then
+        PositionPanel()
+        addonTable.RefreshMythicPlusPanel(true)
+        return
+    end
+    PositionPanel()
+    panel:Show()
+    addonTable.RefreshMythicPlusPanel(true)
+end
+
 function addonTable.ToggleMythicPlusPanel()
     if panel:IsShown() then
+        if OakLFGSorterDB then
+            OakLFGSorterDB.mythicPlusPanelOpen = false
+        end
         panel:Hide()
         if addonTable.UpdateAuxPanelAnchors then
             addonTable.UpdateAuxPanelAnchors()
@@ -715,9 +737,7 @@ function addonTable.ToggleMythicPlusPanel()
         end
         return
     end
-    PositionPanel()
-    panel:Show()
-    addonTable.RefreshMythicPlusPanel(true)
+    addonTable.ShowMythicPlusPanel()
     if addonTable.UpdateAuxPanelAnchors then
         addonTable.UpdateAuxPanelAnchors()
     end
@@ -747,8 +767,21 @@ addonTable.RegisterThemeRefresh("mythic_plus_panel_theme", function()
 end)
 
 panel:HookScript("OnShow", function()
+    PositionPanel()
     ScheduleMythicPlusRefresh(0.05)
     ScheduleFollowupMythicPlusRefresh(0.75)
+end)
+
+OAK_LFG:HookScript("OnShow", function()
+    if OakLFGSorterDB and OakLFGSorterDB.mythicPlusPanelOpen and addonTable.ShowMythicPlusPanel then
+        addonTable.ShowMythicPlusPanel()
+    end
+end)
+
+OAK_LFG:HookScript("OnHide", function()
+    if panel:IsShown() then
+        panel:Hide()
+    end
 end)
 
 local eventFrame = CreateFrame("Frame")
