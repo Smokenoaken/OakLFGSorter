@@ -698,12 +698,31 @@ local function ResultMatchesPartyFit(result, runtime)
     if not partyRoles or not partySize then
         partyRoles, partySize = GetPartyRoleSupply()
     end
+
+    local roleCounts, memberTotal = GetBrowserFilledRoleCounts(result)
     local maxPlayers = tonumber(result.maxPlayers)
     if not maxPlayers or maxPlayers <= 0 then
         maxPlayers = result.activityInfo and tonumber(result.activityInfo.maxNumPlayers or result.activityInfo.maxPlayers) or 0
     end
-    if maxPlayers > 0 and result.numMembers + partySize > maxPlayers then
+    local listedMembers = math.max(tonumber(result.numMembers) or 0, memberTotal or 0)
+    if maxPlayers > 0 and listedMembers + partySize > maxPlayers then
         return false
+    end
+
+    -- For 5-player listings, the visible comp is the most reliable source for
+    -- Party Fit. Blizzard's remaining-role counts can allow roles that are
+    -- already visibly filled, which lets tank/healer groups leak through.
+    if maxPlayers == 5 then
+        local targets = { TANK = 1, HEALER = 1, DAMAGER = 3 }
+        for role, amount in pairs(partyRoles) do
+            if amount > 0 then
+                local openSpots = math.max(0, (targets[role] or 0) - (roleCounts[role] or 0))
+                if amount > openSpots then
+                    return false
+                end
+            end
+        end
+        return true
     end
 
     local hasRemainingData = false
@@ -721,16 +740,6 @@ local function ResultMatchesPartyFit(result, runtime)
 
     if hasRemainingData then
         return true
-    end
-
-    if maxPlayers == 5 then
-        local targets = { TANK = 1, HEALER = 1, DAMAGER = 3 }
-        for role, amount in pairs(partyRoles) do
-            local openSpots = math.max(0, (targets[role] or 0) - (result.roleCounts[role] or 0))
-            if amount > openSpots then
-                return false
-            end
-        end
     end
 
     return true
@@ -779,6 +788,7 @@ function addonTable.ResultPassesBrowserFilters(result, options)
 
     local runtime = addonTable._browserRuntimeFilters
     local filters = (runtime and runtime.filters) or BrowserFilterState()
+    local mode = result.mode or GetBrowserMode()
     if filters.hideDeclined
             and not result._oakShowDeclinedUntilRefresh
             and addonTable.IsSearchResultHiddenByDeclineMemory
