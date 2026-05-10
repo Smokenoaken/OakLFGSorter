@@ -1,3 +1,7 @@
+## v4.0.13
+
+- Fixed Party Fit filtering so dungeon listings full on the player's current party role are hidden correctly
+
 ## v4.0.12
 
 - Fixed Oak-only dungeon searches so saved Blizzard advanced filters are rebuilt on login without opening Blizzard's Dungeons & Raids panel
