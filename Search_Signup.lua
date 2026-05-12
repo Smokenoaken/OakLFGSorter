@@ -127,6 +127,17 @@ local EnsureQueueRoleSelectorHooks
 local GetSignupNoteEditBox
 local RestoreSavedSignupNote
 
+local function TrySetSignupNoteText(editBox, noteText)
+    if not (editBox and type(editBox.SetText) == "function") then
+        return false
+    end
+
+    quickSignupState.suppressNoteFallback = true
+    local ok = pcall(editBox.SetText, editBox, noteText or "")
+    quickSignupState.suppressNoteFallback = false
+    return ok == true
+end
+
 local SIGNUP_COOLDOWN_DURATION = 1.5  -- Blizzard server-side throttle estimate (seconds)
 local lastDirectSignupTime = 0
 local cooldownTimerRunning = false
@@ -746,9 +757,7 @@ local function EvaluateSignupNoteFallback(editBox, expectedText)
     end
 
     SaveBlockedSignupNoteText(currentText)
-    quickSignupState.suppressNoteFallback = true
-    editBox:SetText("")
-    quickSignupState.suppressNoteFallback = false
+    TrySetSignupNoteText(editBox, "")
 
     if not quickSignupState.noteFallbackWarnedForDialog then
         quickSignupState.noteFallbackWarnedForDialog = true
@@ -769,12 +778,6 @@ local function HookSignupNoteFallback()
 
         local rawText = tostring(self:GetText() or "")
         local noteText = NormalizeSignupNoteText(rawText)
-        if noteText ~= rawText then
-            quickSignupState.suppressNoteFallback = true
-            self:SetText(noteText)
-            quickSignupState.suppressNoteFallback = false
-        end
-
         SetSavedSignupNoteText(noteText)
 
         if noteText == "" then

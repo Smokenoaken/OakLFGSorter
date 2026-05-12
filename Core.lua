@@ -1206,6 +1206,9 @@ local function FetchSearchResultData()
                 local _, hasLust, hasBrez, highestItemLevel = SummarizeSearchResultPlayers(players)
                 local playstyleValue, playstyleLabel, playstyleShortLabel = GetSearchResultPlaystyle(resultInfo, activityInfo)
                 local applicationStatus = GetApplicationStatusForResult(searchResultID)
+                if resultInfo.hasSelf and not IsAppliedStatus(applicationStatus) and not IsDeclinedStatus(applicationStatus) then
+                    applicationStatus = "applied"
+                end
                 local ratingValue = tonumber(resultInfo.leaderOverallDungeonScore) or 0
                 local mainRatingValue = 0
                 local pvpRating = 0
@@ -1404,6 +1407,36 @@ local function FetchSearchResultData()
         and missingCount <= maxPreservedMissing
 
     local usedLiveResults = {}
+    local function PreserveMissingPreviousResult(previous, previousIndex, options)
+        local previousID = previous and previous.id
+        if not previousID or liveResultsByID[previousID] or usedLiveResults[previousID] then
+            return false
+        end
+
+        local preserveApplied = type(options) == "table" and options.preserveApplied == true
+        local isApplied = previous.isApplied == true
+            or previous.hasSelf == true
+            or (addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(previous.applicationStatus))
+        previous._oakStableIndex = previous._oakStableIndex or previousIndex
+        previous.isUnavailable = true
+        if preserveApplied then
+            previous.isFilteredOut = true
+            previous.isDelisted = nil
+        else
+            previous.isFilteredOut = nil
+            previous.isDelisted = true
+        end
+        previous.applicationStatus = previous.applicationStatus or "none"
+        if isApplied then
+            previous.isApplied = true
+            previous.hasSelf = true
+            previous._oakStickyUntilRefresh = true
+        end
+        table.insert(addonTable.SearchResults, previous)
+        usedLiveResults[previousID] = true
+        return true
+    end
+
     if preserveMissingResults then
         local passesPreservedBrowserFilters = addonTable.ResultPassesBrowserFilters
         for previousIndex, previous in ipairs(previousResults) do
@@ -1421,15 +1454,23 @@ local function FetchSearchResultData()
                 live.isFilteredOut = nil
                 table.insert(addonTable.SearchResults, live)
                 usedLiveResults[previousID] = true
-            elseif previousID and previous and previous._oakWasVisibleInBrowser == true and not (addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(previous.applicationStatus)) then
-                previous._oakStableIndex = previous._oakStableIndex or previousIndex
-                previous.isDelisted = true
-                previous.isUnavailable = true
-                previous.isFilteredOut = nil
-                previous.applicationStatus = previous.applicationStatus or "none"
-                if not passesPreservedBrowserFilters or passesPreservedBrowserFilters(previous, { allowUnavailable = true }) then
-                    table.insert(addonTable.SearchResults, previous)
+            elseif previousID and previous and previous._oakWasVisibleInBrowser == true then
+                local isApplied = previous.isApplied == true
+                    or previous.hasSelf == true
+                    or (addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(previous.applicationStatus))
+                if isApplied or not passesPreservedBrowserFilters or passesPreservedBrowserFilters(previous, { allowUnavailable = true }) then
+                    PreserveMissingPreviousResult(previous, previousIndex, { preserveApplied = isApplied })
                 end
+            end
+        end
+    end
+
+    if sameSearchScope and not isManualBrowserRefresh then
+        for previousIndex, previous in ipairs(previousResults) do
+            if previous and (previous.isApplied == true
+                    or previous.hasSelf == true
+                    or (addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(previous.applicationStatus))) then
+                PreserveMissingPreviousResult(previous, previousIndex, { preserveApplied = true })
             end
         end
     end

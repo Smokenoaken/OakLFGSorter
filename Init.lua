@@ -641,7 +641,7 @@ function addonTable.IsAppliedRoleFilled(result)
         return false
     end
 
-    local isApplied = result.isApplied == true
+    local isApplied = result.isApplied == true or result.hasSelf == true
     if not isApplied and addonTable.IsAppliedStatus then
         isApplied = addonTable.IsAppliedStatus(result.applicationStatus)
     end

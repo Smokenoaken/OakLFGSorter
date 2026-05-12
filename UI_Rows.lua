@@ -1634,6 +1634,13 @@ local function GetCurrentRaidBrowserColumns()
     }
 end
 
+function addonTable.IsBrowserResultApplied(result)
+    return type(result) == "table"
+        and (result.isApplied == true
+            or result.hasSelf == true
+            or (addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)))
+end
+
 GetBrowserApplicationPriority = function(result)
     if result.isRoleFilled then
         return 4
@@ -1641,7 +1648,7 @@ GetBrowserApplicationPriority = function(result)
     if result._oakStickyUntilRefresh then
         return 3
     end
-    if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+    if addonTable.IsBrowserResultApplied(result) then
         return 3
     end
     if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
@@ -1724,7 +1731,7 @@ local function GetBrowserRowColor(result, isAltColor)
     if result.isRoleFilled then
         return 0.28, 0.22, 0.11, rowAlpha
     end
-    if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+    if addonTable.IsBrowserResultApplied(result) then
         return 0.14, 0.22, 0.14, rowAlpha
     end
     if addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
@@ -3676,11 +3683,10 @@ CreateRow = function(index, parentOverride, prevRowOverride)
         if r.searchResult then
             -- Browser mode
             local result = r.searchResult
-            if result.isUnavailable then
-                return
-            end
-            if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+            if addonTable.IsBrowserResultApplied(result) then
                 C_LFGList.CancelApplication(result.id)
+            elseif result.isUnavailable then
+                return
             else
                 if IsAtApplicationLimit() then
                     return
@@ -3713,7 +3719,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if r.searchResult then
             local result = r.searchResult
-            if addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+            if addonTable.IsBrowserResultApplied(result) then
                 if result.isRoleFilled then
                     GameTooltip:SetText("Role Filled - Cancel", 1, 0.82, 0.30)
                 else
@@ -4193,9 +4199,6 @@ PopulateBrowserRow = function(row, result, isAltColor)
         if addonTable.IsCancelledStatus and addonTable.IsCancelledStatus(result.applicationStatus) then
             row.ageText:SetText("Cancelled")
             row.ageText:SetTextColor(1, 0.45, 0.25)
-        elseif result.isUnavailable then
-            row.ageText:SetText(result.isDelisted and "Delisted" or "Filtered")
-            row.ageText:SetTextColor(1, 0.35, 0.25)
         elseif addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
             row.ageText:SetText("Declined")
             row.ageText:SetTextColor(1, 0.2, 0.2)
@@ -4205,9 +4208,12 @@ PopulateBrowserRow = function(row, result, isAltColor)
         elseif result.isRoleFilled then
             row.ageText:SetText("Filled")
             row.ageText:SetTextColor(1.0, 0.82, 0.30)
-        elseif addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+        elseif addonTable.IsBrowserResultApplied(result) then
             row.ageText:SetText("Pending")
             row.ageText:SetTextColor(0.2, 1, 0.2)
+        elseif result.isUnavailable then
+            row.ageText:SetText(result.isDelisted and "Delisted" or "Filtered")
+            row.ageText:SetTextColor(1, 0.35, 0.25)
         else
             row.ageText:SetText(FormatAge(result.age))
             row.ageText:SetTextColor(1, 1, 1)
@@ -4217,6 +4223,12 @@ PopulateBrowserRow = function(row, result, isAltColor)
     if addonTable.IsCancelledStatus and addonTable.IsCancelledStatus(result.applicationStatus) then
         row.noteText:SetText("Cancelled")
         row.noteText:SetTextColor(1, 0.45, 0.25)
+    elseif result.isRoleFilled then
+        row.noteText:SetText(result.comment or "")
+        row.noteText:SetTextColor(1.0, 0.82, 0.30)
+    elseif addonTable.IsBrowserResultApplied(result) then
+        row.noteText:SetText(result.comment or "")
+        row.noteText:SetTextColor(1, 1, 1)
     elseif result.isUnavailable then
         row.noteText:SetText(result.isDelisted and "Delisted" or "Filtered")
         row.noteText:SetTextColor(1, 0.35, 0.25)
@@ -4246,19 +4258,19 @@ PopulateBrowserRow = function(row, result, isAltColor)
 
     row.statusText:Hide()
     row.declineBtn:Hide()
-    row.inviteBtn:SetShown(not result.isUnavailable)
+    local isApplied = addonTable.IsBrowserResultApplied(result)
+    row.inviteBtn:SetShown(isApplied or not result.isUnavailable)
     -- Texture only — OnClick/OnEnter/OnLeave are static handlers set once in CreateRow
     if result.isUnavailable then
         row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
-    elseif addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus) then
+    elseif isApplied then
         row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
     else
         row.inviteBtn:SetNormalTexture("Interface\\RAIDFRAME\\ReadyCheck-Ready")
     end
     local inviteTexture = row.inviteBtn:GetNormalTexture()
     if inviteTexture then
-        local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
-        local canApply = (not result.isUnavailable) and (isApplied or (CanApplyToSearchResult() and not IsAtApplicationLimit()))
+        local canApply = isApplied or ((not result.isUnavailable) and CanApplyToSearchResult() and not IsAtApplicationLimit())
         inviteTexture:SetDesaturated(not isApplied and not canApply)
         inviteTexture:SetAlpha((isApplied or canApply) and 1 or 0.55)
     end
@@ -4382,7 +4394,7 @@ function addonTable.UpdateDisplay()
             result.isRoleFilled = addonTable.IsAppliedRoleFilled and addonTable.IsAppliedRoleFilled(result) or false
             -- Groups the player has applied to are always shown regardless of filters
             -- so the user can always see and cancel their pending sign-ups.
-            local isApplied = addonTable.IsAppliedStatus and addonTable.IsAppliedStatus(result.applicationStatus)
+            local isApplied = addonTable.IsBrowserResultApplied(result)
             if isApplied then
                 result._oakStickyUntilRefresh = true
             end
