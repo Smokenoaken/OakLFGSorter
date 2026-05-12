@@ -1,3 +1,9 @@
+## v4.0.14
+
+- Fixed applied groups that become role-filled showing as Filtered and losing the cancel button
+- Fixed applied rows staying cancelable across live search refreshes when Blizzard temporarily drops or filters the result
+- Fixed signup note persistence taint from writing to Blizzard's protected edit box while typing
+
 ## v4.0.13
 
 - Fixed Party Fit filtering so dungeon listings full on the player's current party role are hidden correctly

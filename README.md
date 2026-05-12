@@ -2,7 +2,7 @@
 
 Oakensoul LFG Sorter is a World of Warcraft Retail addon that gives group leaders a cleaner way to review Group Finder applicants. It adds a sortable, filterable applicant window focused on quick triage for Mythic+ and other premade listings.
 
-Current repo version: `4.0.13`
+Current repo version: `4.0.14`
 
 ## Highlights
 
@@ -86,7 +86,7 @@ That produces a release zip in `dist\` with the correct top-level addon folder. 
 
 ## Version
 
-Current repo version: `4.0.13`
+Current repo version: `4.0.14`
 
 ## Project Summary
 
