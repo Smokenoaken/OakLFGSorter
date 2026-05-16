@@ -1,3 +1,10 @@
+## v4.0.15
+
+- Reduced browser refresh work while Oak is open, especially on large raid/custom result lists
+- Saved Quick Sign Up role selections per character instead of account-wide
+- Stopped minimap-open from forcing a protected Blizzard LFG search call
+- Updated the Patreon supporter list
+
 ## v4.0.14
 
 - Fixed applied groups that become role-filled showing as Filtered and losing the cancel button
