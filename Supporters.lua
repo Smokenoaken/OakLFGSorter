@@ -9,7 +9,6 @@ addonTable.Socials = {
 }
 
 addonTable.Patreons = {
-    "Mandos",
     "Thomas Valhøj",
     "Justin Komosky",
     "psykotedy",
@@ -25,6 +24,7 @@ addonTable.Patreons = {
     "Emmanuel leroy",
     "Casey",
     "Mike Saul",
+    "Mandos",
     "Rob Richardson",
     "Michael Irving",
     "bcvbcfb",
@@ -40,7 +40,6 @@ addonTable.Patreons = {
     "Justin Vaughn",
     "Allan Nielsen",
     "Naomi McMillan",
-    "Mike Ham",
     "Thomas Nguyen",
     "sondel robi",
     "jonathan wester",
@@ -52,4 +51,8 @@ addonTable.Patreons = {
     "Tenelle Mallard",
     "Iury Sampaio",
     "coot",
+    "Edwin Cridland",
+    "Robert D Jones",
+    "J. M.",
+    "Abeu42",
 }

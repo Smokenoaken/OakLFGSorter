@@ -2497,10 +2497,10 @@ RefreshBrowserResponsiveLayout = function(options)
     if not options.liveResize and addonTable.UpdateTopBarLayout then
         addonTable.UpdateTopBarLayout()
     end
-    if (not options.liveResize) and (not OAK_LFG.isOakResizing) and addonTable.UpdateBrowserFilterPanel and addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() then
+    if (not options.skipFilterPanel) and (not options.liveResize) and (not OAK_LFG.isOakResizing) and addonTable.UpdateBrowserFilterPanel and addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() then
         addonTable.UpdateBrowserFilterPanel()
     end
-    if layoutChanged or not options.liveResize then
+    if (not options.skipRows) and (layoutChanged or not options.liveResize) then
         RefreshVisibleBrowserRows(layoutToken)
     end
 end
@@ -4328,7 +4328,7 @@ function addonTable.UpdateDisplay()
     browserRenderGeneration = browserRenderGeneration + 1
     local isBrowser = IsBrowserMode()
     if addonTable.RefreshBrowserResponsiveLayout and IsBrowserMode() then
-        addonTable.RefreshBrowserResponsiveLayout()
+        addonTable.RefreshBrowserResponsiveLayout({ skipRows = true, skipFilterPanel = true })
     end
     addonTable.UpdateGroupBuffs()
     if addonTable.UpdateTopBarActions then

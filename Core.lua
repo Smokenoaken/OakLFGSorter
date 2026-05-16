@@ -351,6 +351,21 @@ local searchRefreshQueued = false
 local searchLastRefreshAt = 0
 local SEARCH_REFRESH_MIN_DELAY = 0.30
 local SEARCH_REFRESH_MIN_INTERVAL = 0.90
+local displayRefreshPending = false
+
+local function ScheduleDisplayRefresh(delay)
+    if displayRefreshPending then
+        return
+    end
+
+    displayRefreshPending = true
+    C_Timer.After(delay or 0.05, function()
+        displayRefreshPending = false
+        if OAK_LFG:IsShown() and addonTable.UpdateDisplay then
+            addonTable.UpdateDisplay()
+        end
+    end)
+end
 
 local function RunScheduledSearchRefresh()
     searchRefreshPending = false
@@ -381,7 +396,7 @@ local function RunScheduledSearchRefresh()
     end
 
     if changed then
-        addonTable.UpdateDisplay()
+        ScheduleDisplayRefresh(0)
         -- Re-render the filter panel AFTER FetchSearchResultData has updated mode and
         -- SearchResults. Skip work if the pane is hidden or a dropdown is currently open.
         local dropdownOpen = addonTable.IsBrowserDropdownOpen and addonTable.IsBrowserDropdownOpen()
@@ -1183,6 +1198,14 @@ local function FetchSearchResultData()
     local firstContextResult = nil
     local liveResultsByID = {}
     local liveResultOrder = {}
+    local browserFilters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
+    local needsUtilityData = browserFilters.partyFit == true
+        or browserFilters.lustMatch == true
+        or browserFilters.needsLust == true
+        or browserFilters.needsBrez == true
+        or browserFilters.hasLust == true
+        or browserFilters.hasBrez == true
+    local showSpecIcons = OakLFGSorterDB and OakLFGSorterDB.showSpecIcons == true
     for _, searchResultID in ipairs(resultIDs) do
         local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
         if resultInfo then
@@ -1197,12 +1220,15 @@ local function FetchSearchResultData()
                 local activityFilterKey = NormalizeSearchScoreTargetLabel(activityFilterLabel or "")
                 local memberCounts = GetSearchResultMemberCounts(searchResultID)
                 local roleCounts = GetSearchResultRoleCounts(searchResultID, memberCounts)
-                -- Browser comp rendering always depends on per-member class data, even when
-                -- "Show Spec Icons" is off, because the fixed role slots are tinted by class.
-                -- v3.0.20 tried to skip roster fetches unless spec icons or utility filters
-                -- were enabled, which left players empty and caused every filled slot to fall
-                -- back to the theme accent color until a later refresh repopulated players.
-                local players = GetSearchResultPlayers(searchResultID, resultInfo.numMembers or 0)
+                local maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or 0
+                local numMembers = tonumber(resultInfo.numMembers) or 0
+                local shouldFetchPlayers = showSpecIcons
+                    or needsUtilityData
+                    or listingMode == "rated_pvp"
+                    or listingMode == "pvp"
+                    or maxPlayers <= 5
+                    or numMembers <= 5
+                local players = shouldFetchPlayers and GetSearchResultPlayers(searchResultID, numMembers) or {}
                 local _, hasLust, hasBrez, highestItemLevel = SummarizeSearchResultPlayers(players)
                 local playstyleValue, playstyleLabel, playstyleShortLabel = GetSearchResultPlaystyle(resultInfo, activityInfo)
                 local applicationStatus = GetApplicationStatusForResult(searchResultID)
@@ -1295,7 +1321,7 @@ local function FetchSearchResultData()
                     leaderName = resultInfo.leaderName or "",
                     leaderClass = leaderClass,
                     leaderRole = leaderRole,
-                    numMembers = tonumber(resultInfo.numMembers) or #players,
+                    numMembers = numMembers > 0 and numMembers or #players,
                     activityID = activityID,
                     activityInfo = activityInfo,
                     mode = listingMode,
@@ -1319,7 +1345,7 @@ local function FetchSearchResultData()
                     hasLust = hasLust,
                     hasBrez = hasBrez,
                     highestItemLevel = highestItemLevel,
-                    maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or 0,
+                    maxPlayers = maxPlayers,
                     difficultyID = tonumber(activityInfo.difficultyID) or 0,
                     isMythicPlus = activityInfo.isMythicPlusActivity or false,
                     difficultyToken = GetSearchResultDifficultyToken(resultInfo, activityInfo),
@@ -1360,7 +1386,7 @@ local function FetchSearchResultData()
                     tostring(ratingValue or 0),
                     tostring(pvpBracket or ""),
                     tostring(applicationStatus or ""),
-                    tostring(tonumber(resultInfo.numMembers) or #players),
+                    tostring(numMembers > 0 and numMembers or #players),
                     tostring(tonumber(resultInfo.requiredItemLevel) or 0),
                     tostring(tonumber(resultInfo.requiredDungeonScore) or 0),
                     tostring(tonumber(resultInfo.numBNetFriends) or 0),
@@ -3197,9 +3223,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
             end
         end
         if isShown then
-            C_Timer.After(0, function()
-                if OAK_LFG:IsShown() then addonTable.UpdateDisplay() end
-            end)
+            ScheduleDisplayRefresh(0)
         end
         return
     elseif event == "LFG_LIST_SEARCH_RESULTS_RECEIVED" then
@@ -3234,7 +3258,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
             addonTable.SetCurrentViewMode("browser")
             if isShown then
                 FetchSearchResultData()
-                addonTable.UpdateDisplay()
+                ScheduleDisplayRefresh(0)
             end
             return
         end
@@ -3250,7 +3274,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         FetchSearchResultData()
     end
 
-    addonTable.UpdateDisplay()
+    ScheduleDisplayRefresh(0)
 end)
 
 OAK_LFG:SetScript("OnShow", function(self)

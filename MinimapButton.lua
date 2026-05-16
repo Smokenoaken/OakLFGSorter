@@ -97,10 +97,13 @@ local function OpenOakBrowser()
     if addonTable.SetCurrentViewMode then
         addonTable.SetCurrentViewMode("browser")
     end
-    if addonTable.RunBrowserSearch then
-        addonTable.RunBrowserSearch()
-    end
     ShowOakFrameSafely()
+    if addonTable.FetchSearchResultData then
+        addonTable.FetchSearchResultData()
+    end
+    if addonTable.UpdateDisplay and addonTable.OAK_LFG and addonTable.OAK_LFG:IsShown() then
+        addonTable.UpdateDisplay()
+    end
 end
 addonTable.OpenOakBrowser = OpenOakBrowser
 

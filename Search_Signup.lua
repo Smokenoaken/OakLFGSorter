@@ -266,13 +266,20 @@ local function GetDefaultQuickSignupRoles()
     return roles
 end
 
+local CopyQuickSignupRoles
+
 local function GetSavedQuickSignupRoles()
-    if type(OakLFGSorterDB.searchQuickSignupRoles) ~= "table" then
-        OakLFGSorterDB.searchQuickSignupRoles = GetDefaultQuickSignupRoles()
+    local charDB = GetSearchSignupCharacterDB()
+    if type(charDB.quickSignupRoles) ~= "table" then
+        if type(OakLFGSorterDB.searchQuickSignupRoles) == "table" then
+            charDB.quickSignupRoles = CopyQuickSignupRoles(OakLFGSorterDB.searchQuickSignupRoles)
+        else
+            charDB.quickSignupRoles = GetDefaultQuickSignupRoles()
+        end
     end
 
     local availableRoles = GetPlayerQuickSignupCapabilities()
-    local roles = OakLFGSorterDB.searchQuickSignupRoles
+    local roles = charDB.quickSignupRoles
     local hasAnyAvailableRole = false
 
     for _, roleKey in ipairs(quickSignupState.roleOrder) do
@@ -293,7 +300,7 @@ local function GetSavedQuickSignupRoles()
     return roles
 end
 
-local function CopyQuickSignupRoles(roleSource)
+function CopyQuickSignupRoles(roleSource)
     local roles = {}
     for _, roleKey in ipairs(quickSignupState.roleOrder) do
         roles[roleKey] = roleSource and roleSource[roleKey] == true or false
