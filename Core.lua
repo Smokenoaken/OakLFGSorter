@@ -1616,6 +1616,13 @@ end
 addonTable.NormalizeSearchScoreTargetLabel = NormalizeSearchScoreTargetLabel
 
 addonTable.GetMythicPlusScoreTargets = function()
+    if addonTable.IsRestrictedCombatInInstance and addonTable.IsRestrictedCombatInInstance() then
+        if type(addonTable.LastGoodMythicPlusScoreTargets) == "table" then
+            return addonTable.LastGoodMythicPlusScoreTargets
+        end
+        return {}
+    end
+
     if not (C_ChallengeMode and C_ChallengeMode.GetMapTable and C_ChallengeMode.GetMapUIInfo and C_MythicPlus and C_MythicPlus.GetSeasonBestAffixScoreInfoForMap) then
         return {}
     end

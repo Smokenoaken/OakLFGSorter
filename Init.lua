@@ -79,6 +79,89 @@ if type(OakLFGSorterDB.themeCustomColor) ~= "table" then OakLFGSorterDB.themeCus
 if type(OakLFGSorterDB.regionFilters) ~= "table" then OakLFGSorterDB.regionFilters = {} end
 OakLFGSorterDB.browserFilters = OakLFGSorterDB.browserFilters or {}
 
+function addonTable.IsInInstance()
+    if not IsInInstance then
+        return false
+    end
+    local inInstance = IsInInstance()
+    return inInstance == true
+end
+
+function addonTable.IsRestrictedCombatInInstance()
+    local inCombat = (InCombatLockdown and InCombatLockdown())
+        or (UnitAffectingCombat and UnitAffectingCombat("player"))
+    return inCombat == true and addonTable.IsInInstance()
+end
+
+function addonTable.CanUpdateProtectedActions()
+    return not (InCombatLockdown and InCombatLockdown())
+end
+
+function addonTable.GetRestrictedCombatTooltipText(actionName)
+    local action = actionName or "This protected action"
+    return action .. " is disabled while you are in combat inside an instance. It will be available again after combat."
+end
+
+function addonTable.AddRestrictedCombatTooltipLine(tooltip, actionName)
+    if tooltip and tooltip.AddLine then
+        tooltip:AddLine(addonTable.GetRestrictedCombatTooltipText(actionName), 1, 0.35, 0.35, true)
+    end
+end
+
+function addonTable.TryClearProtectedSpellAction(button)
+    if not button or not button.SetAttribute or not addonTable.CanUpdateProtectedActions() then
+        return false
+    end
+
+    pcall(button.SetAttribute, button, "type", nil)
+    pcall(button.SetAttribute, button, "type1", nil)
+    pcall(button.SetAttribute, button, "spell", nil)
+    pcall(button.SetAttribute, button, "spell1", nil)
+    return true
+end
+
+function addonTable.TrySetProtectedSpellAction(button, spell)
+    if not button or not button.SetAttribute or not addonTable.CanUpdateProtectedActions() then
+        return false
+    end
+
+    if spell then
+        pcall(button.SetAttribute, button, "type", "spell")
+        pcall(button.SetAttribute, button, "type1", "spell")
+        pcall(button.SetAttribute, button, "spell", spell)
+        pcall(button.SetAttribute, button, "spell1", spell)
+    else
+        addonTable.TryClearProtectedSpellAction(button)
+    end
+    return true
+end
+
+function addonTable.InviteApplicant(applicantID, numMembers)
+    if not (applicantID and C_LFGList and C_LFGList.InviteApplicant) then
+        return false
+    end
+
+    local memberCount = tonumber(numMembers) or 1
+    local invitedCount = 0
+    if C_LFGList.GetNumInvitedApplicantMembers then
+        invitedCount = tonumber(C_LFGList.GetNumInvitedApplicantMembers()) or 0
+    end
+
+    if not IsInRaid(LE_PARTY_CATEGORY_HOME)
+            and GetNumGroupMembers(LE_PARTY_CATEGORY_HOME) + memberCount + invitedCount > MAX_PARTY_MEMBERS + 1 then
+        if StaticPopup_Show and StaticPopupDialogs and StaticPopupDialogs["LFG_LIST_INVITING_CONVERT_TO_RAID"] then
+            StaticPopup_Show("LFG_LIST_INVITING_CONVERT_TO_RAID", nil, nil, applicantID)
+            return true
+        end
+        if C_PartyInfo and C_PartyInfo.ConfirmConvertToRaid then
+            pcall(C_PartyInfo.ConfirmConvertToRaid)
+        end
+    end
+
+    C_LFGList.InviteApplicant(applicantID)
+    return true
+end
+
 local function CopyBooleanMap(source)
     local copy = {}
     if type(source) ~= "table" then

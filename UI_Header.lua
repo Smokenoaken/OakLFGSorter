@@ -50,6 +50,10 @@ OAK_LFG:SetResizeBounds(460, 444, 1100, 800)
 OAK_LFG:EnableMouse(true)
 OAK_LFG:RegisterForDrag("LeftButton")
 OAK_LFG:SetScript("OnDragStart", function(self)
+    if addonTable.IsRestrictedCombatInInstance and addonTable.IsRestrictedCombatInInstance() then
+        return
+    end
+
     OakLFGSorterDB = OakLFGSorterDB or {}
     OakLFGSorterDB.frameUserPlaced = true
     NormalizeFrameAnchorForMovement(self)
@@ -147,21 +151,6 @@ end
 
 _G["SorterClassicFrame"] = OAK_LFG
 tinsert(UISpecialFrames, "SorterClassicFrame")
-
-local combatCloseFrame = CreateFrame("Frame")
-combatCloseFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-combatCloseFrame:SetScript("OnEvent", function(_, event)
-    if event ~= "PLAYER_REGEN_DISABLED" then
-        return
-    end
-
-    if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH:IsShown() then
-        addonTable.OAK_SEARCH:Hide()
-    end
-    if OAK_LFG:IsShown() then
-        OAK_LFG:Hide()
-    end
-end)
 
 local titleHeader = CreateFrame("Frame", nil, OAK_LFG)
 addonTable.TitleHeader = titleHeader

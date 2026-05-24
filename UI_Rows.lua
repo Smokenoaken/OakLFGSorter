@@ -716,6 +716,12 @@ lfrBtn:SetPoint("RIGHT", mythicPanelBtn, "LEFT", -2, 0)
 lfgBtn:ClearAllPoints()
 lfgBtn:SetPoint("RIGHT", lfrBtn, "LEFT", -2, 0)
 mythicPanelBtn:SetScript("OnClick", function()
+    if addonTable.IsRestrictedCombatInInstance and addonTable.IsRestrictedCombatInInstance() then
+        if UIErrorsFrame and addonTable.GetRestrictedCombatTooltipText then
+            UIErrorsFrame:AddMessage(addonTable.GetRestrictedCombatTooltipText("The Mythic+ panel"), 1, 0.35, 0.35)
+        end
+        return
+    end
     if addonTable.ToggleMythicPlusPanel then
         addonTable.ToggleMythicPlusPanel()
     end
@@ -724,7 +730,13 @@ mythicPanelBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:SetText("Mythic+ Overview", 1, 1, 1)
-    GameTooltip:AddLine("Open your condensed Mythic+ score, dungeon, affix, and vault panel.", 1, 1, 1, true)
+    if addonTable.IsRestrictedCombatInInstance and addonTable.IsRestrictedCombatInInstance() then
+        if addonTable.AddRestrictedCombatTooltipLine then
+            addonTable.AddRestrictedCombatTooltipLine(GameTooltip, "The Mythic+ panel")
+        end
+    else
+        GameTooltip:AddLine("Open your condensed Mythic+ score, dungeon, affix, and vault panel.", 1, 1, 1, true)
+    end
     GameTooltip:Show()
 end)
 mythicPanelBtn:SetScript("OnLeave", function(self)
@@ -3592,8 +3604,12 @@ CreateRow = function(index, parentOverride, prevRowOverride)
             if addonTable.ApplyToSearchResult then
                 addonTable.ApplyToSearchResult(self.searchResultID)
             end
-        elseif self.groupID then 
-            C_LFGList.InviteApplicant(self.groupID)
+        elseif self.groupID then
+            if addonTable.InviteApplicant then
+                addonTable.InviteApplicant(self.groupID, self.groupNumMembers)
+            else
+                C_LFGList.InviteApplicant(self.groupID)
+            end
             if self.inviteBtn then
                 if self.searchResult == nil and self.bg then
             self.bg:SetColorTexture(0.14, 0.22, 0.14, 0.82)
@@ -3701,7 +3717,11 @@ CreateRow = function(index, parentOverride, prevRowOverride)
             end
         elseif r.groupID then
             -- Applicant mode
-            C_LFGList.InviteApplicant(r.groupID)
+            if addonTable.InviteApplicant then
+                addonTable.InviteApplicant(r.groupID, r.groupNumMembers)
+            else
+                C_LFGList.InviteApplicant(r.groupID)
+            end
             if r.searchResult == nil and r.bg then
         r.bg:SetColorTexture(0.14, 0.22, 0.14, 0.82)
             end
@@ -4014,6 +4034,7 @@ PopulateBrowserRow = function(row, result, isAltColor)
     row.searchResult = result
     row._isAltColor = isAltColor and true or false
     row.groupID = nil
+    row.groupNumMembers = nil
     row.applicantID = nil
     row.memberIdx = nil
     row.fullComment = result.comment
@@ -4553,6 +4574,7 @@ function addonTable.UpdateDisplay()
                 row.searchResultID = nil
                 row.searchResult = nil
                 row.groupID = group.id
+                row.groupNumMembers = group.numMembers
                 row.applicantID = group.id
                 row.memberIdx = member.memberIdx
                 row.applicationStatus = group.applicationStatus

@@ -3000,6 +3000,56 @@ local function BrowserKnowsSpell(spellID)
     return IsSpellKnown and IsSpellKnown(numericSpellID) or false
 end
 
+local function IsRestrictedCombatInInstance()
+    return addonTable.IsRestrictedCombatInInstance and addonTable.IsRestrictedCombatInInstance()
+end
+
+local function CanUpdateProtectedActions()
+    return addonTable.CanUpdateProtectedActions and addonTable.CanUpdateProtectedActions()
+end
+
+local function SetProtectedSpellAction(button, spell)
+    if IsRestrictedCombatInInstance() then
+        if addonTable.TryClearProtectedSpellAction then
+            addonTable.TryClearProtectedSpellAction(button)
+        end
+        return false
+    end
+    if addonTable.TrySetProtectedSpellAction then
+        return addonTable.TrySetProtectedSpellAction(button, spell)
+    end
+    return false
+end
+
+local function EnsureBrowserTeleportButton(button)
+    if button.teleportButton or not CanUpdateProtectedActions() then
+        return button.teleportButton
+    end
+
+    button.teleportButton = CreateFrame("Button", nil, browserContent, "InsecureActionButtonTemplate")
+    button.teleportButton:EnableMouse(true)
+    button.teleportButton:RegisterForClicks("AnyUp", "AnyDown")
+    button.teleportButton:SetFrameStrata(browserContent:GetFrameStrata())
+    button.teleportButton:SetFrameLevel(browserContent:GetFrameLevel() + 20)
+    return button.teleportButton
+end
+
+local function ClearBrowserActivityProtectedActions()
+    for _, button in ipairs(browserActivityButtons) do
+        if button and button.teleportButton then
+            SetProtectedSpellAction(button.teleportButton, nil)
+        end
+    end
+end
+
+local browserProtectedActionEventFrame = CreateFrame("Frame")
+browserProtectedActionEventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+browserProtectedActionEventFrame:SetScript("OnEvent", function()
+    if IsRestrictedCombatInInstance() then
+        ClearBrowserActivityProtectedActions()
+    end
+end)
+
 -- Hook filter panel hide to restore the search box to Blizzard's panel
 browserFilterPanel:HookScript("OnHide", function() RestoreBrowserNativeSearchBox() end)
 
@@ -3183,7 +3233,13 @@ givesScoreHeaderHitbox:SetSize(72, 16)
 givesScoreHeaderHitbox:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:SetText(L["Gives Score"], 1, 1, 1)
-    GameTooltip:AddLine(L["Shows the lowest timed key level that should increase your score for that dungeon, plus the estimated score gain."], 1, 1, 1, true)
+    if IsRestrictedCombatInInstance() then
+        if addonTable.AddRestrictedCombatTooltipLine then
+            addonTable.AddRestrictedCombatTooltipLine(GameTooltip, "Score-gain details")
+        end
+    else
+        GameTooltip:AddLine(L["Shows the lowest timed key level that should increase your score for that dungeon, plus the estimated score gain."], 1, 1, 1, true)
+    end
     GameTooltip:Show()
 end)
 givesScoreHeaderHitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -3286,6 +3342,10 @@ local function UpdateBrowserActivityButtons(startY)
 
     for _, button in ipairs(browserActivityButtons) do
         button:Hide()
+        if button.teleportButton and CanUpdateProtectedActions() then
+            button.teleportButton:Hide()
+            SetProtectedSpellAction(button.teleportButton, nil)
+        end
         -- button.text is a child of browserContent, NOT of button, so we must
         -- hide it explicitly — hiding the checkbox frame does not cascade to it.
         if button.text then button.text:Hide() end
@@ -3303,11 +3363,7 @@ local function UpdateBrowserActivityButtons(startY)
             button = CreateBrowserToggleBox(browserContent, "")
             button.text = browserContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
             button.text:SetJustifyH("LEFT")
-            button.teleportButton = CreateFrame("Button", nil, browserContent, "SecureActionButtonTemplate")
-            button.teleportButton:EnableMouse(true)
-            button.teleportButton:RegisterForClicks("AnyUp", "AnyDown")
-            button.teleportButton:SetFrameStrata(browserContent:GetFrameStrata())
-            button.teleportButton:SetFrameLevel(browserContent:GetFrameLevel() + 20)
+            EnsureBrowserTeleportButton(button)
             button.scoreText = browserContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
             button.scoreText:SetWidth(60)
             button.scoreText:SetJustifyH("RIGHT")
@@ -3348,51 +3404,46 @@ local function UpdateBrowserActivityButtons(startY)
         button:Show()
 
         if showScoreColumn and entry.mapID then
+            local teleportButton = EnsureBrowserTeleportButton(button)
             local mapInfo = entry.mapID and addonTable.GetChallengeMapInfo and addonTable.GetChallengeMapInfo(entry.mapID) or nil
             local spellID = addonTable.GetDungeonTeleportSpellID and addonTable.GetDungeonTeleportSpellID(mapInfo and mapInfo.instanceMapID or entry.mapID) or nil
             local spellName = spellID and ((C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)) or GetSpellInfo(spellID)) or nil
-            local knowsTeleport = BrowserKnowsSpell(spellID)
-            button.teleportButton:SetFrameLevel(browserContent:GetFrameLevel() + 20)
-            button.teleportButton:ClearAllPoints()
-            button.teleportButton:SetPoint("TOPLEFT", button, "TOPLEFT", 22, 0)
-            button.teleportButton:SetSize(132, 16)
-            button.teleportButton:Show()
-            if not (InCombatLockdown and InCombatLockdown()) then
+            if teleportButton and CanUpdateProtectedActions() then
+                teleportButton:SetFrameLevel(browserContent:GetFrameLevel() + 20)
+                teleportButton:ClearAllPoints()
+                teleportButton:SetPoint("TOPLEFT", button, "TOPLEFT", 22, 0)
+                teleportButton:SetSize(132, 16)
+                teleportButton:Show()
                 if spellID then
-                    button.teleportButton:SetAttribute("type", "spell")
-                    button.teleportButton:SetAttribute("type1", "spell")
-                    button.teleportButton:SetAttribute("spell", spellName or spellID)
-                    button.teleportButton:SetAttribute("spell1", spellName or spellID)
+                    SetProtectedSpellAction(teleportButton, spellName or spellID)
                 else
-                    button.teleportButton:SetAttribute("type", nil)
-                    button.teleportButton:SetAttribute("type1", nil)
-                    button.teleportButton:SetAttribute("spell", nil)
-                    button.teleportButton:SetAttribute("spell1", nil)
+                    SetProtectedSpellAction(teleportButton, nil)
                 end
+                teleportButton:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                    GameTooltip:SetText(entry.label or "", 1, 1, 1)
+                    if IsRestrictedCombatInInstance() then
+                        if addonTable.AddRestrictedCombatTooltipLine then
+                            addonTable.AddRestrictedCombatTooltipLine(GameTooltip, "Dungeon teleports")
+                        end
+                    elseif spellID and BrowserKnowsSpell(spellID) then
+                        GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
+                    elseif spellID then
+                        GameTooltip:AddLine("Teleport spell detected; click to try", 1, 0.82, 0.30)
+                    end
+                    GameTooltip:Show()
+                end)
+                teleportButton:SetScript("OnLeave", function()
+                    GameTooltip:Hide()
+                end)
             end
-            button.teleportButton:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-                GameTooltip:SetText(entry.label or "", 1, 1, 1)
-                if spellID and BrowserKnowsSpell(spellID) then
-                    GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
-                elseif spellID then
-                    GameTooltip:AddLine("Teleport spell detected; click to try", 1, 0.82, 0.30)
-                end
-                GameTooltip:Show()
-            end)
-            button.teleportButton:SetScript("OnLeave", function()
-                GameTooltip:Hide()
-            end)
         else
-            button.teleportButton:Hide()
-            if not (InCombatLockdown and InCombatLockdown()) then
-                button.teleportButton:SetAttribute("type", nil)
-                button.teleportButton:SetAttribute("type1", nil)
-                button.teleportButton:SetAttribute("spell", nil)
-                button.teleportButton:SetAttribute("spell1", nil)
+            if button.teleportButton and CanUpdateProtectedActions() then
+                button.teleportButton:Hide()
+                SetProtectedSpellAction(button.teleportButton, nil)
+                button.teleportButton:SetScript("OnEnter", nil)
+                button.teleportButton:SetScript("OnLeave", nil)
             end
-            button.teleportButton:SetScript("OnEnter", nil)
-            button.teleportButton:SetScript("OnLeave", nil)
         end
 
         -- Score column
@@ -3419,6 +3470,16 @@ local function UpdateBrowserActivityButtons(startY)
             button.scoreHitbox:SetPoint("TOP", button, "TOP", 0, 0)
             button.scoreHitbox.entryData = entry
             button.scoreHitbox:SetScript("OnEnter", function(self)
+                if IsRestrictedCombatInInstance() then
+                    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                    GameTooltip:SetText("Gives Score", 1, 1, 1)
+                    if addonTable.AddRestrictedCombatTooltipLine then
+                        addonTable.AddRestrictedCombatTooltipLine(GameTooltip, "Score-gain details")
+                    end
+                    GameTooltip:Show()
+                    return
+                end
+
                 local data = self.entryData
                 if not data or not data.scoreTarget then return end
                 GameTooltip:SetOwner(self, "ANCHOR_LEFT")

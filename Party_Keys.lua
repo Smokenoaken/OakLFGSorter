@@ -43,6 +43,23 @@ local function IsTeleportKnown(spellID)
     return IsSpellKnown and IsSpellKnown(spellID) or false
 end
 
+local function IsRestrictedCombatInInstance()
+    return addonTable.IsRestrictedCombatInInstance and addonTable.IsRestrictedCombatInInstance()
+end
+
+local function SetProtectedSpellAction(button, spell)
+    if IsRestrictedCombatInInstance() then
+        if addonTable.TryClearProtectedSpellAction then
+            addonTable.TryClearProtectedSpellAction(button)
+        end
+        return false
+    end
+    if addonTable.TrySetProtectedSpellAction then
+        return addonTable.TrySetProtectedSpellAction(button, spell)
+    end
+    return false
+end
+
 local function GetDungeonLabel(mapID)
     local name = mapID and C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapID)
     if not name then
@@ -71,6 +88,35 @@ local function GetKeyColor(level)
     if level >= 7 then return 0, 0.44, 0.87 end
     if level >= 5 then return 0.12, 0.75, 0.26 end
     return 1, 1, 1
+end
+
+local function SafeCall(func, ...)
+    if type(func) ~= "function" then
+        return nil
+    end
+    local ok, a, b, c = pcall(func, ...)
+    if not ok then
+        return nil
+    end
+    return a, b, c
+end
+
+local function GetPlayerOwnedKeystoneEntry()
+    local level = tonumber(SafeCall(C_MythicPlus and C_MythicPlus.GetOwnedKeystoneLevel)) or 0
+    local challengeMapID = tonumber(SafeCall(C_MythicPlus and C_MythicPlus.GetOwnedKeystoneChallengeMapID))
+    if level <= 0 or not challengeMapID then
+        return nil
+    end
+
+    return {
+        unit = "player",
+        info = {
+            level = level,
+            challengeMapID = challengeMapID,
+            mythicPlusMapID = challengeMapID,
+        },
+        fullName = UnitName("player") or "player",
+    }
 end
 
 local partyKeysPanel = CreateFrame("Frame", nil, OAK_LFG, "BackdropTemplate")
@@ -114,8 +160,6 @@ title:SetPoint("CENTER", titleBg, "CENTER", 0, 0)
 title:SetText("Party Keys")
 
 local rows = {}
-local pendingUpdateAfterCombat = false
-
 local function CreateRow(index)
     local row = CreateFrame("Frame", nil, partyKeysPanel)
     row:SetSize(PANEL_WIDTH - PANEL_PADDING * 2, ROW_HEIGHT)
@@ -131,7 +175,7 @@ local function CreateRow(index)
     row.icon:SetPoint("LEFT", row, "LEFT", 4, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    row.dungeonButton = CreateFrame("Button", nil, row, "SecureActionButtonTemplate")
+    row.dungeonButton = CreateFrame("Button", nil, row, "InsecureActionButtonTemplate")
     row.dungeonButton:RegisterForClicks("AnyUp", "AnyDown")
     row.dungeonButton:SetPoint("LEFT", row, "LEFT", 18, 0)
     row.dungeonButton:SetSize(72, 16)
@@ -159,7 +203,11 @@ local function CreateRow(index)
         if self.tooltipDungeon then
             GameTooltip:SetText(self.tooltipDungeon, 1, 1, 1)
         end
-        if self.spellID and IsTeleportKnown(self.spellID) then
+        if IsRestrictedCombatInInstance() then
+            if addonTable.AddRestrictedCombatTooltipLine then
+                addonTable.AddRestrictedCombatTooltipLine(GameTooltip, "Party key teleports")
+            end
+        elseif self.spellID and IsTeleportKnown(self.spellID) then
             GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
         elseif self.spellID then
             GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
@@ -180,9 +228,6 @@ for i = 1, PARTY_KEY_ROWS do
 end
 
 local function ShouldShowPartyKeys()
-    if not GetOpenRaidLib() then
-        return false
-    end
     if not (OakLFGSorterDB and OakLFGSorterDB.showPartyKeys == true) then
         return false
     end
@@ -195,6 +240,11 @@ local function ShouldShowPartyKeys()
         local mode = context and context.mode or nil
         return mode == "mythic_plus" or mode == "dungeon"
     end
+
+    if GetPlayerOwnedKeystoneEntry() then
+        return true
+    end
+
     local searchContext = addonTable.CurrentSearchContext or {}
     local searchMode = searchContext.mode
     local categoryKey = searchContext.selectedCategoryKey
@@ -226,29 +276,11 @@ local function HideRows()
         row:Hide()
         row.dungeonButton.spellID = nil
         row.dungeonButton.tooltipDungeon = nil
-        row.dungeonButton:SetAttribute("type", nil)
-        row.dungeonButton:SetAttribute("type1", nil)
-        row.dungeonButton:SetAttribute("spell", nil)
-        row.dungeonButton:SetAttribute("spell1", nil)
+        SetProtectedSpellAction(row.dungeonButton, nil)
     end
-end
-
-local function IsCombatLocked()
-    return InCombatLockdown and InCombatLockdown()
-end
-
-local function DeferUpdateForCombat()
-    pendingUpdateAfterCombat = true
 end
 
 local function UpdatePartyKeysPanel()
-    if IsCombatLocked() then
-        DeferUpdateForCombat()
-        return
-    end
-
-    pendingUpdateAfterCombat = false
-
     if not ShouldShowPartyKeys() then
         HideRows()
         partyKeysPanel:Hide()
@@ -256,21 +288,20 @@ local function UpdatePartyKeysPanel()
     end
 
     local lib = GetOpenRaidLib()
-    if not lib then
-        HideRows()
-        partyKeysPanel:Hide()
-        return
-    end
-
-    local allKeystones = lib.GetAllKeystonesInfo and lib.GetAllKeystonesInfo() or {}
+    local allKeystones = lib and lib.GetAllKeystonesInfo and lib.GetAllKeystonesInfo() or {}
     local display = {}
 
-    local playerKey = lib.GetKeystoneInfo and lib.GetKeystoneInfo("player")
+    local playerKey = lib and lib.GetKeystoneInfo and lib.GetKeystoneInfo("player")
     if playerKey and playerKey.level and playerKey.level > 0 then
         table.insert(display, { unit = "player", info = playerKey, fullName = UnitName("player") or "player" })
+    else
+        local ownedKeyEntry = GetPlayerOwnedKeystoneEntry()
+        if ownedKeyEntry then
+            table.insert(display, ownedKeyEntry)
+        end
     end
 
-    if not IsInRaid() then
+    if lib and not IsInRaid() then
         for i = 1, 4 do
             local unit = "party" .. i
             if UnitExists(unit) then
@@ -327,16 +358,10 @@ local function UpdatePartyKeysPanel()
         row.dungeonButton.spellID = spellID
         if spellID and IsTeleportKnown(spellID) then
             local spellName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or GetSpellInfo(spellID)
-            row.dungeonButton:SetAttribute("type", "spell")
-            row.dungeonButton:SetAttribute("type1", "spell")
-            row.dungeonButton:SetAttribute("spell", spellName or spellID)
-            row.dungeonButton:SetAttribute("spell1", spellName or spellID)
+            SetProtectedSpellAction(row.dungeonButton, spellName or spellID)
             row.dungeonText:SetTextColor(0.55, 1, 0.55, 1)
         else
-            row.dungeonButton:SetAttribute("type", nil)
-            row.dungeonButton:SetAttribute("type1", nil)
-            row.dungeonButton:SetAttribute("spell", nil)
-            row.dungeonButton:SetAttribute("spell1", nil)
+            SetProtectedSpellAction(row.dungeonButton, nil)
         end
 
         row:Show()
@@ -382,16 +407,15 @@ eventFrame:RegisterEvent("LFG_LIST_ACTIVE_ENTRY_UPDATE")
 eventFrame:RegisterEvent("CHALLENGE_MODE_MAPS_UPDATE")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:SetScript("OnEvent", function(_, event)
-    if event == "PLAYER_REGEN_ENABLED" then
-        if pendingUpdateAfterCombat then
-            UpdatePartyKeysPanel()
-        end
+    if event == "PLAYER_REGEN_DISABLED" then
+        UpdatePartyKeysPanel()
         return
     end
 
-    if IsCombatLocked() then
-        DeferUpdateForCombat()
+    if event == "PLAYER_REGEN_ENABLED" then
+        UpdatePartyKeysPanel()
         return
     end
 

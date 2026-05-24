@@ -19,6 +19,29 @@ local function IsTeleportKnown(spellID)
     return IsSpellKnown and IsSpellKnown(spellID) or false
 end
 
+local function IsRestrictedCombatInInstance()
+    return addonTable.IsRestrictedCombatInInstance and addonTable.IsRestrictedCombatInInstance()
+end
+
+local function AddRestrictedTooltip(actionName)
+    if addonTable.AddRestrictedCombatTooltipLine then
+        addonTable.AddRestrictedCombatTooltipLine(GameTooltip, actionName)
+    end
+end
+
+local function SetProtectedSpellAction(button, spell)
+    if IsRestrictedCombatInInstance() then
+        if addonTable.TryClearProtectedSpellAction then
+            addonTable.TryClearProtectedSpellAction(button)
+        end
+        return false
+    end
+    if addonTable.TrySetProtectedSpellAction then
+        return addonTable.TrySetProtectedSpellAction(button, spell)
+    end
+    return false
+end
+
 local VAULT_TYPE_RAID = Enum and Enum.WeeklyRewardChestThresholdType and Enum.WeeklyRewardChestThresholdType.Raid
 local VAULT_TYPE_ACTIVITIES = Enum and Enum.WeeklyRewardChestThresholdType and Enum.WeeklyRewardChestThresholdType.Activities
 local VAULT_TYPE_WORLD = Enum and Enum.WeeklyRewardChestThresholdType and Enum.WeeklyRewardChestThresholdType.World
@@ -351,7 +374,7 @@ keyValue:SetPoint("LEFT", keyLabel, "RIGHT", 8, 0)
 keyValue:SetWidth(132)
 keyValue:SetJustifyH("LEFT")
 
-local keyTeleportButton = CreateFrame("Button", nil, panel, "SecureActionButtonTemplate")
+local keyTeleportButton = CreateFrame("Button", nil, panel, "InsecureActionButtonTemplate")
 keyTeleportButton:SetPoint("TOPLEFT", panel, "TOPLEFT", 68, -57)
 keyTeleportButton:SetSize(132, 18)
 keyTeleportButton:RegisterForClicks("AnyUp", "AnyDown")
@@ -364,7 +387,9 @@ keyTeleportButton:SetScript("OnEnter", function(self)
     elseif self.keyText and self.keyText ~= "" then
         GameTooltip:AddLine(self.keyText, 1, 1, 1, true)
     end
-    if self.spellID and IsTeleportKnown(self.spellID) then
+    if IsRestrictedCombatInInstance() then
+        AddRestrictedTooltip("Your key teleport")
+    elseif self.spellID and IsTeleportKnown(self.spellID) then
         GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
     elseif self.spellID then
         GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
@@ -440,7 +465,7 @@ colScore:SetText("Score")
 
 local dungeonRows = {}
 for i = 1, 8 do
-    local row = CreateFrame("Button", nil, panel, "SecureActionButtonTemplate")
+    local row = CreateFrame("Button", nil, panel, "InsecureActionButtonTemplate")
     row:SetSize(226, 15)
     row:RegisterForClicks("AnyUp", "AnyDown")
     if i == 1 then
@@ -467,7 +492,9 @@ for i = 1, 8 do
     row:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(self.mapName or "Dungeon", 1, 1, 1)
-        if self.spellID and IsTeleportKnown(self.spellID) then
+        if IsRestrictedCombatInInstance() then
+            AddRestrictedTooltip("Dungeon teleports")
+        elseif self.spellID and IsTeleportKnown(self.spellID) then
             GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
         elseif self.spellID then
             GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
@@ -505,13 +532,20 @@ for i = 1, 3 do
     button.value:SetWidth(164)
     button.value:SetJustifyH("RIGHT")
     button:SetScript("OnClick", function()
+        if IsRestrictedCombatInInstance() then
+            return
+        end
         OpenWeeklyRewardsUI()
     end)
     button:SetScript("OnEnter", function(self)
         self:SetBackdropBorderColor(0.58, 0.48, 0.20, 1)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Open Great Vault", 1, 1, 1)
-        GameTooltip:AddLine("Click to open Blizzard's Great Vault panel.", 1, 1, 1, true)
+        if IsRestrictedCombatInInstance() then
+            AddRestrictedTooltip("The Great Vault panel")
+        else
+            GameTooltip:AddLine("Click to open Blizzard's Great Vault panel.", 1, 1, 1, true)
+        end
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function(self)
@@ -564,12 +598,10 @@ local function RefreshMythicPlusPanel()
     keyTeleportButton.spellID = ownedSpellID
     if ownedSpellID and IsTeleportKnown(ownedSpellID) then
         local spellName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(ownedSpellID) or GetSpellInfo(ownedSpellID)
-        keyTeleportButton:SetAttribute("type", "spell")
-        keyTeleportButton:SetAttribute("spell", spellName or ownedSpellID)
+        SetProtectedSpellAction(keyTeleportButton, spellName or ownedSpellID)
         keyValue:SetTextColor(0.55, 1, 0.55)
     else
-        keyTeleportButton:SetAttribute("type", nil)
-        keyTeleportButton:SetAttribute("spell", nil)
+        SetProtectedSpellAction(keyTeleportButton, nil)
         keyValue:SetTextColor(1, 1, 1)
     end
 
@@ -600,12 +632,10 @@ local function RefreshMythicPlusPanel()
             row.spellID = GetTeleportSpellID(mapInfo and mapInfo.instanceMapID or data.mapID)
             if row.spellID and IsTeleportKnown(row.spellID) then
                 local spellName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(row.spellID) or GetSpellInfo(row.spellID)
-                row:SetAttribute("type", "spell")
-                row:SetAttribute("spell", spellName or row.spellID)
+                SetProtectedSpellAction(row, spellName or row.spellID)
                 row.name:SetTextColor(0.55, 1, 0.55)
             else
-                row:SetAttribute("type", nil)
-                row:SetAttribute("spell", nil)
+                SetProtectedSpellAction(row, nil)
                 row.name:SetTextColor(0.95, 0.95, 0.95)
             end
             row.level:SetText(data.level > 0 and ("+" .. data.level) or "--")
@@ -622,8 +652,7 @@ local function RefreshMythicPlusPanel()
         else
             row.mapName = nil
             row.spellID = nil
-            row:SetAttribute("type", nil)
-            row:SetAttribute("spell", nil)
+            SetProtectedSpellAction(row, nil)
             row:Hide()
         end
     end
@@ -710,6 +739,9 @@ addonTable.RefreshMythicPlusPanel = function(immediate)
 end
 
 function addonTable.ShowMythicPlusPanel()
+    if IsRestrictedCombatInInstance() then
+        return
+    end
     if OakLFGSorterDB then
         OakLFGSorterDB.mythicPlusPanelOpen = true
     end
@@ -724,6 +756,12 @@ function addonTable.ShowMythicPlusPanel()
 end
 
 function addonTable.ToggleMythicPlusPanel()
+    if IsRestrictedCombatInInstance() then
+        if UIErrorsFrame and addonTable.GetRestrictedCombatTooltipText then
+            UIErrorsFrame:AddMessage(addonTable.GetRestrictedCombatTooltipText("The Mythic+ panel"), 1, 0.35, 0.35)
+        end
+        return
+    end
     if panel:IsShown() then
         if OakLFGSorterDB then
             OakLFGSorterDB.mythicPlusPanelOpen = false
@@ -786,6 +824,7 @@ end)
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("CHALLENGE_MODE_MAPS_UPDATE")
 eventFrame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
@@ -793,7 +832,28 @@ eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 eventFrame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
 eventFrame:RegisterEvent("WEEKLY_REWARDS_ITEM_CHANGED")
 eventFrame:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_REGEN_DISABLED" then
+        if IsRestrictedCombatInInstance() then
+            SetProtectedSpellAction(keyTeleportButton, nil)
+            for _, row in ipairs(dungeonRows) do
+                SetProtectedSpellAction(row, nil)
+            end
+            if panel:IsShown() then
+                pcall(panel.Hide, panel)
+                if addonTable.UpdateAuxPanelAnchors then
+                    addonTable.UpdateAuxPanelAnchors()
+                end
+            end
+        end
+        return
+    end
+
     if event == "PLAYER_REGEN_ENABLED" then
+        if OakLFGSorterDB and OakLFGSorterDB.mythicPlusPanelOpen
+                and OAK_LFG and OAK_LFG:IsShown()
+                and not panel:IsShown() then
+            addonTable.ShowMythicPlusPanel()
+        end
         if mythicPlusRefreshAfterCombat then
             ScheduleMythicPlusRefresh(0.1)
         end
