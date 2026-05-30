@@ -350,8 +350,21 @@ local searchRefreshPending = false
 local searchRefreshQueued = false
 local searchLastRefreshAt = 0
 local SEARCH_REFRESH_MIN_DELAY = 0.30
-local SEARCH_REFRESH_MIN_INTERVAL = 0.90
+local SEARCH_REFRESH_MIN_INTERVAL = 1.25
 local displayRefreshPending = false
+local lastBrowserFilterPanelToken = nil
+
+local function BuildBrowserFilterPanelRefreshToken()
+    local context = addonTable.CurrentSearchContext or {}
+    return table.concat({
+        tostring(context.selectedCategoryKey or ""),
+        tostring(context.selectedCategoryID or ""),
+        tostring(context.categoryID or ""),
+        tostring(context.groupID or ""),
+        tostring(context.mode or ""),
+        tostring(math.floor((OAK_LFG and OAK_LFG.GetWidth and OAK_LFG:GetWidth()) or 0)),
+    }, "|")
+end
 
 local function ScheduleDisplayRefresh(delay)
     if displayRefreshPending then
@@ -402,7 +415,11 @@ local function RunScheduledSearchRefresh()
         local dropdownOpen = addonTable.IsBrowserDropdownOpen and addonTable.IsBrowserDropdownOpen()
         local filterPanelShown = addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown()
         if addonTable.UpdateBrowserFilterPanel and filterPanelShown and not dropdownOpen then
-            addonTable.UpdateBrowserFilterPanel()
+            local panelToken = BuildBrowserFilterPanelRefreshToken()
+            if panelToken ~= lastBrowserFilterPanelToken then
+                lastBrowserFilterPanelToken = panelToken
+                addonTable.UpdateBrowserFilterPanel()
+            end
         end
     end
 
@@ -776,6 +793,24 @@ end
 
 addonTable.GetSearchResultPlayers = GetSearchResultPlayers
 
+local function SearchResultPlayersReusable(previous, numMembers, roleCounts)
+    if not previous or type(previous.players) ~= "table" then
+        return false
+    end
+    if (tonumber(previous.numMembers) or 0) ~= (tonumber(numMembers) or 0) then
+        return false
+    end
+    if (tonumber(numMembers) or 0) > 0 and #previous.players == 0 then
+        return false
+    end
+
+    local previousRoles = previous.roleCounts or {}
+    local currentRoles = roleCounts or {}
+    return (tonumber(previousRoles.TANK) or 0) == (tonumber(currentRoles.TANK) or 0)
+        and (tonumber(previousRoles.HEALER) or 0) == (tonumber(currentRoles.HEALER) or 0)
+        and (tonumber(previousRoles.DAMAGER) or 0) == (tonumber(currentRoles.DAMAGER) or 0)
+end
+
 local function NormalizeApplicantRole(tank, healer, specID)
     if tank then
         return "TANK"
@@ -1128,6 +1163,7 @@ function addonTable.UpdateSearchContext()
 end
 
 local function FetchSearchResultData()
+    addonTable._availableBrowserActivitiesCache = nil
     local liveSelection = GetCurrentSearchSelection()
     addonTable.UpdateSearchContext()
     local previousResults = {}
@@ -1228,7 +1264,15 @@ local function FetchSearchResultData()
                     or listingMode == "pvp"
                     or maxPlayers <= 5
                     or numMembers <= 5
-                local players = shouldFetchPlayers and GetSearchResultPlayers(searchResultID, numMembers) or {}
+                local previousResult = previousResultsByID[searchResultID]
+                local players = {}
+                if shouldFetchPlayers then
+                    if SearchResultPlayersReusable(previousResult, numMembers, roleCounts) then
+                        players = previousResult.players
+                    else
+                        players = GetSearchResultPlayers(searchResultID, numMembers)
+                    end
+                end
                 local _, hasLust, hasBrez, highestItemLevel = SummarizeSearchResultPlayers(players)
                 local playstyleValue, playstyleLabel, playstyleShortLabel = GetSearchResultPlaystyle(resultInfo, activityInfo)
                 local applicationStatus = GetApplicationStatusForResult(searchResultID)
@@ -1711,6 +1755,7 @@ addonTable.GetMythicPlusScoreTargets = function()
     end
 
     if next(targets) ~= nil then
+        addonTable._availableBrowserActivitiesCache = nil
         addonTable.LastGoodMythicPlusScoreTargets = targets
         addonTable.PendingScoreTargetRefresh = false
         addonTable.ScoreTargetRefreshAttempts = 0
@@ -1724,6 +1769,7 @@ addonTable.GetMythicPlusScoreTargets = function()
             addonTable.ScoreTargetRefreshAttempts = attempts + 1
             C_Timer.After(0.5 * addonTable.ScoreTargetRefreshAttempts, function()
                 addonTable.PendingScoreTargetRefresh = false
+                addonTable._availableBrowserActivitiesCache = nil
                 if addonTable.UpdateBrowserFilterPanel then
                     addonTable.UpdateBrowserFilterPanel()
                 end
@@ -1739,10 +1785,24 @@ addonTable.GetMythicPlusScoreTargets = function()
 end
 
 function addonTable.GetAvailableBrowserActivities()
+    local context = addonTable.CurrentSearchContext or {}
+    local mode = context.mode or "generic"
+    local cacheKey = table.concat({
+        tostring(mode or ""),
+        tostring(context.selectedCategoryKey or ""),
+        tostring(context.selectedCategoryID or ""),
+        tostring(context.categoryID or ""),
+        tostring(context.groupID or ""),
+        tostring(addonTable._lastSearchResultsSignature or ""),
+        tostring(addonTable._scoreTargetsVersion or 0),
+    }, "|")
+    local cached = addonTable._availableBrowserActivitiesCache
+    if cached and cached.key == cacheKey and type(cached.entries) == "table" then
+        return cached.entries
+    end
+
     local activityEntries = {}
     local seen = {}
-
-    local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode or "generic"
     local scoreTargets = ((mode == "mythic_plus" or mode == "dungeon") and addonTable.GetMythicPlusScoreTargets and addonTable.GetMythicPlusScoreTargets()) or {}
 
     -- ── M+ and dungeon mode: use C_ChallengeMode's map list as canonical source ──
@@ -1826,6 +1886,7 @@ function addonTable.GetAvailableBrowserActivities()
             return (a.label or "") < (b.label or "")
         end)
 
+        addonTable._availableBrowserActivitiesCache = { key = cacheKey, entries = activityEntries }
         return activityEntries
     end
 
@@ -1863,6 +1924,7 @@ function addonTable.GetAvailableBrowserActivities()
             end
         end
 
+        addonTable._availableBrowserActivitiesCache = { key = cacheKey, entries = activityEntries }
         return activityEntries
     end
 
@@ -2018,6 +2080,7 @@ function addonTable.GetAvailableBrowserActivities()
         addonTable.BrowserActivityCache[selectedCategoryKey] = cacheEntries
     end
 
+    addonTable._availableBrowserActivitiesCache = { key = cacheKey, entries = activityEntries }
     return activityEntries
 end
 
@@ -2027,52 +2090,12 @@ local function BuildSelectedActivityIDFilter()
         return nil
     end
 
-    local function GetNativeActivitySelections()
-        local anyIDs = {}
-        local concreteActivityIDs = {}
-        local hasNativeSelection = false
-
-        if not (C_LFGList and C_LFGList.GetAdvancedFilter) then
-            return anyIDs, concreteActivityIDs, false
-        end
-
-        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
-        if not ok or type(adv) ~= "table" then
-            return anyIDs, concreteActivityIDs, false
-        end
-
-        if type(adv.activities) == "table" then
-            for _, id in ipairs(adv.activities) do
-                local numericID = tonumber(id)
-                if numericID and numericID > 0 then
-                    anyIDs[numericID] = true
-                    hasNativeSelection = true
-                end
-            end
-        end
-
-        if type(adv.activityIDs) == "table" then
-            for _, id in ipairs(adv.activityIDs) do
-                local numericID = tonumber(id)
-                if numericID and numericID > 0 then
-                    anyIDs[numericID] = true
-                    concreteActivityIDs[numericID] = true
-                    hasNativeSelection = true
-                end
-            end
-        end
-
-        return anyIDs, concreteActivityIDs, hasNativeSelection
-    end
-
     local selectedActivityIDs = {}
     local selectedActivityIDSet = {}
     local selectedGroupIDs = {}
     local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
-    local hasOakActivitySelection = false
     for _, entry in ipairs(activities) do
         if filters.selectedActivities[entry.filterKey] then
-            hasOakActivitySelection = true
             local groupID = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(entry.activityInfo) or nil
             if groupID and groupID > 0 then
                 selectedGroupIDs[groupID] = true
@@ -2082,14 +2105,6 @@ local function BuildSelectedActivityIDFilter()
             if activityID and activityID > 0 then
                 selectedActivityIDSet[activityID] = true
             end
-        end
-    end
-
-    local nativeAnyIDs, nativeConcreteActivityIDs, hasNativeActivitySelection = {}, {}, false
-    if not hasOakActivitySelection then
-        nativeAnyIDs, nativeConcreteActivityIDs, hasNativeActivitySelection = GetNativeActivitySelections()
-        for activityID in pairs(nativeConcreteActivityIDs) do
-            selectedActivityIDSet[activityID] = true
         end
     end
 
@@ -2105,7 +2120,6 @@ local function BuildSelectedActivityIDFilter()
             local groupID = addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(activityInfo) or nil
             if (groupID and selectedGroupIDs[groupID])
                 or selectedActivityIDSet[activityID]
-                or (hasNativeActivitySelection and ((groupID and nativeAnyIDs[groupID]) or nativeAnyIDs[activityID]))
             then
                 selectedActivityIDSet[activityID] = true
             end
@@ -2125,39 +2139,10 @@ local function BuildSelectedActivityIDFilter()
     return selectedActivityIDs
 end
 
-local function HasNativeActivityFilter()
-    if not (C_LFGList and C_LFGList.GetAdvancedFilter) then
-        return false
-    end
-
-    local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
-    if not ok or type(adv) ~= "table" then
-        return false
-    end
-
-    if type(adv.activities) == "table" then
-        for _, id in ipairs(adv.activities) do
-            if tonumber(id) and tonumber(id) > 0 then
-                return true
-            end
-        end
-    end
-
-    if type(adv.activityIDs) == "table" then
-        for _, id in ipairs(adv.activityIDs) do
-            if tonumber(id) and tonumber(id) > 0 then
-                return true
-            end
-        end
-    end
-
-    return false
-end
-
 local function HasSelectedActivityFilter()
     local filters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or nil
     if type(filters) ~= "table" or type(filters.selectedActivities) ~= "table" then
-        return HasNativeActivityFilter()
+        return false
     end
 
     for _, selected in pairs(filters.selectedActivities) do
@@ -2166,7 +2151,7 @@ local function HasSelectedActivityFilter()
         end
     end
 
-    return HasNativeActivityFilter()
+    return false
 end
 
 local function EnsureBlizzardSearchPanelForCategory(categoryID, selection)

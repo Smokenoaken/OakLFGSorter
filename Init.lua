@@ -197,6 +197,7 @@ end
 local charDB = OakLFGSorterCharDB
 if type(charDB.browserFilters) ~= "table" then
     charDB.browserFilters = CopyTable(OakLFGSorterDB.browserFilters)
+    charDB.browserFilters.selectedActivities = {}
 end
 if charDB.browserCategoryKey == nil then
     charDB.browserCategoryKey = OakLFGSorterDB.browserCategoryKey or "DUNGEONS"

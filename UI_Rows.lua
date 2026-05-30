@@ -1737,6 +1737,29 @@ local function GetBrowserSetupSummary(result)
     return setup
 end
 
+addonTable.GetBrowserSpecSlotPlayers = function(result)
+    if result._oakSpecSlotPlayers then
+        return result._oakSpecSlotPlayers
+    end
+
+    local slots = {}
+    local dpsIndex = 3
+    for _, player in ipairs(result.players or {}) do
+        local role = player and player.role
+        if role == "TANK" and not slots[1] then
+            slots[1] = player
+        elseif role == "HEALER" and not slots[2] then
+            slots[2] = player
+        elseif dpsIndex <= 5 then
+            slots[dpsIndex] = player
+            dpsIndex = dpsIndex + 1
+        end
+    end
+
+    result._oakSpecSlotPlayers = slots
+    return slots
+end
+
 local function GetBrowserRowColor(result, isAltColor)
     local opacity = addonTable.GetWindowOpacity and addonTable.GetWindowOpacity() or 1
     local rowAlpha = 0.70 + (math.max(0.35, math.min(1.0, opacity)) * 0.12)
@@ -1945,7 +1968,7 @@ local CreateRow
 local PopulateBrowserRow
 local rows = {}
 local browserRenderGeneration = 0
-local BROWSER_RENDER_BATCH_SIZE = 18
+local BROWSER_RENDER_BATCH_SIZE = 8
 local currentBrowserLayoutToken
 
 local function QueueBrowserRowRender(normalResults, startIndex, generation)
@@ -4146,31 +4169,14 @@ PopulateBrowserRow = function(row, result, isAltColor)
         else
             row.ilvlText:Hide()
             local showSpecIcons = OakLFGSorterDB and OakLFGSorterDB.showSpecIcons
-            local sortedPlayers = {}
-            local usedPlayers = {}
-            if showSpecIcons then
-                local roleOrder = { TANK = 1, HEALER = 2, DAMAGER = 3 }
-                for _, player in ipairs(result.players or {}) do
-                    table.insert(sortedPlayers, player)
-                end
-                table.sort(sortedPlayers, function(a, b)
-                    return (roleOrder[a.role] or 99) < (roleOrder[b.role] or 99)
-                end)
-            end
+            local specSlotPlayers = showSpecIcons and addonTable.GetBrowserSpecSlotPlayers(result) or nil
             for idx, slotInfo in ipairs(setupSummary) do
                 local slot = row.compSlots[idx]
                 slot:Show()
                 if showSpecIcons and slotInfo.filled then
-                    local player = nil
-                    for playerIndex, candidate in ipairs(sortedPlayers) do
-                        if not usedPlayers[playerIndex] and candidate.role == slotInfo.role then
-                            player = candidate
-                            usedPlayers[playerIndex] = true
-                            break
-                        end
-                    end
-                    local specID = ResolveSpecID(player.specID, player.specName, player.class or slotInfo.class)
-                    SetBrowserCompSlotSpec(slot, specID, player.class or slotInfo.class, true)
+                    local player = specSlotPlayers and specSlotPlayers[idx]
+                    local specID = ResolveSpecID(player and player.specID, player and player.specName, (player and player.class) or slotInfo.class)
+                    SetBrowserCompSlotSpec(slot, specID, (player and player.class) or slotInfo.class, true)
                 else
                     SetBrowserCompSlot(slot, slotInfo.role, slotInfo.class, slotInfo.filled)
                 end
@@ -4450,16 +4456,11 @@ function addonTable.UpdateDisplay()
             addonTable.groupCountText:SetText(string.format("Showing %d of %d groups", shown, total))
         end
 
-        local sortableResults = {}
-        for _, result in ipairs(activeResults) do
-            table.insert(sortableResults, result)
-        end
-
         local stabilizeBrowserOrder = browserFilters.keepUnavailable ~= false
             and addonTable._lastBrowserFetchWasManual ~= true
             and addonTable._browserHadPreviousResults == true
             and addonTable._forceBrowserSortOnce ~= true
-        table.sort(sortableResults, function(a, b)
+        table.sort(activeResults, function(a, b)
             if stabilizeBrowserOrder then
                 local aIndex = tonumber(a._oakStableIndex) or 0
                 local bIndex = tonumber(b._oakStableIndex) or 0
@@ -4473,7 +4474,6 @@ function addonTable.UpdateDisplay()
             return SortGroups(a, b, addonTable.CurrentSortBy, addonTable.CurrentIsAscending)
         end)
         addonTable._forceBrowserSortOnce = nil
-        activeResults = sortableResults
         for index, result in ipairs(activeResults) do
             result._oakStableIndex = index
             result._oakWasVisibleInBrowser = result._oakVisibleInCurrentDisplay == true

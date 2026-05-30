@@ -1027,9 +1027,6 @@ local function HasSelectedBrowserActivities(filters)
 end
 
 function addonTable.BuildBrowserRuntimeFilters()
-    if SyncBrowserSelectedActivitiesFromNative then
-        SyncBrowserSelectedActivitiesFromNative()
-    end
     local filters = BrowserFilterState()
     local runtime = {
         filters = filters,
@@ -1323,10 +1320,6 @@ local function SyncBrowserNativeActivities(forceClear)
     if not (C_LFGList and C_LFGList.SaveAdvancedFilter) then return end
     local filters = BrowserFilterState()
 
-    if not forceClear and not HasSelectedBrowserActivities(filters) and SyncBrowserSelectedActivitiesFromNative then
-        SyncBrowserSelectedActivitiesFromNative()
-    end
-
     local success, advancedFilter = pcall(C_LFGList.GetAdvancedFilter)
     if not success or type(advancedFilter) ~= "table" then advancedFilter = {} end
 
@@ -1347,6 +1340,9 @@ local function SyncBrowserNativeActivities(forceClear)
     end
 
     if #groupIDs == 0 and #activityIDs == 0 and not forceClear then
+        advancedFilter.activities = {}
+        advancedFilter.activityIDs = {}
+        pcall(C_LFGList.SaveAdvancedFilter, advancedFilter)
         return
     end
 
@@ -3325,7 +3321,6 @@ end
 
 local function UpdateBrowserActivityButtons(startY)
     local filters = BrowserFilterState()
-    SyncBrowserSelectedActivitiesFromNative()
     local activities = addonTable.GetAvailableBrowserActivities and addonTable.GetAvailableBrowserActivities() or {}
     local validKeys = {}
     local mode = GetBrowserMode()
