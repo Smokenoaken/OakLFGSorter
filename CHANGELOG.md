@@ -1,3 +1,8 @@
+## v4.0.17
+
+- Performance update: reduced browser refresh and row-rendering overhead while Oak is open
+- Made browser dungeon filter selections character-specific instead of inheriting account-wide native filter state
+
 ## v4.0.16
 
 - Kept Oak's applicant browser usable during combat instead of closing the window automatically.
