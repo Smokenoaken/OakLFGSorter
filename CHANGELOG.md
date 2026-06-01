@@ -1,3 +1,8 @@
+## v4.0.18
+
+- Fixed Hide Declined so previously declined non-sticky browser results stay hidden after refresh while just-declined sticky rows remain visible until manual refresh.
+- Fixed Oak browser opening empty by repainting Blizzard's existing search results without triggering protected automatic searches.
+
 ## v4.0.17
 
 - Performance update: reduced browser refresh and row-rendering overhead while Oak is open
