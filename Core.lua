@@ -440,6 +440,31 @@ local function ScheduleSearchRefresh()
     C_Timer.After(SEARCH_REFRESH_MIN_DELAY, RunScheduledSearchRefresh)
 end
 
+local initialBrowserOpenRefreshPending = false
+local function QueueInitialBrowserOpenRefresh()
+    if initialBrowserOpenRefreshPending then
+        return
+    end
+
+    initialBrowserOpenRefreshPending = true
+    C_Timer.After(0.15, function()
+        initialBrowserOpenRefreshPending = false
+
+        if currentViewMode ~= "browser"
+                or not OAK_LFG:IsShown()
+                or (C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()) then
+            return
+        end
+
+        if addonTable.FetchSearchResultData then
+            local changed = addonTable.FetchSearchResultData()
+            if changed or #(addonTable.SearchResults or {}) > 0 then
+                ScheduleDisplayRefresh(0)
+            end
+        end
+    end)
+end
+
 local function NormalizeApplicationStatus(status)
     return strlower(tostring(status or "none"))
 end
@@ -3226,6 +3251,7 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
                 and LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel:IsShown() then
             addonTable.SetCurrentViewMode("browser")
             OAK_LFG:Show()  -- OnShow triggers FetchSearchResultData + UpdateDisplay
+            QueueInitialBrowserOpenRefresh()
             return
         end
         if currentViewMode == "browser" and isShown then
@@ -3280,6 +3306,7 @@ OAK_LFG:SetScript("OnShow", function(self)
         if addonTable.UpdateFilterPaneMode then
             addonTable.UpdateFilterPaneMode()
         end
+        QueueInitialBrowserOpenRefresh()
     end
     addonTable.UpdateHeaderVisuals()
     if addonTable.ApplyHideNotesLayout then

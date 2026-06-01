@@ -790,7 +790,7 @@ function addonTable.ResultPassesBrowserFilters(result, options)
     local filters = (runtime and runtime.filters) or BrowserFilterState()
     local mode = result.mode or GetBrowserMode()
     if filters.hideDeclined
-            and not result._oakShowDeclinedUntilRefresh
+            and not (result._oakStickyUntilRefresh and result._oakShowDeclinedUntilRefresh)
             and addonTable.IsSearchResultHiddenByDeclineMemory
             and addonTable.IsSearchResultHiddenByDeclineMemory(result) then
         return false
@@ -849,7 +849,7 @@ function addonTable.ResultPassesBrowserPreserveFilters(result)
     local runtime = addonTable._browserRuntimeFilters
     local filters = (runtime and runtime.filters) or BrowserFilterState()
     if filters.hideDeclined
-            and not result._oakShowDeclinedUntilRefresh
+            and not (result._oakStickyUntilRefresh and result._oakShowDeclinedUntilRefresh)
             and addonTable.IsSearchResultHiddenByDeclineMemory
             and addonTable.IsSearchResultHiddenByDeclineMemory(result) then
         return false

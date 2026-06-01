@@ -4428,6 +4428,10 @@ function addonTable.UpdateDisplay()
             local isStickyUntilRefresh = result._oakStickyUntilRefresh == true
             local isDeclined = addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus)
             local passesBrowserFilters = not addonTable.ResultPassesBrowserFilters or addonTable.ResultPassesBrowserFilters(result)
+            local hiddenDeclined = browserFilters.hideDeclined == true
+                and not (isStickyUntilRefresh and result._oakShowDeclinedUntilRefresh)
+                and addonTable.IsSearchResultHiddenByDeclineMemory
+                and addonTable.IsSearchResultHiddenByDeclineMemory(result)
             local isDelisted = IsBrowserResultFull(result)
             local passesPreserveFilters = not addonTable.ResultPassesBrowserPreserveFilters or addonTable.ResultPassesBrowserPreserveFilters(result)
             local passesUnavailableFilters = result.isUnavailable and passesPreserveFilters
@@ -4442,7 +4446,7 @@ function addonTable.UpdateDisplay()
                 result.isFilteredOut = true
                 passesUnavailableFilters = true
             end
-            if isStickyUntilRefresh or isApplied or passesBrowserFilters or passesUnavailableFilters then
+            if ((isStickyUntilRefresh or isApplied) and not hiddenDeclined) or passesBrowserFilters or passesUnavailableFilters then
                 result._oakVisibleInCurrentDisplay = true
                 table.insert(activeResults, result)
             end
