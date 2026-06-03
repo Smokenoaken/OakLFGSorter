@@ -5664,11 +5664,15 @@ function addonTable.SetupBlizzardLFGHook()
         addonTable.SearchPanelHooked = true
         LFGListFrame.SearchPanel:HookScript("OnShow", function()
             if OakLFGSorterDB and OakLFGSorterDB.autoOpen and not addonTable.userExplicitlyClosed then
-                C_Timer.After(0, function()
-                    if OakLFGSorterDB and OakLFGSorterDB.autoOpen and not addonTable.userExplicitlyClosed and LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel:IsShown() then
-                        OAK_LFG:Show()
+                if LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel:IsShown() then
+                    if addonTable.SetCurrentViewMode then
+                        addonTable.SetCurrentViewMode("browser")
                     end
-                end)
+                    OAK_LFG:Show()
+                    if addonTable.RefreshBrowserSearchFromOpen then
+                        addonTable.RefreshBrowserSearchFromOpen()
+                    end
+                end
             end
         end)
         LFGListFrame.SearchPanel:HookScript("OnHide", function()

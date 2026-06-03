@@ -476,7 +476,7 @@ end
 
 local function IsDeclinedStatus(status)
     status = NormalizeApplicationStatus(status)
-    return status:find("declined", 1, true) ~= nil or status:find("cancelled", 1, true) ~= nil or status:find("failed", 1, true) ~= nil or status == "none" and false
+    return status:find("declined", 1, true) ~= nil or status == "timedout"
 end
 
 local function IsCancelledStatus(status)
@@ -489,7 +489,7 @@ addonTable.IsAppliedStatus = IsAppliedStatus
 addonTable.IsDeclinedStatus = IsDeclinedStatus
 addonTable.IsCancelledStatus = IsCancelledStatus
 
-local DECLINED_MEMORY_TTL_SECONDS = 12 * 60 * 60
+local DECLINED_MEMORY_TTL_SECONDS = 15 * 60
 local DECLINED_MEMORY_MAX_ENTRIES = 200
 
 local function NormalizeDeclinedMemoryToken(value)
@@ -505,23 +505,19 @@ local function BuildDeclinedMemoryKey(result)
         return nil
     end
 
-    local leaderName = NormalizeDeclinedMemoryToken(result.leaderName)
-    local activityID = tonumber(result.activityID) or 0
-    local activityName = NormalizeDeclinedMemoryToken(result.activityName or result.dungeonName or result.activityFilterLabel)
-    local title = NormalizeDeclinedMemoryToken(result.name ~= "" and result.name or result.displayName)
-    local comment = NormalizeDeclinedMemoryToken(result.comment)
+    local partyGUID = NormalizeDeclinedMemoryToken(result.partyGUID)
+    if partyGUID ~= "" then
+        return "partyGUID:" .. partyGUID
+    end
 
-    if leaderName == "" and activityID == 0 and activityName == "" and title == "" and comment == "" then
+    local activityID = tonumber(result.activityID) or 0
+    local leaderName = NormalizeDeclinedMemoryToken(result.leaderName)
+
+    if activityID == 0 or leaderName == "" then
         return nil
     end
 
-    return table.concat({
-        leaderName,
-        tostring(activityID),
-        activityName,
-        title,
-        comment,
-    }, "|")
+    return "activityLeader:" .. tostring(activityID) .. "|" .. leaderName
 end
 
 function addonTable.GetDeclinedMemoryKey(result)
@@ -919,23 +915,35 @@ local function SummarizeSearchResultPlayers(players)
     return counts, hasLust, hasBrez, highestItemLevel
 end
 
-local function GetApplicationStatusForResult(searchResultID)
+local function GetApplicationStatusForResult(searchResultID, resultInfo)
     if not (C_LFGList and C_LFGList.GetApplicationInfo) then
         return NormalizeApplicationStatus(addonTable.SearchApplications[searchResultID] or "none")
     end
 
+    resultInfo = resultInfo or (C_LFGList.GetSearchResultInfo and C_LFGList.GetSearchResultInfo(searchResultID)) or nil
     local success, appA, appB = pcall(C_LFGList.GetApplicationInfo, searchResultID)
+    local status = nil
     if success then
         if type(appA) == "table" then
-            return NormalizeApplicationStatus(appA.applicationStatus or appA.status or appA.pendingStatus or "none")
+            status = appA.applicationStatus or appA.status or appA.pendingStatus or "none"
         elseif type(appB) == "string" then
-            return NormalizeApplicationStatus(appB)
+            status = appB
         elseif type(appA) == "string" then
-            return NormalizeApplicationStatus(appA)
+            status = appA
         end
     end
 
-    return NormalizeApplicationStatus(addonTable.SearchApplications[searchResultID] or "none")
+    status = NormalizeApplicationStatus(status or addonTable.SearchApplications[searchResultID] or "none")
+    if not IsDeclinedStatus(status)
+            and LFGListFrame
+            and type(LFGListFrame.declines) == "table"
+            and resultInfo
+            and resultInfo.partyGUID
+            and LFGListFrame.declines[resultInfo.partyGUID] then
+        status = NormalizeApplicationStatus(LFGListFrame.declines[resultInfo.partyGUID])
+    end
+
+    return status
 end
 
 local function GetSearchResultDifficultyToken(resultInfo, activityInfo)
@@ -1300,7 +1308,7 @@ local function FetchSearchResultData()
                 end
                 local _, hasLust, hasBrez, highestItemLevel = SummarizeSearchResultPlayers(players)
                 local playstyleValue, playstyleLabel, playstyleShortLabel = GetSearchResultPlaystyle(resultInfo, activityInfo)
-                local applicationStatus = GetApplicationStatusForResult(searchResultID)
+                local applicationStatus = GetApplicationStatusForResult(searchResultID, resultInfo)
                 if resultInfo.hasSelf and not IsAppliedStatus(applicationStatus) and not IsDeclinedStatus(applicationStatus) then
                     applicationStatus = "applied"
                 end
@@ -1384,6 +1392,7 @@ local function FetchSearchResultData()
 
                 local entry = {
                     id = searchResultID,
+                    partyGUID = resultInfo.partyGUID,
                     name = resultInfo.name or "",
                     displayName = displayName,
                     comment = resultInfo.comment or "",
@@ -2287,6 +2296,43 @@ function addonTable.RunBrowserSearch()
     end
 
     return true
+end
+
+function addonTable.RefreshBrowserSearchFromOpen()
+    if currentViewMode ~= "browser"
+            or not OAK_LFG:IsShown()
+            or (C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()) then
+        return false
+    end
+
+    addonTable._manualBrowserRefreshInProgress = true
+    local ok = addonTable.RunBrowserSearch and select(1, addonTable.RunBrowserSearch()) == true
+    if ok then
+        ScheduleSearchRefresh()
+        C_Timer.After(0.35, function()
+            if currentViewMode ~= "browser"
+                    or not OAK_LFG:IsShown()
+                    or (C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()) then
+                return
+            end
+            if addonTable.FetchSearchResultData then
+                addonTable.FetchSearchResultData()
+            end
+            if addonTable.UpdateDisplay then
+                addonTable.UpdateDisplay()
+            end
+        end)
+    else
+        addonTable._manualBrowserRefreshInProgress = nil
+        if addonTable.FetchSearchResultData then
+            addonTable.FetchSearchResultData()
+        end
+        if addonTable.UpdateDisplay then
+            addonTable.UpdateDisplay()
+        end
+    end
+
+    return ok
 end
 
 function addonTable.OpenGroupFinderForOak()
@@ -3212,16 +3258,23 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
         local searchResultID, newStatus = ...
         if searchResultID then
             local normalized = NormalizeApplicationStatus(newStatus or "none")
+            local resultInfo = C_LFGList and C_LFGList.GetSearchResultInfo and C_LFGList.GetSearchResultInfo(searchResultID) or nil
             addonTable.SearchApplications[searchResultID] = normalized
+            local rememberedDecline = false
             for _, result in ipairs(addonTable.SearchResults or {}) do
                 if result.id == searchResultID then
+                    if resultInfo then
+                        result.partyGUID = resultInfo.partyGUID or result.partyGUID
+                        result.leaderName = resultInfo.leaderName or result.leaderName
+                        result.activityID = GetSearchResultActivityID(resultInfo, searchResultID) or result.activityID
+                    end
                     local wasApplied = IsAppliedStatus(result.applicationStatus) or result.hasSelf == true
                     result.applicationStatus = normalized
                     result.hasSelf = IsAppliedStatus(normalized)
                     result.isDeclined = IsDeclinedStatus(normalized)
                     if result.isDeclined then
                         if addonTable.RememberDeclinedSearchResult then
-                            addonTable.RememberDeclinedSearchResult(result)
+                            rememberedDecline = addonTable.RememberDeclinedSearchResult(result) or rememberedDecline
                         end
                         result.hiddenByDeclineMemory = true
                         if wasApplied or result._oakStickyUntilRefresh then
@@ -3237,6 +3290,14 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
                     end
                     break
                 end
+            end
+            if IsDeclinedStatus(normalized) and not rememberedDecline and resultInfo and addonTable.RememberDeclinedSearchResult then
+                addonTable.RememberDeclinedSearchResult({
+                    id = searchResultID,
+                    partyGUID = resultInfo.partyGUID,
+                    activityID = GetSearchResultActivityID(resultInfo, searchResultID) or 0,
+                    leaderName = resultInfo.leaderName,
+                })
             end
         end
         if isShown then
