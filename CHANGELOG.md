@@ -1,3 +1,8 @@
+## v4.0.19
+
+- Fixed Hide Declined (For Real This Time)
+- Fixed Oak browser opening empty by refreshing browser results when Oak opens.
+
 ## v4.0.18
 
 - Fixed Hide Declined so previously declined non-sticky browser results stay hidden after refresh while just-declined sticky rows remain visible until manual refresh.
