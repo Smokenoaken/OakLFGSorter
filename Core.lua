@@ -224,6 +224,21 @@ function addonTable.GetBrowserCategoryConfig(categoryKey)
     return addonTable.BrowserCategoryOptions[1]
 end
 
+local function GetBrowserCategoryConfigForSelection(selection)
+    local categoryID = tonumber(selection and selection.categoryID)
+    if not categoryID then
+        return nil
+    end
+
+    for _, option in ipairs(addonTable.BrowserCategoryOptions or {}) do
+        if not option.separator and tonumber(option.categoryID) == categoryID then
+            return option
+        end
+    end
+
+    return nil
+end
+
 function addonTable.GetCurrentListingCategoryKey()
     local listingContext = addonTable.UpdateListingContext and addonTable.UpdateListingContext() or addonTable.CurrentListingContext
     local activityInfo = listingContext and listingContext.activityInfo or nil
@@ -256,9 +271,19 @@ end
 
 function addonTable.SetBrowserCategory(categoryKey)
     local config = addonTable.GetBrowserCategoryConfig(categoryKey)
+    local previousKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
     local db = addonTable.GetCharacterDB and addonTable.GetCharacterDB() or OakLFGSorterCharDB
     if type(db) == "table" then
         db.browserCategoryKey = config.id
+    end
+
+    if previousKey ~= config.id then
+        addonTable._availableBrowserActivitiesCache = nil
+        addonTable._lastSearchScopeSignature = nil
+        addonTable._lastSearchResultsSignature = nil
+        if addonTable.SearchResults then
+            wipe(addonTable.SearchResults)
+        end
     end
 
     addonTable.CurrentSearchContext = addonTable.CurrentSearchContext or {}
@@ -461,6 +486,51 @@ local function QueueInitialBrowserOpenRefresh()
             if changed or #(addonTable.SearchResults or {}) > 0 then
                 ScheduleDisplayRefresh(0)
             end
+        end
+    end)
+end
+
+local browserPanelOpenRefreshPending = false
+function addonTable.QueueBrowserSearchRefreshFromOpen(delay)
+    if browserPanelOpenRefreshPending then
+        return
+    end
+
+    browserPanelOpenRefreshPending = true
+    C_Timer.After(delay or 0.15, function()
+        browserPanelOpenRefreshPending = false
+
+        if currentViewMode ~= "browser"
+                or not OAK_LFG:IsShown()
+                or (C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()) then
+            return
+        end
+
+        -- Blizzard is already driving the search-panel transition when this is
+        -- queued from SearchPanel:OnShow. Fetch the resulting data after that
+        -- protected stack unwinds instead of starting another search from Oak.
+        addonTable.CurrentSearchContext = addonTable.CurrentSearchContext or {}
+        addonTable.CurrentSearchContext.useOakCategorySelection = nil
+
+        local changed = true
+        if addonTable.FetchSearchResultData then
+            changed = addonTable.FetchSearchResultData()
+            if changed == nil then
+                changed = true
+            end
+        end
+
+        if changed then
+            ScheduleDisplayRefresh(0)
+        elseif addonTable.UpdateDisplay then
+            addonTable.UpdateDisplay()
+        end
+
+        if addonTable.UpdateBrowserFilterPanel
+                and addonTable.BrowserFilterPanel
+                and addonTable.BrowserFilterPanel:IsShown()
+                and not (addonTable.IsBrowserDropdownOpen and addonTable.IsBrowserDropdownOpen()) then
+            addonTable.UpdateBrowserFilterPanel()
         end
     end)
 end
@@ -1166,8 +1236,13 @@ function addonTable.UpdateSearchContext()
     local preferOakSelection = context.useOakCategorySelection == true and context.selectedCategoryKey ~= nil
 
     if selection and selection.categoryID and (not preferOakSelection or selection.categoryID == context.selectedCategoryID) then
+        local observedConfig = GetBrowserCategoryConfigForSelection(selection)
         context.selectedCategoryID = selection.categoryID
         context.categoryID = selection.categoryID
+        if observedConfig then
+            context.selectedCategoryKey = observedConfig.id
+            context.mode = observedConfig.mode or context.mode or "generic"
+        end
         context.searchSelection = selection
     else
         local storedConfig = addonTable.GetBrowserCategoryConfig and addonTable.GetBrowserCategoryConfig(context.selectedCategoryKey)

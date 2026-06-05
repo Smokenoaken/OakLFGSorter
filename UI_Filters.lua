@@ -1688,8 +1688,15 @@ categoryDropdownButton, categoryDropdownList = addonTable.CreateSimpleDropdown(
                 if addonTable.UpdateBrowserFilterPanel then
                     addonTable.UpdateBrowserFilterPanel()
                 end
+                if addonTable.UpdateDisplay then
+                    addonTable.UpdateDisplay()
+                end
                 if addonTable.RunBrowserSearch and id ~= "RAIDS_LEGACY" then
-                    addonTable.RunBrowserSearch()
+                    addonTable._manualBrowserRefreshInProgress = true
+                    local ok = select(1, addonTable.RunBrowserSearch())
+                    if not ok then
+                        addonTable._manualBrowserRefreshInProgress = nil
+                    end
                 elseif id == "RAIDS_LEGACY" and addonTable.SearchResults then
                     wipe(addonTable.SearchResults)
                     if addonTable.UpdateDisplay then
@@ -5669,8 +5676,12 @@ function addonTable.SetupBlizzardLFGHook()
                         addonTable.SetCurrentViewMode("browser")
                     end
                     OAK_LFG:Show()
-                    if addonTable.RefreshBrowserSearchFromOpen then
-                        addonTable.RefreshBrowserSearchFromOpen()
+                    if addonTable.QueueBrowserSearchRefreshFromOpen then
+                        addonTable.QueueBrowserSearchRefreshFromOpen()
+                    elseif addonTable.RefreshBrowserSearchFromOpen then
+                        C_Timer.After(0.15, function()
+                            addonTable.RefreshBrowserSearchFromOpen()
+                        end)
                     end
                 end
             end

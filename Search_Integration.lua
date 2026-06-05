@@ -29,8 +29,12 @@ local function QueueSearchPanelAutoOpen()
         addonTable.SetCurrentViewMode("browser")
     end
     OAK_LFG:Show()
-    if addonTable.RefreshBrowserSearchFromOpen then
-        addonTable.RefreshBrowserSearchFromOpen()
+    if addonTable.QueueBrowserSearchRefreshFromOpen then
+        addonTable.QueueBrowserSearchRefreshFromOpen()
+    elseif addonTable.RefreshBrowserSearchFromOpen then
+        C_Timer.After(0.15, function()
+            addonTable.RefreshBrowserSearchFromOpen()
+        end)
     end
     pendingSearchPanelAutoOpen = false
 end
@@ -121,8 +125,12 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
             if OakLFGSorterDB.autoOpenSearch then
                 if addonTable.SetCurrentViewMode then addonTable.SetCurrentViewMode("browser") end
                 OAK_LFG:Show()
-                if addonTable.RefreshBrowserSearchFromOpen then
-                    addonTable.RefreshBrowserSearchFromOpen()
+                if addonTable.QueueBrowserSearchRefreshFromOpen then
+                    addonTable.QueueBrowserSearchRefreshFromOpen()
+                elseif addonTable.RefreshBrowserSearchFromOpen then
+                    C_Timer.After(0.15, function()
+                        addonTable.RefreshBrowserSearchFromOpen()
+                    end)
                 end
             else
                 OAK_LFG:Hide()
