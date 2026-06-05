@@ -1,3 +1,8 @@
+## v4.0.20
+
+- Fixed Oak browser category switches so M+ to current raid updates filters and results immediately.
+- Deferred Oak browser refreshes from Blizzard search-panel OnShow hooks to avoid ADDON_ACTION_BLOCKED protected-call errors.
+
 ## v4.0.19
 
 - Fixed Hide Declined (For Real This Time)
