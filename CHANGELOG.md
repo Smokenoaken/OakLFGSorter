@@ -1,3 +1,7 @@
+## v4.0.21
+
+- Updated TOC interface compatibility for World of Warcraft 12.0.7.
+
 ## v4.0.20
 
 - Fixed Oak browser category switches so M+ to current raid updates filters and results immediately.
