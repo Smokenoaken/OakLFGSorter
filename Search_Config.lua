@@ -15,9 +15,14 @@ addonTable.SearchConfig.LocalizedSeasonDungeons = addonTable.SearchConfig.Locali
         "Шпиль Ветрокрылых", "Академия Алгет'ар", "Престол Триумвирата",
         "Небесный Путь", "Яма Сарона",
     },
+    koKR = {
+        "마이사라 동굴", "공결탑 제나스", "마법학자의 정원",
+        "윈드러너 첨탑", "알게타르 대학", "삼두정의 권좌",
+        "하늘탑", "사론의 구덩이",
+    },
 }
 
-addonTable.SearchConfig.DefaultSeasonDelves = {
+local defaultSeasonDelves_enUS = {
     "Parhelion Plaza",
     "The Shadow Enclave",
     "Atal'Aman",
@@ -31,6 +36,25 @@ addonTable.SearchConfig.DefaultSeasonDelves = {
     "Torment's Rise",
 }
 
+local localizedSeasonDelves = {
+    koKR = {
+        "무리해 광장",
+        "어둠의 은거처",
+        "아탈아만",
+        "대학 대소동",
+        "어둠길",
+        "황혼의 납골당",
+        "기억의 만",
+        "응어리의 구덩이",
+        "어둠수호병 지점",
+        "태양학살자 성소",
+        "고통의 오름길",
+    },
+}
+
+local currentLocale = GetLocale and GetLocale() or "enUS"
+addonTable.SearchConfig.DefaultSeasonDelves = localizedSeasonDelves[currentLocale] or defaultSeasonDelves_enUS
+
 addonTable.SearchConfig.DelveZoneMapIDs = {
     2393,
     2395,
@@ -43,8 +67,28 @@ addonTable.SearchConfig.DelveZoneMapIDs = {
 
 addonTable.SearchConfig.DelveLabelLookup = addonTable.SearchConfig.DelveLabelLookup or {}
 wipe(addonTable.SearchConfig.DelveLabelLookup)
-for _, delveName in ipairs(addonTable.SearchConfig.DefaultSeasonDelves) do
+
+local function AddDelveLabelToLookup(delveName)
+    if type(delveName) ~= "string" or delveName == "" then
+        return
+    end
+
+    local normalizer = addonTable.GetPendingNativeActivityKey
+    local key = normalizer and normalizer(delveName) or strlower(delveName)
+    if key and key ~= "" then
+        addonTable.SearchConfig.DelveLabelLookup[key] = true
+    end
+
     addonTable.SearchConfig.DelveLabelLookup[strlower(delveName)] = true
+end
+
+for _, delveName in ipairs(addonTable.SearchConfig.DefaultSeasonDelves or {}) do
+    AddDelveLabelToLookup(delveName)
+end
+
+local localizedDelves = addonTable.SearchConfig.GetSeasonDelves and addonTable.SearchConfig.GetSeasonDelves() or {}
+for _, delveName in ipairs(localizedDelves) do
+    AddDelveLabelToLookup(delveName)
 end
 
 local function NormalizeDelveLabel(label)
@@ -55,7 +99,7 @@ local function NormalizeDelveLabel(label)
 
     local text = strlower(tostring(label or ""))
     text = text:gsub("%s*%b()", "")
-    text = text:gsub("[^%w%s']", " ")
+    text = text:gsub("[%(%)%[%]%-_:;,%.%!%?]", " ")
     text = text:gsub("%s+", " ")
     return text:gsub("^%s+", ""):gsub("%s+$", "")
 end

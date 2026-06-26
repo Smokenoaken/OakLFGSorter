@@ -193,7 +193,7 @@ addonTable.BrowserCategoryOptions = {
     { id = "QUESTING", label = L["Questing"], categoryID = CATEGORY_ID.QUESTING, filters = 0, mode = "open_world" },
     { id = "CUSTOM", label = L["Custom"], categoryID = CATEGORY_ID.CUSTOM, filters = 0, mode = "generic" },
     { id = "__PVP_SEPARATOR__", label = L["PvP"], separator = true },
-    { id = "RBG", label = "RBG", categoryID = CATEGORY_ID.RATED_BATTLEGROUND, filters = 0, mode = "rated_pvp" },
+    { id = "RBG", label = L["RBG"], categoryID = CATEGORY_ID.RATED_BATTLEGROUND, filters = 0, mode = "rated_pvp" },
     { id = "ARENA", label = L["Arena"], categoryID = CATEGORY_ID.ARENA, filters = 0, mode = "pvp" },
 }
 
@@ -377,6 +377,7 @@ local searchLastRefreshAt = 0
 local SEARCH_REFRESH_MIN_DELAY = 0.30
 local SEARCH_REFRESH_MIN_INTERVAL = 1.25
 local displayRefreshPending = false
+local applicantRefreshPending = false
 local lastBrowserFilterPanelToken = nil
 
 local function BuildBrowserFilterPanelRefreshToken()
@@ -402,6 +403,28 @@ local function ScheduleDisplayRefresh(delay)
         if OAK_LFG:IsShown() and addonTable.UpdateDisplay then
             addonTable.UpdateDisplay()
         end
+    end)
+end
+
+local function ScheduleApplicantRefresh(delay)
+    if applicantRefreshPending then
+        return
+    end
+
+    applicantRefreshPending = true
+    C_Timer.After(delay or 0, function()
+        applicantRefreshPending = false
+        if not (OAK_LFG:IsShown() and C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()) then
+            return
+        end
+
+        if addonTable.SetCurrentViewMode then
+            addonTable.SetCurrentViewMode("applicant")
+        end
+        if addonTable.FetchApplicantData then
+            addonTable.FetchApplicantData()
+        end
+        ScheduleDisplayRefresh(0)
     end)
 end
 
@@ -1017,23 +1040,52 @@ local function GetApplicationStatusForResult(searchResultID, resultInfo)
 end
 
 local function GetSearchResultDifficultyToken(resultInfo, activityInfo)
-    if activityInfo and activityInfo.isMythicPlusActivity then
+    local difficultyID =
+        tonumber(activityInfo and activityInfo.difficultyID)
+        or tonumber(resultInfo and resultInfo.difficultyID)
+        or 0
+
+    local activityText = tostring(
+        (activityInfo and (
+            activityInfo.fullName
+            or activityInfo.shortName
+            or activityInfo.name
+            or activityInfo.difficultyName
+        ))
+        or (resultInfo and (
+            resultInfo.name
+            or resultInfo.activityName
+        ))
+        or ""
+    )
+    local lowered = strlower(activityText)
+
+    if (activityInfo and activityInfo.isMythicPlusActivity)
+        or difficultyID == 8
+        or lowered:find("mythic+", 1, true)
+        or lowered:find("mythic plus", 1, true)
+        or activityText:find("쐐기", 1, true)
+    then
         return "MYTHIC_PLUS"
     end
 
-    local source = strlower(table.concat({
-        tostring(resultInfo and resultInfo.name or ""),
-        tostring(activityInfo and activityInfo.fullName or ""),
-        tostring(activityInfo and activityInfo.shortName or ""),
-    }, " "))
-
-    if source:find("mythic%+", 1) or source:find("mythic keystone", 1, true) then
-        return "MYTHIC_PLUS"
-    elseif source:find("mythic", 1, true) then
+    if difficultyID == 23
+        or difficultyID == 16
+        or lowered:find("mythic", 1, true)
+        or activityText:find("신화", 1, true)
+    then
         return "MYTHIC"
-    elseif source:find("heroic", 1, true) then
+    elseif difficultyID == 2
+        or difficultyID == 15
+        or lowered:find("heroic", 1, true)
+        or activityText:find("영웅", 1, true)
+    then
         return "HEROIC"
-    elseif source:find("normal", 1, true) then
+    elseif difficultyID == 1
+        or difficultyID == 14
+        or lowered:find("normal", 1, true)
+        or activityText:find("일반", 1, true)
+    then
         return "NORMAL"
     end
 
@@ -1042,13 +1094,14 @@ end
 
 local function GetDifficultyDisplayInfo(difficultyToken)
     local labels = {
-        NORMAL = { full = "Normal", short = "N" },
-        HEROIC = { full = "Heroic", short = "H" },
-        MYTHIC = { full = "Mythic", short = "M" },
-        MYTHIC_PLUS = { full = "Mythic+", short = "M+" },
+        ANY = { full = L["Any"], short = "" },
+        NORMAL = { full = L["Normal"], short = L["Normal Short"] },
+        HEROIC = { full = L["Heroic"], short = L["Heroic Short"] },
+        MYTHIC = { full = L["Mythic"], short = L["Mythic Short"] },
+        MYTHIC_PLUS = { full = L["Mythic+"], short = L["Mythic+ Short"] },
     }
 
-    return labels[difficultyToken] or { full = "Any", short = "" }
+    return labels[difficultyToken] or labels.ANY
 end
 
 local function GetRaidDifficultyCount(data, difficultyToken)
@@ -1761,7 +1814,7 @@ NormalizeSearchScoreTargetLabel = function(label)
     normalized = normalized:gsub("^el%s+", "")
     normalized = normalized:gsub("^los%s+", "")
     normalized = normalized:gsub("^las%s+", "")
-    normalized = normalized:gsub("[^%w%s]", " ")
+    normalized = normalized:gsub("[%(%)%[%]%-_:;,%.%!%?]", " ")
     normalized = normalized:gsub("%s+", " ")
     normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
     return normalized
@@ -3423,7 +3476,8 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
     end
 
     if C_LFGList.HasActiveEntryInfo() then
-        FetchApplicantData()
+        ScheduleApplicantRefresh(0)
+        return
     else
         FetchSearchResultData()
     end
@@ -3435,7 +3489,7 @@ OAK_LFG:SetScript("OnShow", function(self)
     SetupApplicantPingMuteHook()
     if C_LFGList.HasActiveEntryInfo() then
         addonTable.SetCurrentViewMode("applicant")
-        FetchApplicantData()
+        ScheduleApplicantRefresh(0)
     else
         addonTable.SetCurrentViewMode("browser")
         FetchSearchResultData()

@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = addonTable.L
 
 local OAK_LFG = addonTable.OAK_LFG
 if not OAK_LFG then
@@ -157,7 +158,7 @@ innerShade:SetVertexColor(0.11, 0.10, 0.09, 0.82)
 
 local title = partyKeysPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 title:SetPoint("CENTER", titleBg, "CENTER", 0, 0)
-title:SetText("Party Keys")
+title:SetText(L["Party Keys"])
 
 local rows = {}
 local function CreateRow(index)
@@ -208,9 +209,9 @@ local function CreateRow(index)
                 addonTable.AddRestrictedCombatTooltipLine(GameTooltip, "Party key teleports")
             end
         elseif self.spellID and IsTeleportKnown(self.spellID) then
-            GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
+            GameTooltip:AddLine(L["Click to teleport"], 0.5, 1, 0.5)
         elseif self.spellID then
-            GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
+            GameTooltip:AddLine(L["Teleport spell not learned yet"], 1, 0.35, 0.35)
         end
         GameTooltip:Show()
     end)

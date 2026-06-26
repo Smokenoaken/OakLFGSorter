@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = addonTable.L
 
 local OAK_LFG = addonTable.OAK_LFG
 if not OAK_LFG then
@@ -335,14 +336,14 @@ innerShade:SetVertexColor(0.28, 0.25, 0.21, 0.82)
 
 local title = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 title:SetPoint("CENTER", header, "CENTER", 0, 0)
-title:SetText("Mythic+ Overview")
+title:SetText(L["Mythic+ Overview"])
 
 local subtitle = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 subtitle:SetPoint("TOP", title, "BOTTOM", 0, -4)
 subtitle:SetTextColor(0.85, 0.78, 0.58)
-subtitle:SetText("Season snapshot")
+subtitle:SetText(L["Season snapshot"])
 
-local vaultButton = addonTable.CreateFlatButton(panel, "Vault", 48)
+local vaultButton = addonTable.CreateFlatButton(panel, L["Vault"], 48)
 vaultButton:SetAutoWidth(40, 54, 10)
 vaultButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
 vaultButton:SetScript("OnClick", function()
@@ -350,8 +351,8 @@ vaultButton:SetScript("OnClick", function()
 end)
 vaultButton:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Open Great Vault", 1, 1, 1)
-    GameTooltip:AddLine("Open Blizzard's Great Vault window.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Open Great Vault"], 1, 1, 1)
+    GameTooltip:AddLine(L["Open Blizzard's Great Vault window."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 vaultButton:SetScript("OnLeave", function()
@@ -360,14 +361,14 @@ end)
 
 local scoreLabel = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 scoreLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -42)
-scoreLabel:SetText("Score")
+scoreLabel:SetText(L["Score"])
 
 local scoreValue = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 scoreValue:SetPoint("LEFT", scoreLabel, "RIGHT", 8, 0)
 
 local keyLabel = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 keyLabel:SetPoint("TOPLEFT", scoreLabel, "BOTTOMLEFT", 0, -6)
-keyLabel:SetText("Your Key")
+keyLabel:SetText(L["Your Key"])
 
 local keyValue = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 keyValue:SetPoint("LEFT", keyLabel, "RIGHT", 8, 0)
@@ -381,7 +382,7 @@ keyTeleportButton:RegisterForClicks("AnyUp", "AnyDown")
 keyTeleportButton:SetFrameLevel(panel:GetFrameLevel() + 5)
 keyTeleportButton:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Your Key", 1, 1, 1)
+    GameTooltip:SetText(L["Your Key"], 1, 1, 1)
     if self.mapName and self.keyLevel and self.keyLevel > 0 then
         GameTooltip:AddLine(string.format("+%d %s", self.keyLevel, self.mapName), 1, 1, 1, true)
     elseif self.keyText and self.keyText ~= "" then
@@ -390,9 +391,9 @@ keyTeleportButton:SetScript("OnEnter", function(self)
     if IsRestrictedCombatInInstance() then
         AddRestrictedTooltip("Your key teleport")
     elseif self.spellID and IsTeleportKnown(self.spellID) then
-        GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
+        GameTooltip:AddLine(L["Click to teleport"], 0.5, 1, 0.5)
     elseif self.spellID then
-        GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
+        GameTooltip:AddLine(L["Teleport spell not learned yet"], 1, 0.35, 0.35)
     end
     GameTooltip:Show()
 end)
@@ -402,7 +403,7 @@ end)
 
 local affixHeader = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 affixHeader:SetPoint("TOPLEFT", keyLabel, "BOTTOMLEFT", 0, -8)
-affixHeader:SetText("This Week")
+affixHeader:SetText(L["This Week"])
 
 local affixButtons = {}
 for i = 1, 4 do
@@ -439,7 +440,7 @@ end
 
 local bestHeader = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 bestHeader:SetPoint("TOPLEFT", affixButtons[1], "BOTTOMLEFT", 0, -12)
-bestHeader:SetText("Season Best")
+bestHeader:SetText(L["Season Best"])
 
 local colDungeon = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 colDungeon:SetPoint("LEFT", bestHeader, "LEFT", 0, 0)
@@ -449,19 +450,19 @@ colKey:SetWidth(28)
 colKey:SetJustifyH("CENTER")
 colKey:ClearAllPoints()
 colKey:SetPoint("LEFT", bestHeader, "LEFT", 126, 0)
-colKey:SetText("Key")
+colKey:SetText(L["Key"])
 local colTime = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 colTime:ClearAllPoints()
 colTime:SetPoint("LEFT", bestHeader, "LEFT", 156, 0)
 colTime:SetWidth(44)
 colTime:SetJustifyH("CENTER")
-colTime:SetText("Time")
+colTime:SetText(L["Time"])
 local colScore = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 colScore:ClearAllPoints()
 colScore:SetPoint("LEFT", bestHeader, "LEFT", 204, 0)
 colScore:SetWidth(22)
 colScore:SetJustifyH("CENTER")
-colScore:SetText("Score")
+colScore:SetText(L["Score"])
 
 local dungeonRows = {}
 for i = 1, 8 do
@@ -495,9 +496,9 @@ for i = 1, 8 do
         if IsRestrictedCombatInInstance() then
             AddRestrictedTooltip("Dungeon teleports")
         elseif self.spellID and IsTeleportKnown(self.spellID) then
-            GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
+            GameTooltip:AddLine(L["Click to teleport"], 0.5, 1, 0.5)
         elseif self.spellID then
-            GameTooltip:AddLine("Teleport spell not learned yet", 1, 0.35, 0.35)
+            GameTooltip:AddLine(L["Teleport spell not learned yet"], 1, 0.35, 0.35)
         end
         GameTooltip:Show()
     end)
@@ -509,7 +510,7 @@ end
 
 local vaultHeader = panel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 vaultHeader:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -300)
-vaultHeader:SetText("Great Vault")
+vaultHeader:SetText(L["Great Vault"])
 
 local vaultRows = {}
 for i = 1, 3 do
@@ -540,11 +541,11 @@ for i = 1, 3 do
     button:SetScript("OnEnter", function(self)
         self:SetBackdropBorderColor(0.58, 0.48, 0.20, 1)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Open Great Vault", 1, 1, 1)
+        GameTooltip:SetText(L["Open Great Vault"], 1, 1, 1)
         if IsRestrictedCombatInInstance() then
             AddRestrictedTooltip("The Great Vault panel")
         else
-            GameTooltip:AddLine("Click to open Blizzard's Great Vault panel.", 1, 1, 1, true)
+            GameTooltip:AddLine(L["Click to open Blizzard's Great Vault panel."], 1, 1, 1, true)
         end
         GameTooltip:Show()
     end)

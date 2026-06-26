@@ -23,14 +23,14 @@ local IsPvpBrowserMode
 local RefreshBrowserResponsiveLayout
 local UpdateNotesToggleLayout
 local MODE_CONFIGS = {
-    mythic_plus = { ratingLabel = "M+ Rating", keyLabel = "Key" },
-    rated_pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
-    pvp = { ratingLabel = "PVP Rating", keyLabel = "Type" },
-    raid = { ratingLabel = "Raid", keyLabel = "Prog" },
-    legacy_raid = { ratingLabel = "Raid", keyLabel = "Prog" },
-    delve = { ratingLabel = "M+ Rating", keyLabel = "Key" },
-    open_world = { ratingLabel = "M+ Rating", keyLabel = "Key" },
-    generic = { ratingLabel = "M+ Rating", keyLabel = "Key" },
+    mythic_plus = { ratingLabel = L["M+ Rating"], keyLabel = L["Key"] },
+    rated_pvp = { ratingLabel = L["PVP Rating"], keyLabel = L["Type"] },
+    pvp = { ratingLabel = L["PVP Rating"], keyLabel = L["Type"] },
+    raid = { ratingLabel = L["Raid"], keyLabel = L["Prog"] },
+    legacy_raid = { ratingLabel = L["Raid"], keyLabel = L["Prog"] },
+    delve = { ratingLabel = L["M+ Rating"], keyLabel = L["Key"] },
+    open_world = { ratingLabel = L["M+ Rating"], keyLabel = L["Key"] },
+    generic = { ratingLabel = L["M+ Rating"], keyLabel = L["Key"] },
 }
 
 local function GetListingMode()
@@ -105,14 +105,14 @@ local function GetHeaderTooltipData(sortKey)
     if sortKey == "role" then
         if isBrowser then
             if IsRaidBrowserMode() then
-                return "Raid", "Sort by raid instance name."
+                return L["Raid"], L["Sort by raid instance name."]
             elseif listingMode == "pvp" or listingMode == "rated_pvp" then
                 if IsRatedBattlegroundBrowserMode() then
-                    return "Activity", "Sort by PvP activity type."
+                    return L["Activity"], L["Sort by PvP activity type."]
                 end
-                return "Arena", "Sort by arena bracket (2v2 / 3v3)."
+                return L["Arena"], L["Sort by arena bracket (2v2 / 3v3)."]
             elseif listingMode == "delve" then
-                return "Delve", "Sort by delve name."
+                return L["Delve"], L["Sort by delve name."]
             elseif listingMode == "generic" then
                 local ctxInfo = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.activityInfo
                 local firstResult = addonTable.SearchResults and addonTable.SearchResults[1]
@@ -122,58 +122,58 @@ local function GetHeaderTooltipData(sortKey)
                     or ""
                 )
                 if hint:find("custom", 1, true) then
-                    return "Activity", "Sort by activity type."
+                    return L["Activity"], L["Sort by activity type."]
                 end
-                return "Zone", "Sort by zone name."
+                return L["Zone"], L["Sort by zone name."]
             end
-            return "Dungeon", "Sort by dungeon or activity name."
+            return L["Dungeon"], L["Sort by dungeon or activity name."]
         end
-        return "Role", "Sort by the applicant's primary role."
+        return L["Role"], L["Sort by the applicant's primary role."]
     elseif sortKey == "class" then
         if isBrowser then
-            return "Title", "Sort by the listing title."
+            return L["Title"], L["Sort by the listing title."]
         end
-        return "Class", "Sort by the applicant's class."
+        return L["Class"], L["Sort by the applicant's class."]
     elseif sortKey == "spec" then
         if isBrowser then
             if IsRaidBrowserMode() then
-                return "Difficulty", "Sort by raid difficulty."
+                return L["Difficulty"], L["Sort by raid difficulty."]
             end
             return nil, nil  -- hidden in non-raid browser
         end
-        return "Spec", "Sort by the applicant's specialization."
+        return L["Spec"], L["Sort by the applicant's specialization."]
     elseif sortKey == "ilvl" then
         if isBrowser then
-            return "Comp", "Sort by the current party composition of the listing."
+            return L["Comp"], L["Sort by the current party composition of the listing."]
         end
-        return "iLvl", "Sort by item level."
+        return L["iLvl"], L["Sort by item level."]
     elseif sortKey == "rating" then
         local modeConfig = GetModeConfig()
         if listingMode == "raid" or listingMode == "legacy_raid" then
             if isBrowser then
-                return "Kills", "Sort by boss kills. Shows how many raid bosses the group leader has defeated in this lockout (e.g. 4/8)."
+                return L["Kills"], L["Sort by boss kills. Shows how many raid bosses the group leader has defeated in this lockout (e.g. 4/8)."]
             end
-            return modeConfig.ratingLabel, "Sort by raid progress for the applicant."
+            return modeConfig.ratingLabel, L["Sort by raid progress for the applicant."]
         elseif listingMode == "rated_pvp" or listingMode == "pvp" then
-            return modeConfig.ratingLabel, "Sort by PVP rating."
+            return modeConfig.ratingLabel, L["Sort by PVP rating."]
         end
-        return modeConfig.ratingLabel, "Sort by Mythic+ rating."
+        return modeConfig.ratingLabel, L["Sort by Mythic+ rating."]
     elseif sortKey == "key" then
         if isBrowser then
-            return "Age", "Sort by how long ago this listing was posted. Older listings may have already filled."
+            return L["Age"], L["Sort by how long ago this listing was posted. Older listings may have already filled."]
         end
         local modeConfig = GetModeConfig()
         if listingMode == "raid" or listingMode == "legacy_raid" then
-            return modeConfig.keyLabel, "Sort by the applicant's raid progress."
+            return modeConfig.keyLabel, L["Sort by the applicant's raid progress."]
         elseif listingMode == "rated_pvp" or listingMode == "pvp" then
-            return modeConfig.keyLabel, "Sort by bracket type."
+            return modeConfig.keyLabel, L["Sort by bracket type."]
         end
-        return modeConfig.keyLabel, "Sort by best key level or key-related metric."
+        return modeConfig.keyLabel, L["Sort by best key level or key-related metric."]
     elseif sortKey == "region" then
         if addonTable.ShouldShowRegionFlags and addonTable.ShouldShowRegionFlags() then
-            return "Region", "Sort by the displayed flag derived from the leader's or applicant's realm."
+            return L["Region"], L["Sort by the displayed flag derived from the leader's or applicant's realm."]
         end
-        return "Region", "Sort by the displayed region derived from the leader's or applicant's realm."
+        return L["Region"], L["Sort by the displayed region derived from the leader's or applicant's realm."]
     end
 
     return nil, nil
@@ -495,7 +495,7 @@ groupCountText:SetTextColor(0.75, 0.75, 0.75)
 groupCountText:Hide()
 addonTable.groupCountText = groupCountText
 
-local lfgBtn = addonTable.CreateFlatButton(footer, "LFG", 40)
+local lfgBtn = addonTable.CreateFlatButton(footer, L["LFG"], 40)
 lfgBtn.isBrowserFooterControl = true
 lfgBtn:SetAutoWidth(32, 50, 10)
 lfgBtn:SetScript("OnClick", function()
@@ -506,7 +506,7 @@ end)
 lfgBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Open Blizzard Dungeon Finder", 1, 1, 1)
+    GameTooltip:SetText(L["Open Blizzard Dungeon Finder"], 1, 1, 1)
     GameTooltip:Show()
 end)
 lfgBtn:SetScript("OnLeave", function(self)
@@ -514,7 +514,7 @@ lfgBtn:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 
-local lfrBtn = addonTable.CreateFlatButton(footer, "LFR", 40)
+local lfrBtn = addonTable.CreateFlatButton(footer, L["LFR"], 40)
 lfrBtn.isBrowserFooterControl = true
 lfrBtn:SetAutoWidth(32, 50, 10)
 lfrBtn:SetScript("OnClick", function()
@@ -525,7 +525,7 @@ end)
 lfrBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Open Blizzard Raid Finder", 1, 1, 1)
+    GameTooltip:SetText(L["Open Blizzard Raid Finder"], 1, 1, 1)
     GameTooltip:Show()
 end)
 lfrBtn:SetScript("OnLeave", function(self)
@@ -557,8 +557,8 @@ optionsBtn:SetPoint("LEFT", suppBtn, "RIGHT", 3, 0)
 optionsBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Options", 1, 1, 1)
-    GameTooltip:AddLine("Open shared Oak display options.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Options"], 1, 1, 1)
+    GameTooltip:AddLine(L["Open shared Oak display options."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsBtn:SetScript("OnLeave", function(self)
@@ -571,15 +571,15 @@ optionsBtn:SetScript("OnClick", function()
     end
 end)
 
-local listBtn = addonTable.CreateFlatButton(footer, "List", 42)
+local listBtn = addonTable.CreateFlatButton(footer, L["List"], 42)
 listBtn.isBrowserFooterControl = true
 listBtn:SetAutoWidth(34, 50, 10)
 listBtn:SetPoint("LEFT", optionsBtn, "RIGHT", 3, 0)
 listBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Open Blizzard Listing Panel", 1, 1, 1)
-    GameTooltip:AddLine("Choose a listing category and open Blizzard's native listing flow for that category.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Open Blizzard Listing Panel"], 1, 1, 1)
+    GameTooltip:AddLine(L["Choose a listing category and open Blizzard's native listing flow for that category."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 listBtn:SetScript("OnLeave", function(self)
@@ -587,7 +587,7 @@ listBtn:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
 end)
 
-local pvpBtn = addonTable.CreateFlatButton(footer, "PVP", 42)
+local pvpBtn = addonTable.CreateFlatButton(footer, L["PvP"], 42)
 pvpBtn.isBrowserFooterControl = true
 pvpBtn:SetAutoWidth(34, 50, 10)
 pvpBtn:SetPoint("LEFT", listBtn, "RIGHT", 2, 0)
@@ -599,8 +599,8 @@ end)
 pvpBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Open Blizzard PVP Panel", 1, 1, 1)
-    GameTooltip:AddLine("Open Blizzard's native Player vs. Player panel.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Open Blizzard PVP Panel"], 1, 1, 1)
+    GameTooltip:AddLine(L["Open Blizzard's native Player vs. Player panel."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 pvpBtn:SetScript("OnLeave", function(self)
@@ -708,7 +708,7 @@ local footerVersionText = footer:CreateFontString(nil, "OVERLAY", "SorterClassic
 footerVersionText:SetPoint("RIGHT", footer, "RIGHT", -2, 0)
 footerVersionText:SetText(addonTable.VersionText and addonTable.VersionText:GetText() or "")
 
-local mythicPanelBtn = addonTable.CreateFlatButton(footer, "M+", 40)
+local mythicPanelBtn = addonTable.CreateFlatButton(footer, L["Mythic+ Short"], 40)
 mythicPanelBtn:SetAutoWidth(28, 42, 8)
 mythicPanelBtn:SetPoint("RIGHT", suppBtn, "LEFT", -2, 0)
 lfrBtn:ClearAllPoints()
@@ -729,13 +729,13 @@ end)
 mythicPanelBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Mythic+ Overview", 1, 1, 1)
+    GameTooltip:SetText(L["Mythic+ Overview"], 1, 1, 1)
     if addonTable.IsRestrictedCombatInInstance and addonTable.IsRestrictedCombatInInstance() then
         if addonTable.AddRestrictedCombatTooltipLine then
             addonTable.AddRestrictedCombatTooltipLine(GameTooltip, "The Mythic+ panel")
         end
     else
-        GameTooltip:AddLine("Open your condensed Mythic+ score, dungeon, affix, and vault panel.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Open your condensed Mythic+ score, dungeon, affix, and vault panel."], 1, 1, 1, true)
     end
     GameTooltip:Show()
 end)
@@ -813,10 +813,10 @@ function addonTable.UpdateGroupBuffs()
             CheckClass(uClass)
         end
     end
-    if hasLust then lustText:SetText("|cFF55FF55|TInterface\\Icons\\spell_nature_bloodlust:13|t Lust Covered|r")
-    else lustText:SetText("|cFFFF5555|TInterface\\Icons\\spell_nature_bloodlust:13|t Need Lust|r") end
-    if hasBrez then brezText:SetText("|cFF55FF55|TInterface\\Icons\\spell_holy_resurrection:13|t B-Rez Covered|r")
-    else brezText:SetText("|cFFFF5555|TInterface\\Icons\\spell_holy_resurrection:13|t Need B-Rez|r") end
+    if hasLust then lustText:SetText(L["|cFF55FF55|TInterface\\Icons\\spell_nature_bloodlust:13|t Lust Covered|r"])
+    else lustText:SetText(L["|cFFFF5555|TInterface\\Icons\\spell_nature_bloodlust:13|t Need Lust|r"]) end
+    if hasBrez then brezText:SetText(L["|cFF55FF55|TInterface\\Icons\\spell_holy_resurrection:13|t B-Rez Covered|r"])
+    else brezText:SetText(L["|cFFFF5555|TInterface\\Icons\\spell_holy_resurrection:13|t Need B-Rez|r"]) end
 end
 end
 
@@ -1459,7 +1459,7 @@ function addonTable.UpdateHeaderVisuals()
         -- Text labels
         if header.sortKey == "rating" then
             if isRaidBrowser then
-                header.text:SetText("Kills")
+                header.text:SetText(L["Kills"])
             else
                 header.text:SetText(modeConfig.ratingLabel)
             end
@@ -1471,11 +1471,11 @@ function addonTable.UpdateHeaderVisuals()
             end
         elseif isBrowser and header.sortKey == "role" then
             if isRaidBrowser then
-                header.text:SetText("Raid")
+                header.text:SetText(L["Raid"])
             elseif isPvpBrowser then
                 header.text:SetText(isRbgBrowser and "Activity" or "Arena")
             elseif GetListingMode() == "delve" then
-                header.text:SetText("Delve")
+                header.text:SetText(L["Delve"])
             elseif GetListingMode() == "generic" then
                 -- Generic covers Custom Groups (shows Custom PvE/PvP activity types)
                 -- and Questing (shows zone names). Distinguish by examining the first result.
@@ -1487,9 +1487,9 @@ function addonTable.UpdateHeaderVisuals()
                     or ""
                 )
                 if hint:find("custom", 1, true) then
-                    header.text:SetText("Activity")
+                    header.text:SetText(L["Activity"])
                 else
-                    header.text:SetText("Zone")
+                    header.text:SetText(L["Zone"])
                 end
             else
                 header.text:SetText(L["Dungeon"])
@@ -1499,9 +1499,9 @@ function addonTable.UpdateHeaderVisuals()
         elseif isBrowser and header.sortKey == "ilvl" then
             header.text:SetText(L["Comp"])
         elseif isRaidBrowser and header.sortKey == "spec" then
-            header.text:SetText("Difficulty")
+            header.text:SetText(L["Difficulty"])
         elseif header.sortKey == "region" then
-            header.text:SetText("Reg")
+            header.text:SetText(L["Reg"])
         else
             header.text:SetText(header.baseText)
         end
@@ -1563,7 +1563,7 @@ local function CreateHeader(label, sortKey, column)
             GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
             GameTooltip:SetText(title, 1, 1, 1)
             GameTooltip:AddLine(description, 1, 1, 1, true)
-            GameTooltip:AddLine("Click to sort. Click again to reverse the order.", 0.75, 0.75, 0.75, true)
+            GameTooltip:AddLine(L["Click to sort. Click again to reverse the order."], 0.75, 0.75, 0.75, true)
             GameTooltip:Show()
         end
     end)
@@ -1940,11 +1940,11 @@ notesToggleBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
-        GameTooltip:SetText("Show Notes", 1, 1, 1)
-        GameTooltip:AddLine("Expand the Note column and restore the full sorter width.", 1, 1, 1, true)
+        GameTooltip:SetText(L["Show Notes"], 1, 1, 1)
+        GameTooltip:AddLine(L["Expand the Note column and restore the full sorter width."], 1, 1, 1, true)
     else
-        GameTooltip:SetText("Hide Notes", 1, 1, 1)
-        GameTooltip:AddLine("Collapse the Note column and shrink the sorter window.", 1, 1, 1, true)
+        GameTooltip:SetText(L["Hide Notes"], 1, 1, 1)
+        GameTooltip:AddLine(L["Collapse the Note column and shrink the sorter window."], 1, 1, 1, true)
     end
     GameTooltip:Show()
 end)
@@ -2071,8 +2071,8 @@ end
 
 local function FormatAge(seconds)
     if not seconds or seconds <= 0 then return "--" end
-    if seconds < 60 then return seconds .. "s" end
-    return math.floor(seconds / 60) .. "m"
+    if seconds < 60 then return seconds .. L["s"] end
+    return math.floor(seconds / 60) .. L["m"]
 end
 
 local function CanApplyToSearchResult()
@@ -3106,7 +3106,7 @@ function addonTable.BuildBrowserGroupTooltip(result)
     -- ── Member list ───────────────────────────────────────────────────────────
     if result.players and #result.players > 0 then
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Members: (" .. #result.players .. ")", 1, 0.82, 0)
+        GameTooltip:AddLine(string.format(L["Members: (%d)"], #result.players), 1, 0.82, 0)
         local isRaidContext = (listingMode == "raid" or listingMode == "legacy_raid" or listingMode == "open_world")
         local leaderIndex = addonTable.FindLeaderPlayerIndex(result) or 1
         if isRaidContext and #result.players > 5 then
@@ -3211,7 +3211,7 @@ function addonTable.BuildBrowserGroupTooltip(result)
 
     if result.raidListing and type(result.raidListing.defeatedBossList) == "table" and #result.raidListing.defeatedBossList > 0 then
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Bosses Defeated:", 1, 0.82, 0)
+        GameTooltip:AddLine(L["Bosses Defeated:"], 1, 0.82, 0)
         for _, bossName in ipairs(result.raidListing.defeatedBossList) do
             GameTooltip:AddLine(bossName, 1, 1, 1)
         end
@@ -3227,7 +3227,7 @@ function addonTable.BuildBrowserGroupTooltip(result)
             local cR, cG, cB = GetPreferredScoreColor(score, 1, 0.82, 0)
             GameTooltip:AddDoubleLine("Raider.IO M+ Score", tostring(score), 1, 0.82, 0, cR, cG, cB)
         else
-            GameTooltip:AddLine("Raider.IO M+ Score", 1, 0.82, 0)
+            GameTooltip:AddLine(L["Raider.IO M+ Score"], 1, 0.82, 0)
         end
         if mainScore > score then
             local mcR, mcG, mcB = GetPreferredScoreColor(mainScore, 0.85, 0.85, 0.85)
@@ -3242,7 +3242,7 @@ function addonTable.BuildBrowserGroupTooltip(result)
         local txt = rp.longText or rp.displayText or ""
         if txt ~= "" then
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Raider.IO Raid Progress", 1, 0.82, 0)
+            GameTooltip:AddLine(L["Raider.IO Raid Progress"], 1, 0.82, 0)
             GameTooltip:AddLine(txt, 1, 1, 1)
         end
     end
@@ -3271,14 +3271,14 @@ function addonTable.BuildBrowserGroupTooltip(result)
     -- ── Note ──────────────────────────────────────────────────────────────────
     if result.comment and result.comment ~= "" then
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Note:", 1, 0.8, 0)
+        GameTooltip:AddLine(L["Note:"], 1, 0.8, 0)
         GameTooltip:AddLine(result.comment, 0.85, 0.85, 0.85, true)
     end
 
     -- ── Shift hint ────────────────────────────────────────────────────────────
     if RaiderIO and RaiderIO.ShowProfile and leaderName ~= "" then
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Hold Shift for full Raider.IO profile", 0.50, 0.50, 0.50)
+        GameTooltip:AddLine(L["Hold Shift for full Raider.IO profile"], 0.50, 0.50, 0.50)
     end
 end
 
@@ -3391,7 +3391,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
                     levelLine = levelLine .. " (" .. factionName .. ")"
                 end
                 GameTooltip:AddLine(levelLine, 1, 1, 1)
-                GameTooltip:AddLine("Item Level: " .. math.floor(itemLevel or 0), 1, 0.82, 0)
+                GameTooltip:AddLine(L["Item Level: "] .. math.floor(itemLevel or 0), 1, 0.82, 0)
                 if isLeaver then
                     GameTooltip:AddLine("|cffff4040<!>|r Recent M+ leaver flag", 1, 0.25, 0.25)
                 end
@@ -3399,13 +3399,13 @@ CreateRow = function(index, parentOverride, prevRowOverride)
 
                 local listingMode = GetListingMode()
                 if listingMode == "rated_pvp" or listingMode == "pvp" then
-                    GameTooltip:AddLine("PvP Profile", 0.2, 1, 0.2)
+                    GameTooltip:AddLine(L["PvP Profile"], 0.2, 1, 0.2)
                     GameTooltip:AddDoubleLine("Rating:", (self.memberPvpRating and self.memberPvpRating > 0) and self.memberPvpRating or "--", 1, 1, 1, 1, 1, 1)
                     if self.memberPvpBracket then
                         GameTooltip:AddDoubleLine("Bracket:", self.memberPvpBracket, 1, 1, 1, 1, 1, 1)
                     end
                 elseif listingMode == "raid" or listingMode == "legacy_raid" then
-                    GameTooltip:AddLine("Raid Profile", 1, 0.8, 0)
+                    GameTooltip:AddLine(L["Raid Profile"], 1, 0.8, 0)
                     if self.memberRaidProgress then
                         GameTooltip:AddDoubleLine(self.memberRaidProgress.raidName .. ":", self.memberRaidProgress.longText or self.memberRaidProgress.displayText, 1, 1, 1, 1, 1, 1)
                     else
@@ -3483,7 +3483,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
                             local rcR, rcG, rcB = GetPreferredScoreColor(rioScore, 1, 0.82, 0)
                             GameTooltip:AddDoubleLine("Raider.IO M+ Score", tostring(rioScore), 1, 0.82, 0, rcR, rcG, rcB)
                         else
-                            GameTooltip:AddLine("Raider.IO M+ Score", 1, 0.82, 0)
+                            GameTooltip:AddLine(L["Raider.IO M+ Score"], 1, 0.82, 0)
                         end
                         local rioLookupDungeonName = listingDungeonBestMapName or listingDungeonName
                         local rioBestRun, rioBestForDungeon = addonTable.GetRIOBestRunLineData and addonTable.GetRIOBestRunLineData(tooltipRioProfile, rioLookupDungeonName, activityID)
@@ -3574,7 +3574,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
                         if rightText ~= "" then
                             if not addedRaidHeader then
                                 GameTooltip:AddLine(" ")
-                                GameTooltip:AddLine("Raider.IO Raid Progress", 1, 0.8, 0)
+                                GameTooltip:AddLine(L["Raider.IO Raid Progress"], 1, 0.8, 0)
                                 addedRaidHeader = true
                             end
                             GameTooltip:AddDoubleLine(rname, rightText, 1, 1, 1, 1, 1, 1)
@@ -3582,18 +3582,18 @@ CreateRow = function(index, parentOverride, prevRowOverride)
                     end
                 end
             else
-                GameTooltip:SetText("Applicant", 1, 1, 1)
+                GameTooltip:SetText(L["Applicant"], 1, 1, 1)
             end
 
             if self.fullComment and self.fullComment ~= "" then
                 if GameTooltip:NumLines() > 0 then GameTooltip:AddLine(" ") end
-                GameTooltip:AddLine("Applicant Note:", 1, 0.8, 0)
+                GameTooltip:AddLine(L["Applicant Note:"], 1, 0.8, 0)
                 GameTooltip:AddLine(self.fullComment, 0.85, 0.85, 0.85, true) 
             end
 
             if RaiderIO and RaiderIO.ShowProfile and name and name ~= "" then
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("Hold Shift for full Raider.IO profile", 0.50, 0.50, 0.50)
+                GameTooltip:AddLine(L["Hold Shift for full Raider.IO profile"], 0.50, 0.50, 0.50)
             end
             
             GameTooltip:Show()
@@ -3641,7 +3641,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
                 self.groupApplicationStatus = "invited"
                 self.inviteBtn:Hide()
                 self.declineBtn:Hide()
-                self.statusText:SetText("Invited")
+                self.statusText:SetText(L["Invited"])
                 self.statusText:Show()
             end 
         end
@@ -3699,7 +3699,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
     row.declineBtn:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
     row.declineBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Decline", 1, 0.2, 0.2)
+        GameTooltip:SetText(L["Decline"], 1, 0.2, 0.2)
         GameTooltip:Show()
     end)
     row.declineBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
@@ -3752,7 +3752,7 @@ CreateRow = function(index, parentOverride, prevRowOverride)
             r.groupApplicationStatus = "invited"
             self:Hide()
             r.declineBtn:Hide()
-            r.statusText:SetText("Invited")
+            r.statusText:SetText(L["Invited"])
             r.statusText:Show()
         end
     end)
@@ -3764,23 +3764,23 @@ CreateRow = function(index, parentOverride, prevRowOverride)
             local result = r.searchResult
             if addonTable.IsBrowserResultApplied(result) then
                 if result.isRoleFilled then
-                    GameTooltip:SetText("Role Filled - Cancel", 1, 0.82, 0.30)
+                    GameTooltip:SetText(L["Role Filled - Cancel"], 1, 0.82, 0.30)
                 else
-                    GameTooltip:SetText("Cancel", 1, 0.2, 0.2)
+                    GameTooltip:SetText(L["Cancel"], 1, 0.2, 0.2)
                 end
             else
                 if IsAtApplicationLimit() then
-                    GameTooltip:SetText("Cannot Apply", 1.0, 0.35, 0.35)
-                    GameTooltip:AddLine("You have already signed up to the maximum number of groups.", 1, 1, 1, true)
+                    GameTooltip:SetText(L["Cannot Apply"], 1.0, 0.35, 0.35)
+                    GameTooltip:AddLine(L["You have already signed up to the maximum number of groups."], 1, 1, 1, true)
                 elseif CanApplyToSearchResult() then
-                    GameTooltip:SetText("Apply", 0.2, 1, 0.2)
+                    GameTooltip:SetText(L["Apply"], 0.2, 1, 0.2)
                 else
                     GameTooltip:SetText(L["Cannot Apply While Listing"], 1.0, 0.82, 0.30)
                     GameTooltip:AddLine(L["You cannot sign up for another group while your own group is listed."], 1, 1, 1, true)
                 end
             end
         else
-            GameTooltip:SetText("Invite", 0.2, 1, 0.2)
+            GameTooltip:SetText(L["Invite"], 0.2, 1, 0.2)
         end
         GameTooltip:Show()
     end)
@@ -4224,22 +4224,22 @@ PopulateBrowserRow = function(row, result, isAltColor)
 
     if row.ageText then
         if addonTable.IsCancelledStatus and addonTable.IsCancelledStatus(result.applicationStatus) then
-            row.ageText:SetText("Cancelled")
+            row.ageText:SetText(L["Cancelled"])
             row.ageText:SetTextColor(1, 0.45, 0.25)
         elseif addonTable.IsDeclinedStatus and addonTable.IsDeclinedStatus(result.applicationStatus) then
-            row.ageText:SetText("Declined")
+            row.ageText:SetText(L["Declined"])
             row.ageText:SetTextColor(1, 0.2, 0.2)
         elseif result.applicationStatus == "invited" or result.applicationStatus == "inviteaccepted" then
-            row.ageText:SetText("Invited")
+            row.ageText:SetText(L["Invited"])
             row.ageText:SetTextColor(0.2, 1, 0.2)
         elseif result.isRoleFilled then
-            row.ageText:SetText("Filled")
+            row.ageText:SetText(L["Filled"])
             row.ageText:SetTextColor(1.0, 0.82, 0.30)
         elseif addonTable.IsBrowserResultApplied(result) then
-            row.ageText:SetText("Pending")
+            row.ageText:SetText(L["Pending"])
             row.ageText:SetTextColor(0.2, 1, 0.2)
         elseif result.isUnavailable then
-            row.ageText:SetText(result.isDelisted and "Delisted" or "Filtered")
+            row.ageText:SetText(result.isDelisted and L["Delisted"] or L["Filtered"])
             row.ageText:SetTextColor(1, 0.35, 0.25)
         else
             row.ageText:SetText(FormatAge(result.age))
@@ -4248,7 +4248,7 @@ PopulateBrowserRow = function(row, result, isAltColor)
     end
 
     if addonTable.IsCancelledStatus and addonTable.IsCancelledStatus(result.applicationStatus) then
-        row.noteText:SetText("Cancelled")
+        row.noteText:SetText(L["Cancelled"])
         row.noteText:SetTextColor(1, 0.45, 0.25)
     elseif result.isRoleFilled then
         row.noteText:SetText(result.comment or "")
@@ -4257,7 +4257,7 @@ PopulateBrowserRow = function(row, result, isAltColor)
         row.noteText:SetText(result.comment or "")
         row.noteText:SetTextColor(1, 1, 1)
     elseif result.isUnavailable then
-        row.noteText:SetText(result.isDelisted and "Delisted" or "Filtered")
+        row.noteText:SetText(result.isDelisted and L["Delisted"] or L["Filtered"])
         row.noteText:SetTextColor(1, 0.35, 0.25)
     else
         row.noteText:SetText(result.comment or "")
@@ -4457,7 +4457,7 @@ function addonTable.UpdateDisplay()
         if addonTable.groupCountText then
             local total = #(addonTable.SearchResults or {})
             local shown = #activeResults
-            addonTable.groupCountText:SetText(string.format("Showing %d of %d groups", shown, total))
+            addonTable.groupCountText:SetText(string.format(L["%d of %d Groups"], shown, total))
         end
 
         local stabilizeBrowserOrder = browserFilters.keepUnavailable ~= false
@@ -4548,7 +4548,7 @@ function addonTable.UpdateDisplay()
 
         local categoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
         if #activeResults == 0 and categoryKey == "RAIDS_LEGACY" then
-            emptyStateText:SetText("Legacy raid results must be loaded from Blizzard's Premade Groups panel first.\n\nOpen Blizzard's Group Finder, select Legacy Raids there, then Oak will display those results here.")
+            emptyStateText:SetText(L["Legacy raid results must be loaded from Blizzard's Premade Groups panel first.\n\nOpen Blizzard's Group Finder, select Legacy Raids there, then Oak will display those results here."])
             emptyStateText:Show()
         end
         addonTable._browserRuntimeFilters = nil

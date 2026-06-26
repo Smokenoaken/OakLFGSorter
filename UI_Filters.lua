@@ -1436,26 +1436,26 @@ addonTable.SyncSharedRegionToggles = SyncSharedRegionToggleBoxes
 
 local function ShowRegionToggleTooltip(owner)
     GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-    GameTooltip:SetText("Regions", 1, 1, 1)
-    GameTooltip:AddLine("Show visible region tags in Oak rows and region details in tooltips. Region is derived from the leader realm, similar to Premade Regions.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Regions"], 1, 1, 1)
+    GameTooltip:AddLine(L["Show visible region tags in Oak rows and region details in tooltips. Region is derived from the leader realm, similar to Premade Regions."], 1, 1, 1, true)
     GameTooltip:Show()
 end
 
 function addonTable.ShowRegionFlagsToggleTooltip(owner)
     GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-    GameTooltip:SetText("Region Flags", 1, 1, 1)
+    GameTooltip:SetText(L["Region Flags"], 1, 1, 1)
     if addonTable.CanShowRegionFlags and addonTable.CanShowRegionFlags() then
-        GameTooltip:AddLine("Show country-style flags instead of Oak's region tags. This uses realm lookup data provided by GroupfinderFlags when that addon is installed and enabled.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Show country-style flags instead of Oak's region tags. This uses realm lookup data provided by GroupfinderFlags when that addon is installed and enabled."], 1, 1, 1, true)
     else
-        GameTooltip:AddLine("Requires the GroupfinderFlags addon to be installed and enabled. Oak will continue showing region tags without it.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Requires the GroupfinderFlags addon to be installed and enabled. Oak will continue showing region tags without it."], 1, 1, 1, true)
     end
     GameTooltip:Show()
 end
 
 local function ShowLowLatencyToggleTooltip(owner)
     GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-    GameTooltip:SetText("Region Filters", 1, 1, 1)
-    GameTooltip:AddLine("Choose exactly which regions Oak should show in both the listing browser and the find browser.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Region Filters"], 1, 1, 1)
+    GameTooltip:AddLine(L["Choose exactly which regions Oak should show in both the listing browser and the find browser."], 1, 1, 1, true)
     GameTooltip:Show()
 end
 
@@ -1510,8 +1510,8 @@ toggleFiltersBtn:SetAutoWidth(60, 130, 22)
 toggleFiltersBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Filters", 1, 1, 1)
-    GameTooltip:AddLine("Open Oak's filter panel for the current view.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Filters"], 1, 1, 1)
+    GameTooltip:AddLine(L["Open Oak's filter panel for the current view."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 toggleFiltersBtn:SetScript("OnLeave", function(self)
@@ -1525,8 +1525,8 @@ refreshBtn:SetAutoWidth(60, 130, 22)
 refreshBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Refresh", 1, 1, 1)
-    GameTooltip:AddLine("Refresh Oak's current browser results or applicant list.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Refresh"], 1, 1, 1)
+    GameTooltip:AddLine(L["Refresh Oak's current browser results or applicant list."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 refreshBtn:SetScript("OnLeave", function(self)
@@ -1540,8 +1540,8 @@ delistBtn:SetAutoWidth(60, 130, 22)
 delistBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Delist", 1, 1, 1)
-    GameTooltip:AddLine("Remove your current group listing from Blizzard's finder.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Delist"], 1, 1, 1)
+    GameTooltip:AddLine(L["Remove your current group listing from Blizzard's finder."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 delistBtn:SetScript("OnLeave", function(self)
@@ -1555,8 +1555,8 @@ editListingBtn:SetAutoWidth(50, 120, 22)
 editListingBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Edit Listing", 1, 1, 1)
-    GameTooltip:AddLine("Open Blizzard's edit listing screen for your active group.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Edit Listing"], 1, 1, 1)
+    GameTooltip:AddLine(L["Open Blizzard's edit listing screen for your active group."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 editListingBtn:SetScript("OnLeave", function(self)
@@ -1909,7 +1909,7 @@ end
 ApplyFlyoutPanelChrome(filterPanel, addonTable.FilterTitle)
 
 local yOffset = -45
-local rolesToFilter = { {"TANK", L["Tank"]}, {"HEALER", L["Healer"]}, {"DAMAGER", "DPS"} }
+local rolesToFilter = { {"TANK", L["Tank"]}, {"HEALER", L["Healer"]}, {"DAMAGER", L["DPS"]} }
 
 for _, rData in ipairs(rolesToFilter) do
     local rKey, rLabel = rData[1], rData[2]
@@ -1955,34 +1955,34 @@ btnNone:SetScript("OnClick", function()
 end)
 yOffset = yOffset - 25
 
-local btnLust = addonTable.CreateFlatButton(filterPanel, "Lust", btnWidth)
+local btnLust = addonTable.CreateFlatButton(filterPanel, L["Lust"], btnWidth)
 quickFilterButtons.lust = btnLust
 btnLust:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, yOffset)
 btnLust:SetScript("OnClick", function() ApplyQuickFilter(classData.lust) end)
 
-local btnBrez = addonTable.CreateFlatButton(filterPanel, "B-Rez", btnWidth)
+local btnBrez = addonTable.CreateFlatButton(filterPanel, L["B-Rez"], btnWidth)
 quickFilterButtons.brez = btnBrez
 btnBrez:SetPoint("LEFT", btnLust, "RIGHT", 10, 0)
 btnBrez:SetScript("OnClick", function() ApplyQuickFilter(classData.brez) end)
 yOffset = yOffset - 25
 
-local btnPlate = addonTable.CreateFlatButton(filterPanel, "Plate", btnWidth)
+local btnPlate = addonTable.CreateFlatButton(filterPanel, L["Plate"], btnWidth)
 quickFilterButtons.plate = btnPlate
 btnPlate:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, yOffset)
 btnPlate:SetScript("OnClick", function() ApplyQuickFilter(classData.plate) end)
 
-local btnMail = addonTable.CreateFlatButton(filterPanel, "Mail", btnWidth)
+local btnMail = addonTable.CreateFlatButton(filterPanel, L["Mail"], btnWidth)
 quickFilterButtons.mail = btnMail
 btnMail:SetPoint("LEFT", btnPlate, "RIGHT", 10, 0)
 btnMail:SetScript("OnClick", function() ApplyQuickFilter(classData.mail) end)
 yOffset = yOffset - 25
 
-local btnLeather = addonTable.CreateFlatButton(filterPanel, "Leather", btnWidth)
+local btnLeather = addonTable.CreateFlatButton(filterPanel, L["Leather"], btnWidth)
 quickFilterButtons.leather = btnLeather
 btnLeather:SetPoint("TOPLEFT", filterPanel, "TOPLEFT", 15, yOffset)
 btnLeather:SetScript("OnClick", function() ApplyQuickFilter(classData.leather) end)
 
-local btnCloth = addonTable.CreateFlatButton(filterPanel, "Cloth", btnWidth)
+local btnCloth = addonTable.CreateFlatButton(filterPanel, L["Cloth"], btnWidth)
 quickFilterButtons.cloth = btnCloth
 btnCloth:SetPoint("LEFT", btnLeather, "RIGHT", 10, 0)
 btnCloth:SetScript("OnClick", function() ApplyQuickFilter(classData.cloth) end)
@@ -2007,10 +2007,21 @@ for i, class in ipairs(addonTable.ValidClasses) do
     
     local text = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     text:SetPoint("LEFT", box, "RIGHT", 5, 0)
-    local displayClass = class:sub(1,1) .. class:sub(2):lower()
-    
-    if displayClass == "Deathknight" then displayClass = "DK"
-    elseif displayClass == "Demonhunter" then displayClass = "DH" end
+    local displayClass = ({
+        DEATHKNIGHT = L["Death Knight"],
+        DEMONHUNTER = L["Demon Hunter"],
+        DRUID = L["Druid"],
+        EVOKER = L["Evoker"],
+        HUNTER = L["Hunter"],
+        MAGE = L["Mage"],
+        MONK = L["Monk"],
+        PALADIN = L["Paladin"],
+        PRIEST = L["Priest"],
+        ROGUE = L["Rogue"],
+        SHAMAN = L["Shaman"],
+        WARLOCK = L["Warlock"],
+        WARRIOR = L["Warrior"],
+    })[class] or (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[class]) or class
     
     text:SetText(addonTable.ApplyClassColor(displayClass, class))
     
@@ -2027,7 +2038,7 @@ addonTable.FilterBottomDivider:SetColorTexture(addonTable.ClassColor.r, addonTab
 addonTable.FilterBottomDivider:SetSize(160, 1)
 
 local applicantRegionLabel = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
-applicantRegionLabel:SetText("Regions")
+applicantRegionLabel:SetText(L["Regions"])
 applicantRegionLabel:SetTextColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b)
 
 local applicantRegionContainer = CreateFrame("Frame", nil, filterPanel)
@@ -2051,7 +2062,7 @@ local function CreateApplicantRegionFilterOption(parent, regionCode, xOffset, yO
         ApplySharedRegionToggleVisual(self, label, addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText(meta.label or regionCode, 1, 1, 1)
-        GameTooltip:AddLine("Toggle whether Oak shows applicants from this region.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Toggle whether Oak shows applicants from this region."], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     box:SetScript("OnLeave", function()
@@ -2115,14 +2126,14 @@ end
 addonTable.SyncApplicantFilterPanelControls = SyncApplicantFilterPanelControls
 
 -- Decline Filtered Button
-local btnDecline = addonTable.CreateFlatButton(filterPanel, "Decline Filtered", 160)
+local btnDecline = addonTable.CreateFlatButton(filterPanel, L["Decline Filtered"], 160)
 btnDecline:SetPoint("BOTTOM", filterPanel, "BOTTOM", 0, 72)
 btnDecline:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(1, 0.2, 0.2, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Decline Hidden Applicants", 1, 0.2, 0.2)
-    GameTooltip:AddLine("Permanently declines applicants currently hidden by your active filters.", 1, 1, 1, true)
-    GameTooltip:AddLine("|cFFFFFF00Note:|r Due to Blizzard restrictions, you must click this button once for EVERY applicant you wish to decline. Keep clicking until the list is clear!", 1, 1, 1, true)
+    GameTooltip:SetText(L["Decline Hidden Applicants"], 1, 0.2, 0.2)
+    GameTooltip:AddLine(L["Permanently declines applicants currently hidden by your active filters."], 1, 1, 1, true)
+    GameTooltip:AddLine(L["|cFFFFFF00Note:|r Due to Blizzard restrictions, you must click this button once for EVERY applicant you wish to decline. Keep clicking until the list is clear!"], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 btnDecline:SetScript("OnLeave", function(self)
@@ -2145,13 +2156,13 @@ autoHideRolesBox:SetPoint("BOTTOMLEFT", filterPanel, "BOTTOMLEFT", 15, 30)
 
 local autoHideRolesText = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 autoHideRolesText:SetPoint("LEFT", autoHideRolesBox, "RIGHT", 8, 0)
-autoHideRolesText:SetText("Auto-Hide Filled Roles")
+autoHideRolesText:SetText(L["Auto-Hide Filled Roles"])
 
 autoHideRolesBox:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Auto-Hide Filled Roles", 1, 1, 1)
-    GameTooltip:AddLine("When your current group has already filled a role target, applicants for that role will be filtered out automatically.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Auto-Hide Filled Roles"], 1, 1, 1)
+    GameTooltip:AddLine(L["When your current group has already filled a role target, applicants for that role will be filtered out automatically."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 autoHideRolesBox:SetScript("OnLeave", function(self)
@@ -2171,13 +2182,13 @@ mutePingBox:SetPoint("BOTTOMLEFT", filterPanel, "BOTTOMLEFT", 15, 8)
 
 local mutePingText = filterPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 mutePingText:SetPoint("LEFT", mutePingBox, "RIGHT", 8, 0)
-mutePingText:SetText("Mute Ping")
+mutePingText:SetText(L["Mute Ping"])
 
 mutePingBox:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Mute Ping", 1, 1, 1)
-    GameTooltip:AddLine("Suppress the Blizzard new-applicant alert sound while Oak LFG Sorter is open and the Blizzard Group Finder window is closed.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Mute Ping"], 1, 1, 1)
+    GameTooltip:AddLine(L["Suppress the Blizzard new-applicant alert sound while Oak LFG Sorter is open and the Blizzard Group Finder window is closed."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 mutePingBox:SetScript("OnLeave", function(self)
@@ -2600,14 +2611,14 @@ local function GetRaidBossOptions()
     end
 
     local options = {
-        { value = "ANY", label = "Any Boss Kills" },
-        { value = "0", label = "Fresh (0 Kills)" },
+        { value = "ANY", label = L["Any Boss Kills"] },
+        { value = "0", label = L["Fresh (0 Kills)"] },
     }
 
     for kills = 1, math.max(1, highestBossCount) do
         table.insert(options, {
             value = tostring(kills),
-            label = string.format("%d+ Boss%s", kills, kills == 1 and "" or "es"),
+            label = string.format(L["%d+ Bosses"], kills),
         })
     end
 
@@ -2618,21 +2629,21 @@ end
 local function GetNeedsMyClassLabel()
     local _, playerClass = UnitClass("player")
     local labels = {
-        DEATHKNIGHT = "No DKs",
-        DEMONHUNTER = "No DHs",
-        DRUID       = "No Druids",
-        EVOKER      = "No Evokers",
-        HUNTER      = "No Hunters",
-        MAGE        = "No Mages",
-        MONK        = "No Monks",
-        PALADIN     = "No Pallies",
-        PRIEST      = "No Priests",
-        ROGUE       = "No Rogues",
-        SHAMAN      = "No Shammies",
-        WARLOCK     = "No Locks",
-        WARRIOR     = "No Warriors",
+        DEATHKNIGHT = L["No DKs"],
+        DEMONHUNTER = L["No DHs"],
+        DRUID       = L["No Druids"],
+        EVOKER      = L["No Evokers"],
+        HUNTER      = L["No Hunters"],
+        MAGE        = L["No Mages"],
+        MONK        = L["No Monks"],
+        PALADIN     = L["No Pallies"],
+        PRIEST      = L["No Priests"],
+        ROGUE       = L["No Rogues"],
+        SHAMAN      = L["No Shammies"],
+        WARLOCK     = L["No Locks"],
+        WARRIOR     = L["No Warriors"],
     }
-    return labels[playerClass] or "No [class]"
+    return labels[playerClass] or L["No [class]"]
 end
 addonTable.GetNeedsMyClassLabel = GetNeedsMyClassLabel
 
@@ -2640,9 +2651,9 @@ addonTable.GetNeedsMyClassLabel = GetNeedsMyClassLabel
 local function GetSearchQueryLabel(mode)
     if mode == "mythic_plus" or mode == "dungeon" then
         -- Dungeon and M+ share the same filter panel layout
-        return "Examples: 10-11, 15, 15-20"
+        return L["Examples: 10-11, 15, 15-20"]
     elseif mode == "raid" or mode == "legacy_raid" then
-        return "Search raid groups..."
+        return L["Search raid groups..."]
     end
     return ""
 end
@@ -2650,16 +2661,16 @@ addonTable.GetSearchQueryLabel = GetSearchQueryLabel
 
 local playstyleDropdown = CreateBrowserDropdown(browserContent, 188, function()
     return {
-        { value = "ANY", label = "Any Playstyle" },
-        { value = "COMPETITIVE", label = "Competitive" },
-        { value = "RELAXED", label = "Relaxed" },
-        { value = "LEARNING", label = "Learning" },
-        { value = "CARRY", label = "Carry Offered" },
+        { value = "ANY", label = L["Any Playstyle"] },
+        { value = "COMPETITIVE", label = L["Competitive"] },
+        { value = "RELAXED", label = L["Relaxed"] },
+        { value = "LEARNING", label = L["Learning"] },
+        { value = "CARRY", label = L["Carry Offered"] },
     }
-end, "playstyle", "Any Playstyle")
+end, "playstyle", L["Any Playstyle"])
 
 local difficultyDropdown = CreateBrowserDropdown(browserContent, 188, GetBrowserDifficultyOptions, "difficulty", L["Any Difficulty"])
-local raidBossesDropdown = CreateBrowserDropdown(browserContent, 188, GetRaidBossOptions, "raidBossesMin", "Any Boss Kills")
+local raidBossesDropdown = CreateBrowserDropdown(browserContent, 188, GetRaidBossOptions, "raidBossesMin", L["Any Boss Kills"])
 
 -- Raid range filter rows (Boss Kills, Tanks, Healers, DPS)
 local raidRangeRows = {}
@@ -2677,8 +2688,8 @@ local function CreateRaidRangeRow(filterKey, labelText)
     box:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(labelText, 1, 1, 1)
-        GameTooltip:AddLine("Enter a number or range expression, then press Enter.", 1, 1, 1, true)
-        GameTooltip:AddLine("Examples:  3  |  1-4  |  <3  |  >=2  |  >0", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["Enter a number or range expression, then press Enter."], 1, 1, 1, true)
+        GameTooltip:AddLine(L["Examples:  3  |  1-4  |  <3  |  >=2  |  >0"], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     box:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -2697,10 +2708,10 @@ local function CreateRaidRangeRow(filterKey, labelText)
     return raidRangeRows[filterKey]
 end
 
-CreateRaidRangeRow("raidBossKills", "Boss Kills")
-CreateRaidRangeRow("raidTanks",    "Tanks")
-CreateRaidRangeRow("raidHealers",  "Healers")
-CreateRaidRangeRow("raidDps",      "DPS")
+CreateRaidRangeRow("raidBossKills", L["Boss Kills"])
+CreateRaidRangeRow("raidTanks",    L["Tanks"])
+CreateRaidRangeRow("raidHealers",  L["Healers"])
+CreateRaidRangeRow("raidDps",      L["DPS"])
 
 local keyRangeLabel = browserContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 keyRangeLabel:SetText(L["Key Range"])
@@ -2711,39 +2722,39 @@ keyRangeTo:SetText("to")
 local keyMaxBox = CreateBrowserNumberBox(browserContent, "keyMax", 48)
 -- Role + utility toggle boxes (matching old Search.lua layout: Need/Has columns)
 local browserToggleKeys = {
-    { key = "needsTank",   label = "Need Tank",    column = 1 },
-    { key = "hasTank",     label = "Has Tank",     column = 2 },
-    { key = "needsHealer", label = "Need Healer",  column = 1 },
-    { key = "hasHealer",   label = "Has Healer",   column = 2 },
-    { key = "needsDPS",    label = "Need Damage",  column = 1 },
+    { key = "needsTank",   label = L["Need Tank"],    column = 1 },
+    { key = "hasTank",     label = L["Has Tank"],     column = 2 },
+    { key = "needsHealer", label = L["Need Healer"],  column = 1 },
+    { key = "hasHealer",   label = L["Has Healer"],   column = 2 },
+    { key = "needsDPS",    label = L["Need Damage"],  column = 1 },
     -- column 2 of needsDPS row = "No [class]" handled separately below
-    { key = "partyFit",    label = "Party Fit",    column = 1 },
-    { key = "lustMatch",   label = "Lust Match",   column = 2 },
-    { key = "needsBrez",   label = "Need BRez",    column = 1 },
-    { key = "hasBrez",     label = "Has BRez",     column = 2 },
-    { key = "hideDeclined",label = "Hide Declined",column = 2 },
-    { key = "matchMyRaidLockout", label = "Match My Lockout", column = 1, span = 2, raidOnly = true },
+    { key = "partyFit",    label = L["Party Fit"],    column = 1 },
+    { key = "lustMatch",   label = L["Lust Match"],   column = 2 },
+    { key = "needsBrez",   label = L["Need BRez"],    column = 1 },
+    { key = "hasBrez",     label = L["Has BRez"],     column = 2 },
+    { key = "hideDeclined",label = L["Hide Declined"],column = 2 },
+    { key = "matchMyRaidLockout", label = L["Match My Lockout"], column = 1, span = 2, raidOnly = true },
 }
 local browserToggleTooltips = {
     lustMatch = {
-        title = "Lust Match",
-        body = "Shows groups where Lust is covered or can still be covered after your party joins.",
-        detail = "A group passes if it already has Lust, your party brings Lust, or there will still be room for a Lust-capable class after inviting your party.",
+        title = L["Lust Match"],
+        body = L["Shows groups where Lust is covered or can still be covered after your party joins."],
+        detail = L["A group passes if it already has Lust, your party brings Lust, or there will still be room for a Lust-capable class after inviting your party."],
     },
     needsBrez = {
-        title = "Need BRez",
-        body = "Shows groups that do not currently have a battle resurrection, but are still reasonable for your current party to join.",
-        detail = "If your current party already brings BRez, those groups still pass. If your party does not bring BRez, Oak only keeps groups that still have room for a BRez-capable class after your party joins.",
+        title = L["Need BRez"],
+        body = L["Shows groups that do not currently have a battle resurrection, but are still reasonable for your current party to join."],
+        detail = L["If your current party already brings BRez, those groups still pass. If your party does not bring BRez, Oak only keeps groups that still have room for a BRez-capable class after your party joins."],
     },
     hasBrez = {
-        title = "Has BRez",
-        body = "Shows groups that will have a battle resurrection once your current party joins.",
-        detail = "A group passes if it already has BRez or your current party brings BRez and the party can actually fit into the group.",
+        title = L["Has BRez"],
+        body = L["Shows groups that will have a battle resurrection once your current party joins."],
+        detail = L["A group passes if it already has BRez or your current party brings BRez and the party can actually fit into the group."],
     },
     hideDeclined = {
-        title = "Hide Declined",
-        body = "Hides groups that have declined your application.",
-        detail = "When this is off, declined groups can remain visible so the browser list does not jump around as much.",
+        title = L["Hide Declined"],
+        body = L["Hides groups that have declined your application."],
+        detail = L["When this is off, declined groups can remain visible so the browser list does not jump around as much."],
     },
 }
 
@@ -3135,8 +3146,9 @@ browserResetBtn:SetScript("OnClick", function()
 end)
 
 -- Activity Select All / None buttons
-local activitySelectAllBtn = addonTable.CreateFlatButton(browserContent, "A", 18)
+local activitySelectAllBtn = addonTable.CreateFlatButton(browserContent, L["A"], 18)
 activitySelectAllBtn.text:SetFontObject("SorterClassic_FontSmall")
+activitySelectAllBtn:SetAutoWidth(24, 52, 10)
 activitySelectAllBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -3159,8 +3171,9 @@ activitySelectAllBtn:SetScript("OnClick", function()
     RefreshBrowserFilters()
 end)
 
-local activitySelectNoneBtn = addonTable.CreateFlatButton(browserContent, "N", 18)
+local activitySelectNoneBtn = addonTable.CreateFlatButton(browserContent, L["N"], 18)
 activitySelectNoneBtn.text:SetFontObject("SorterClassic_FontSmall")
+activitySelectNoneBtn:SetAutoWidth(24, 52, 10)
 activitySelectNoneBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -3182,8 +3195,9 @@ activitySelectNoneBtn:SetScript("OnClick", function()
     RefreshBrowserFilters()
 end)
 
-local activitySelectBountifulBtn = addonTable.CreateFlatButton(browserContent, "B", 18)
+local activitySelectBountifulBtn = addonTable.CreateFlatButton(browserContent, L["B"], 18)
 activitySelectBountifulBtn.text:SetFontObject("SorterClassic_FontSmall")
+activitySelectBountifulBtn:SetAutoWidth(24, 52, 10)
 activitySelectBountifulBtn:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -3429,9 +3443,9 @@ local function UpdateBrowserActivityButtons(startY)
                             addonTable.AddRestrictedCombatTooltipLine(GameTooltip, "Dungeon teleports")
                         end
                     elseif spellID and BrowserKnowsSpell(spellID) then
-                        GameTooltip:AddLine("Click to teleport", 0.5, 1, 0.5)
+                        GameTooltip:AddLine(L["Click to teleport"], 0.5, 1, 0.5)
                     elseif spellID then
-                        GameTooltip:AddLine("Teleport spell detected; click to try", 1, 0.82, 0.30)
+                        GameTooltip:AddLine(L["Teleport spell detected; click to try"], 1, 0.82, 0.30)
                     end
                     GameTooltip:Show()
                 end)
@@ -3474,7 +3488,7 @@ local function UpdateBrowserActivityButtons(startY)
             button.scoreHitbox:SetScript("OnEnter", function(self)
                 if IsRestrictedCombatInInstance() then
                     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-                    GameTooltip:SetText("Gives Score", 1, 1, 1)
+                    GameTooltip:SetText(L["Gives Score"], 1, 1, 1)
                     if addonTable.AddRestrictedCombatTooltipLine then
                         addonTable.AddRestrictedCombatTooltipLine(GameTooltip, "Score-gain details")
                     end
@@ -3491,16 +3505,16 @@ local function UpdateBrowserActivityButtons(startY)
                 local breakdown = data.scoreTarget.estimatedGainBreakdown
                 if tLevel and tLevel > 0 then
                     if eGain and eGain > 0 then
-                        GameTooltip:AddLine(string.format("A timed +%d should increase your score by about %d points for this dungeon.", tLevel, eGain), 0.40, 1.00, 0.55, true)
+                        GameTooltip:AddLine(string.format(L["A timed +%d should increase your score by about %d points for this dungeon."], tLevel, eGain), 0.40, 1.00, 0.55, true)
                     else
-                        GameTooltip:AddLine(string.format("A timed +%d should increase your score for this dungeon.", tLevel), 0.40, 1.00, 0.55, true)
+                        GameTooltip:AddLine(string.format(L["A timed +%d should increase your score for this dungeon."], tLevel), 0.40, 1.00, 0.55, true)
                     end
                     if type(breakdown) == "table" then
                         GameTooltip:AddLine(" ")
-                        GameTooltip:AddLine(string.format("+%d timed: %d  ++%d: %d  +++%d: %d", tLevel, tonumber(breakdown.timed) or 0, tLevel, tonumber(breakdown.plusTwo) or 0, tLevel, tonumber(breakdown.plusThree) or 0), 0.75, 1.00, 0.80, true)
+                        GameTooltip:AddLine(string.format(L["+%d timed: %d  ++%d: %d  +++%d: %d"], tLevel, tonumber(breakdown.timed) or 0, tLevel, tonumber(breakdown.plusTwo) or 0, tLevel, tonumber(breakdown.plusThree) or 0), 0.75, 1.00, 0.80, true)
                     end
                 else
-                    GameTooltip:AddLine("Oak could not determine a score-gain target for this dungeon yet.", 1, 1, 1, true)
+                    GameTooltip:AddLine(L["Oak could not determine a score-gain target for this dungeon yet."], 1, 1, 1, true)
                 end
                 GameTooltip:Show()
             end)
@@ -3634,8 +3648,8 @@ function addonTable.UpdateBrowserFilterPanel()
     local dropdownWidth = math.max(
         188,
         addonTable.MeasureBrowserTextWidth(L["Any Difficulty"], _G["SorterClassic_FontRegular"]) + 44,
-        addonTable.MeasureBrowserTextWidth("Any Playstyle", _G["SorterClassic_FontRegular"]) + 44,
-        addonTable.MeasureBrowserTextWidth("Any Boss Kills", _G["SorterClassic_FontRegular"]) + 44
+        addonTable.MeasureBrowserTextWidth(L["Any Playstyle"], _G["SorterClassic_FontRegular"]) + 44,
+        addonTable.MeasureBrowserTextWidth(L["Any Boss Kills"], _G["SorterClassic_FontRegular"]) + 44
     )
     local desiredContentWidth = math.max(
         dropdownWidth,
@@ -4277,7 +4291,7 @@ addonTable.OptionsRegionFlagsBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edge
 addonTable.OptionsRegionFlagsBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 33, -64)
 addonTable.OptionsRegionFlagsLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 addonTable.OptionsRegionFlagsLabel:SetPoint("LEFT", addonTable.OptionsRegionFlagsBox, "RIGHT", 8, 0)
-addonTable.OptionsRegionFlagsLabel:SetText("Show Flags Instead of Tags")
+addonTable.OptionsRegionFlagsLabel:SetText(L["Show Flags Instead of Tags"])
 addonTable.OptionsRegionFlagsBox:Hide()
 addonTable.OptionsRegionFlagsLabel:Hide()
 
@@ -4303,7 +4317,7 @@ optionsPartyKeysBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonT
 optionsPartyKeysBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -130)
 local optionsPartyKeysLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsPartyKeysLabel:SetPoint("LEFT", optionsPartyKeysBox, "RIGHT", 8, 0)
-optionsPartyKeysLabel:SetText("Show Party Keys")
+optionsPartyKeysLabel:SetText(L["Show Party Keys"])
 
 local optionsBrowserTooltipBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
 optionsBrowserTooltipBox:SetSize(16, 16)
@@ -4311,7 +4325,7 @@ optionsBrowserTooltipBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = a
 optionsBrowserTooltipBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -152)
 local optionsBrowserTooltipLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsBrowserTooltipLabel:SetPoint("LEFT", optionsBrowserTooltipBox, "RIGHT", 8, 0)
-optionsBrowserTooltipLabel:SetText("Tooltip on Cursor")
+optionsBrowserTooltipLabel:SetText(L["Tooltip on Cursor"])
 
 local optionsKeepGoneBox = CreateFrame("Button", nil, optionsPanel, "BackdropTemplate")
 optionsKeepGoneBox:SetSize(16, 16)
@@ -4319,21 +4333,21 @@ optionsKeepGoneBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addonTa
 optionsKeepGoneBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -174)
 local optionsKeepGoneLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsKeepGoneLabel:SetPoint("LEFT", optionsKeepGoneBox, "RIGHT", 8, 0)
-optionsKeepGoneLabel:SetText("Keep Delisted/Cancelled/Filtered")
+optionsKeepGoneLabel:SetText(L["Keep Delisted/Cancelled/Filtered"])
 
 local optionsMythicSideLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsMythicSideLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -198)
-optionsMythicSideLabel:SetText("M+ Panel Side")
+optionsMythicSideLabel:SetText(L["M+ Panel Side"])
 local optionsMythicSideButton, optionsMythicSideList = addonTable.CreateSimpleDropdown(
     optionsPanel,
     170,
     function()
-        return OakLFGSorterDB.mythicPlusPanelSide == "LEFT" and "Left of Oak" or "Right of Oak"
+        return OakLFGSorterDB.mythicPlusPanelSide == "LEFT" and L["Left of Oak"] or L["Right of Oak"]
     end,
     function()
         return {
-            { id = "RIGHT", label = "Right of Oak" },
-            { id = "LEFT", label = "Left of Oak" },
+            { id = "RIGHT", label = L["Right of Oak"] },
+            { id = "LEFT", label = L["Left of Oak"] },
         }
     end,
     function(id)
@@ -4354,32 +4368,32 @@ optionsKeepMythicBox:SetBackdrop({bgFile = addonTable.FLAT_TEX, edgeFile = addon
 optionsKeepMythicBox:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -244)
 local optionsKeepMythicLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsKeepMythicLabel:SetPoint("LEFT", optionsKeepMythicBox, "RIGHT", 8, 0)
-optionsKeepMythicLabel:SetText("Keep M+ Panel Open")
+optionsKeepMythicLabel:SetText(L["Keep M+ Panel Open"])
 optionsKeepMythicBox:Hide()
 optionsKeepMythicLabel:Hide()
 
 local optionsThemeModeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsThemeModeLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -268)
-optionsThemeModeLabel:SetText("Theme")
+optionsThemeModeLabel:SetText(L["Theme"])
 local optionsThemeModeNotice = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 optionsThemeModeNotice:SetPoint("LEFT", optionsThemeModeLabel, "RIGHT", 8, 0)
-optionsThemeModeNotice:SetText("|cffffff00Will Force Reload|r")
+optionsThemeModeNotice:SetText(L["|cffffff00Will Force Reload|r"])
 local optionsThemeModeButton = addonTable.CreateThemeModeDropdown(optionsPanel, 170)
 optionsThemeModeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -172)
 
 local optionsStyleLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsStyleLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -204)
-optionsStyleLabel:SetText("Modern Style")
+optionsStyleLabel:SetText(L["Modern Style"])
 optionsStyleButton, optionsStyleList = addonTable.CreateThemeStyleDropdown(optionsPanel, 170)
 optionsStyleButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -222)
 
 local optionsThemeAccentLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsThemeAccentLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -254)
-optionsThemeAccentLabel:SetText("Modern Accent")
+optionsThemeAccentLabel:SetText(L["Modern Accent"])
 optionsThemeButton, optionsThemeList = addonTable.CreateThemeDropdown(optionsPanel, 170)
 optionsThemeButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -272)
 
-optionsThemeColorButton = addonTable.CreateFlatButton(optionsPanel, "Custom Accent", 170)
+optionsThemeColorButton = addonTable.CreateFlatButton(optionsPanel, L["Custom Accent"], 170)
 optionsThemeColorButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -298)
 optionsThemeColorButton:SetScript("OnClick", function()
     if addonTable.OpenThemeColorPicker then
@@ -4389,8 +4403,8 @@ end)
 optionsThemeColorButton:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Custom Accent", 1, 1, 1)
-    GameTooltip:AddLine("Choose a custom accent color for the Modern theme.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Custom Accent"], 1, 1, 1)
+    GameTooltip:AddLine(L["Choose a custom accent color for the Modern theme."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsThemeColorButton:SetScript("OnLeave", function(self)
@@ -4407,7 +4421,7 @@ do
     local browserBindingCaptureActive = false
     optionsKeybindLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
     optionsKeybindLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -154)
-    optionsKeybindLabel:SetText("Browser Keybind")
+    optionsKeybindLabel:SetText(L["Browser Keybind"])
 
     local optionsKeybindValue = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
     optionsKeybindValue:SetPoint("TOPLEFT", optionsKeybindLabel, "BOTTOMLEFT", 0, -36)
@@ -4482,7 +4496,7 @@ do
 
     local function SaveBrowserBinding(bindingKey)
         if InCombatLockdown and InCombatLockdown() then
-            optionsKeybindValue:SetText("Cannot change bindings in combat.")
+            optionsKeybindValue:SetText(L["Cannot change bindings in combat."])
             StopBrowserBindingCapture()
             return
         end
@@ -4524,11 +4538,11 @@ do
         return prefix .. key
     end
 
-    optionsSetBindButton = addonTable.CreateFlatButton(optionsPanel, "Set Key", 84)
+    optionsSetBindButton = addonTable.CreateFlatButton(optionsPanel, L["Set Key"], 84)
     optionsSetBindButton:SetPoint("TOPLEFT", optionsKeybindLabel, "BOTTOMLEFT", 0, -10)
     optionsSetBindButton:SetScript("OnClick", function()
         if InCombatLockdown and InCombatLockdown() then
-            optionsKeybindValue:SetText("Cannot change bindings in combat.")
+            optionsKeybindValue:SetText(L["Cannot change bindings in combat."])
             optionsKeybindValue:Show()
             return
         end
@@ -4536,18 +4550,18 @@ do
         browserBindingCaptureActive = true
         optionsPanel:EnableKeyboard(true)
         optionsPanel:SetPropagateKeyboardInput(false)
-        optionsKeybindValue:SetText("Press a key combination. Esc cancels. Backspace clears.")
+        optionsKeybindValue:SetText(L["Press a key combination. Esc cancels. Backspace clears."])
         optionsKeybindValue:Show()
         if optionsSetBindButton.text then
-            optionsSetBindButton.text:SetText("Press Key...")
+            optionsSetBindButton.text:SetText(L["Press Key..."])
         end
     end)
     optionsSetBindButton:SetScript("OnEnter", function(self)
         self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
         if not browserBindingCaptureActive then
             GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-            GameTooltip:SetText("Set Key", 1, 1, 1)
-            GameTooltip:AddLine("Assign or replace Oak's browser toggle binding.", 1, 1, 1, true)
+            GameTooltip:SetText(L["Set Key"], 1, 1, 1)
+            GameTooltip:AddLine(L["Assign or replace Oak's browser toggle binding."], 1, 1, 1, true)
             GameTooltip:Show()
         end
     end)
@@ -4556,7 +4570,7 @@ do
         GameTooltip:Hide()
     end)
 
-    optionsClearBindButton = addonTable.CreateFlatButton(optionsPanel, "Clear", 62)
+    optionsClearBindButton = addonTable.CreateFlatButton(optionsPanel, L["Clear"], 62)
     optionsClearBindButton:SetPoint("LEFT", optionsSetBindButton, "RIGHT", 6, 0)
     optionsClearBindButton:SetScript("OnClick", function()
         SaveBrowserBinding(nil)
@@ -4583,7 +4597,7 @@ do
 
         local bindingKey = BuildCapturedBinding(key)
         if not bindingKey then
-            optionsKeybindValue:SetText("Choose a non-modifier key.")
+            optionsKeybindValue:SetText(L["Choose a non-modifier key."])
             return
         end
 
@@ -4622,7 +4636,7 @@ optionsSpecBox:SetScript("OnEnter", function(self)
     ApplySpecToggleVisual(self, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:SetText(L["Show Spec Icons"], 1, 1, 1)
-    GameTooltip:AddLine("Show specialization icons instead of abbreviated names in the applicant list.", 1, 1, 1, true)
+    GameTooltip:AddLine(L["Show specialization icons instead of abbreviated names in the applicant list."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsSpecBox:SetScript("OnLeave", function()
@@ -4653,7 +4667,7 @@ optionsMinimapBox:SetScript("OnEnter", function(self)
     ApplyMinimapToggleVisual(self, optionsMinimapLabel, not (OakLFGSorterDB and OakLFGSorterDB.hideMinimapButton == true))
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:SetText(L["Show Minimap Button"], 1, 1, 1)
-    GameTooltip:AddLine("Show Oak's minimap button for quick access to the browser and options.", 1, 1, 1, true)
+    GameTooltip:AddLine(L["Show Oak's minimap button for quick access to the browser and options."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsMinimapBox:SetScript("OnLeave", function()
@@ -4669,8 +4683,8 @@ end)
 optionsPartyKeysBox:SetScript("OnEnter", function(self)
     ApplyMinimapToggleVisual(self, optionsPartyKeysLabel, OakLFGSorterDB.showPartyKeys == true)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Show Party Keys", 1, 1, 1)
-    GameTooltip:AddLine("Show the Party Keys panel while browsing dungeons or listing groups.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Show Party Keys"], 1, 1, 1)
+    GameTooltip:AddLine(L["Show the Party Keys panel while browsing dungeons or listing groups."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsPartyKeysBox:SetScript("OnLeave", function()
@@ -4685,8 +4699,8 @@ end)
 optionsBrowserTooltipBox:SetScript("OnEnter", function(self)
     ApplyMinimapToggleVisual(self, optionsBrowserTooltipLabel, OakLFGSorterDB.attachBrowserTooltipToCursor == true)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Tooltip on Cursor", 1, 1, 1)
-    GameTooltip:AddLine("When enabled, browser row tooltips follow the mouse cursor. When disabled, they anchor to the right of Oak's rightmost visible panel.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Tooltip on Cursor"], 1, 1, 1)
+    GameTooltip:AddLine(L["When enabled, browser row tooltips follow the mouse cursor. When disabled, they anchor to the right of Oak's rightmost visible panel."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsBrowserTooltipBox:SetScript("OnLeave", function()
@@ -4709,8 +4723,8 @@ optionsKeepGoneBox:SetScript("OnEnter", function(self)
     local filters = BrowserFilterState()
     ApplyNeutralOptionsToggleVisual(self, optionsKeepGoneLabel, filters.keepUnavailable == true)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Keep Delisted/Cancelled/Filtered", 1, 1, 1)
-    GameTooltip:AddLine("Keeps visible browser rows stable during live updates when they become delisted, cancelled, full, or filtered. Manual Refresh loads a fresh list.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Keep Delisted/Cancelled/Filtered"], 1, 1, 1)
+    GameTooltip:AddLine(L["Keeps visible browser rows stable during live updates when they become delisted, cancelled, full, or filtered. Manual Refresh loads a fresh list."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsKeepGoneBox:SetScript("OnLeave", function()
@@ -4721,8 +4735,8 @@ end)
 
 optionsMythicSideButton:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("M+ Panel Side", 1, 1, 1)
-    GameTooltip:AddLine("Choose whether the Mythic+ panel opens to the left or right of Oak.", 1, 1, 1, true)
+    GameTooltip:SetText(L["M+ Panel Side"], 1, 1, 1)
+    GameTooltip:AddLine(L["Choose whether the Mythic+ panel opens to the left or right of Oak."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsMythicSideButton:SetScript("OnLeave", function()
@@ -4742,7 +4756,7 @@ optionsKeepMythicBox:SetScript("OnLeave", function()
 end)
 
 browserRegionFilterLabel = browserContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
-browserRegionFilterLabel:SetText("Regions")
+browserRegionFilterLabel:SetText(L["Regions"])
 
 local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
     local box = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -4762,7 +4776,7 @@ local function CreateRegionFilterOption(parent, regionCode, xOffset, yOffset)
         ApplySharedRegionToggleVisual(self, label, addonTable.IsRegionEnabled and addonTable.IsRegionEnabled(regionCode))
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText(meta.label or regionCode, 1, 1, 1)
-        GameTooltip:AddLine("Toggle whether Oak shows listings from this region.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Toggle whether Oak shows listings from this region."], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     box:SetScript("OnLeave", function()
@@ -4835,8 +4849,8 @@ optionsFontSizeSlider:SetScript("OnValueChanged", function(self, value)
 end)
 optionsFontSizeSlider:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Font Size", 1, 1, 1)
-    GameTooltip:AddLine("Adjust the base Oak font size used throughout the addon.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Font Size"], 1, 1, 1)
+    GameTooltip:AddLine(L["Adjust the base Oak font size used throughout the addon."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsFontSizeSlider:SetScript("OnLeave", function()
@@ -4846,7 +4860,7 @@ optionsFontSizeSlider:SetValue(addonTable.GetFontSize and addonTable.GetFontSize
 
 local optionsOpacityLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsOpacityLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -570)
-optionsOpacityLabel:SetText("Window Opacity")
+optionsOpacityLabel:SetText(L["Window Opacity"])
 local optionsOpacityValue = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsOpacityValue:SetPoint("LEFT", optionsPanel, "TOPLEFT", 170, -570)
 
@@ -4876,8 +4890,8 @@ optionsOpacitySlider:SetScript("OnValueChanged", function(self, value)
 end)
 optionsOpacitySlider:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Window Opacity", 1, 1, 1)
-    GameTooltip:AddLine("Adjust the background opacity used by Oak's windows and side panels.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Window Opacity"], 1, 1, 1)
+    GameTooltip:AddLine(L["Adjust the background opacity used by Oak's windows and side panels."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsOpacitySlider:SetScript("OnLeave", function()
@@ -4887,7 +4901,7 @@ optionsOpacitySlider:SetValue(addonTable.GetWindowOpacity and addonTable.GetWind
 
 local optionsFrameStrataLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 optionsFrameStrataLabel:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -620)
-optionsFrameStrataLabel:SetText("Frame Strata")
+optionsFrameStrataLabel:SetText(L["Frame Strata"])
 local optionsFrameStrataButton, optionsFrameStrataList = addonTable.CreateSimpleDropdown(
     optionsPanel,
     170,
@@ -4912,8 +4926,8 @@ local optionsFrameStrataButton, optionsFrameStrataList = addonTable.CreateSimple
 optionsFrameStrataButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -638)
 optionsFrameStrataButton:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Frame Strata", 1, 1, 1)
-    GameTooltip:AddLine("Controls how high Oak sits relative to other UI windows. Lower strata lets other frames appear above it.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Frame Strata"], 1, 1, 1)
+    GameTooltip:AddLine(L["Controls how high Oak sits relative to other UI windows. Lower strata lets other frames appear above it."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 optionsFrameStrataButton:SetScript("OnLeave", function()
@@ -5075,7 +5089,7 @@ local function RefreshOptionsPanel()
     do
         local filters = BrowserFilterState()
         if optionsKeepGoneLabel then
-            optionsKeepGoneLabel:SetText("Keep Delisted/Cancelled/Filtered")
+            optionsKeepGoneLabel:SetText(L["Keep Delisted/Cancelled/Filtered"])
         end
         ApplyNeutralOptionsToggleVisual(optionsKeepGoneBox, optionsKeepGoneLabel, filters.keepUnavailable == true)
     end
@@ -5096,7 +5110,7 @@ local function RefreshOptionsPanel()
     if optionsThemeColorButton then
         local isModernTheme = addonTable.IsModernTheme and addonTable.IsModernTheme()
         if optionsThemeColorButton.SetLabel then
-            optionsThemeColorButton:SetLabel("Custom Accent")
+            optionsThemeColorButton:SetLabel(L["Custom Accent"])
         end
         if optionsThemeColorButton.text then
             optionsThemeColorButton.text:SetTextColor(isModernTheme and 1 or 0.55, isModernTheme and 0.82 or 0.55, isModernTheme and 0 or 0.55, 1)
@@ -5264,16 +5278,16 @@ do
 
     local title = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
     title:SetPoint("TOPLEFT", 16, -16)
-    title:SetText("OAK LFG Sorter")
+    title:SetText(L["OAK LFG Sorter"])
 
     local description = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    description:SetText("Open Oak's in-window options panel.")
+    description:SetText(L["Open Oak's in-window options panel."])
 
     local openButton = CreateFrame("Button", nil, settingsFrame, "UIPanelButtonTemplate")
     openButton:SetSize(180, 24)
     openButton:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -14)
-    openButton:SetText("Open Oak Options")
+    openButton:SetText(L["Open Oak Options"])
     openButton:SetScript("OnClick", OpenOakOptionsFromBlizzard)
 
     if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
@@ -5298,7 +5312,7 @@ ApplyFlyoutPanelChrome(supportersPanel, suppTitle)
 
 local fontPickerLabel = supportersPanel:CreateFontString(nil, "OVERLAY", "SorterClassic_FontRegular")
 fontPickerLabel:SetPoint("TOPLEFT", supportersPanel, "TOPLEFT", 15, -330)
-fontPickerLabel:SetText("Addon Font")
+fontPickerLabel:SetText(L["Addon Font"])
 fontPickerLabel:SetTextColor(1, 1, 1)
 fontPickerLabel:Hide()
 
@@ -5306,6 +5320,7 @@ local suppContent = CreateFrame("Frame", nil, supportersPanel)
 suppContent:SetPoint("TOPLEFT", supportersPanel, "TOPLEFT", 14, -42)
 suppContent:SetPoint("BOTTOMRIGHT", supportersPanel, "BOTTOMRIGHT", -14, 58)
 
+local specialThanks = addonTable.SpecialThanks or {}
 local supporterNames = addonTable.Patreons or {}
 local topSupporters = {}
 local generalSupporters = {}
@@ -5318,9 +5333,31 @@ for _, name in ipairs(supporterNames) do
     end
 end
 
+local topLabelY = 0
+if #specialThanks > 0 then
+    local specialLabel = suppContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
+    specialLabel:SetPoint("TOP", suppContent, "TOP", 0, topLabelY)
+    specialLabel:SetText(L["Special Thanks"])
+    specialLabel:SetTextColor(0.96, 0.82, 0.36)
+
+    local specialY = topLabelY - 14
+    for _, entry in ipairs(specialThanks) do
+        local line = suppContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
+        line:SetPoint("TOP", suppContent, "TOP", 0, specialY)
+        line:SetWidth(310)
+        if line.SetWordWrap then line:SetWordWrap(false) end
+        line:SetJustifyH("CENTER")
+        line:SetText(L[entry.textKey or entry.name or ""])
+        line:SetTextColor(0.84, 0.84, 0.84)
+        specialY = specialY - 13
+    end
+
+    topLabelY = specialY - 8
+end
+
 local topSectionLabel = suppContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
-topSectionLabel:SetPoint("TOP", suppContent, "TOP", 0, 0)
-topSectionLabel:SetText("Top Supporters")
+topSectionLabel:SetPoint("TOP", suppContent, "TOP", 0, topLabelY)
+topSectionLabel:SetText(L["Top Supporters"])
 topSectionLabel:SetTextColor(0.96, 0.82, 0.36)
 
 local function CreateRainbowSupporterLine(parent, text, xOffset, yOffset)
@@ -5348,7 +5385,7 @@ local function CreateRainbowSupporterLine(parent, text, xOffset, yOffset)
     end
 end
 
-local topYOffset = -18
+local topYOffset = topLabelY - 18
 for _, name in ipairs(topSupporters) do
     local estimatedWidth = #tostring(name or "") * 9
     CreateRainbowSupporterLine(suppContent, name, math.max(6, math.floor((332 - estimatedWidth) / 2)), topYOffset)
@@ -5362,7 +5399,7 @@ divider:SetPoint("TOP", suppContent, "TOP", 0, topYOffset + 4)
 
 local supportersLabel = suppContent:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 supportersLabel:SetPoint("TOP", suppContent, "TOP", 0, topYOffset - 5)
-supportersLabel:SetText("Supporters")
+supportersLabel:SetText(L["Supporters"])
 supportersLabel:SetTextColor(0.84, 0.84, 0.84)
 supportersLabel:SetJustifyH("CENTER")
 
@@ -5483,8 +5520,8 @@ end)
 fontPickerButton:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Addon Font", 1, 1, 1)
-    GameTooltip:AddLine("Choose which SharedMedia font Oak uses for its custom text.", 1, 1, 1, true)
+    GameTooltip:SetText(L["Addon Font"], 1, 1, 1)
+    GameTooltip:AddLine(L["Choose which SharedMedia font Oak uses for its custom text."], 1, 1, 1, true)
     GameTooltip:Show()
 end)
 fontPickerButton:SetScript("OnLeave", function(self)
@@ -5637,7 +5674,7 @@ function addonTable.SetupBlizzardLFGHook()
             lfgToggleBox:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(L["Auto-Open Sorter"], 1, 1, 1)
-                GameTooltip:AddLine("Automatically open Oak when Blizzard's applicant viewer opens.", 1, 1, 1, true)
+                GameTooltip:AddLine(L["Automatically open Oak when Blizzard's applicant viewer opens."], 1, 1, 1, true)
                 GameTooltip:Show()
             end)
 

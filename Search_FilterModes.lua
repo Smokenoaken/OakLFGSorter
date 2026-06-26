@@ -4,7 +4,7 @@ local L = addonTable.L
 function addonTable.GetPendingNativeActivityKey(label)
     local text = strlower(tostring(label or ""))
     text = text:gsub("%s*%b()", "")
-    text = text:gsub("[^%w%s]", " ")
+    text = text:gsub("[%(%)%[%]%-_:;,%.%!%?]", " ")
     text = text:gsub("%s+", " ")
     text = text:gsub("^%s+", ""):gsub("%s+$", "")
     return text
@@ -60,13 +60,13 @@ end
 
 function addonTable.GetSearchQueryLabel(mode)
     if mode == "mythic_plus" then
-        return "Examples: 12-13, <10, 12 pit", ""
+        return L["Examples: 12-13, <10, 12 pit"], ""
     elseif mode == "dungeon" then
-        return "Examples: 10-11, <10, <12", ""
+        return L["Examples: 10-11, <10, <12"], ""
     elseif mode == "delve" then
-        return "Examples: tier 8, bountyful, healer", ""
+        return L["Examples: tier 8, bountiful, healer"], ""
     elseif mode == "generic" then
-        return "Examples: chill, farm, quest, weekly", ""
+        return L["Examples: chill, farm, quest, weekly"], ""
     end
 
     return "", ""
@@ -75,25 +75,25 @@ end
 function addonTable.GetNeedsMyClassLabel()
     local _, classToken = UnitClass("player")
     local pluralLabel = ({
-        DEATHKNIGHT = "DKs",
-        DEMONHUNTER = "DHs",
-        DRUID = "Druids",
-        EVOKER = "Evokers",
-        HUNTER = "Hunters",
-        MAGE = "Mages",
-        MONK = "Monks",
-        PALADIN = "Pallies",
-        PRIEST = "Priests",
-        ROGUE = "Rogues",
-        SHAMAN = "Shamans",
-        WARLOCK = "Warlocks",
-        WARRIOR = "Warriors",
+        DEATHKNIGHT = L["No DKs"],
+        DEMONHUNTER = L["No DHs"],
+        DRUID = L["No Druids"],
+        EVOKER = L["No Evokers"],
+        HUNTER = L["No Hunters"],
+        MAGE = L["No Mages"],
+        MONK = L["No Monks"],
+        PALADIN = L["No Pallies"],
+        PRIEST = L["No Priests"],
+        ROGUE = L["No Rogues"],
+        SHAMAN = L["No Shammies"],
+        WARLOCK = L["No Locks"],
+        WARRIOR = L["No Warriors"],
     })[classToken or ""]
     if pluralLabel and pluralLabel ~= "" then
-        return "No " .. pluralLabel
+        return pluralLabel
     end
 
-    return "No class dupes"
+    return L["No [class]"]
 end
 
 function addonTable.GetLocalizedSeasonDungeonLabels()

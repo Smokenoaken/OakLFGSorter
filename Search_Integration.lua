@@ -1,4 +1,5 @@
 local addonName, addonTable = ...
+local L = addonTable.L
 
 local OAK_LFG = addonTable.OAK_LFG
 if not OAK_LFG then
@@ -139,8 +140,8 @@ EventFrame:SetScript("OnEvent", function(_, _, loadedAddon)
 
         toggleBox:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Auto-Open Sorter", 1, 1, 1)
-            GameTooltip:AddLine("Automatically open Oak when Blizzard's group browser opens.", 1, 1, 1, true)
+            GameTooltip:SetText(L["Auto-Open Sorter"], 1, 1, 1)
+            GameTooltip:AddLine(L["Automatically open Oak when Blizzard's group browser opens."], 1, 1, 1, true)
             GameTooltip:Show()
         end)
 

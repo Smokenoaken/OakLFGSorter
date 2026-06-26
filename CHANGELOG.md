@@ -1,3 +1,12 @@
+## v4.0.22
+
+- Added Korean locale support and broader localized UI coverage.
+- Improved UTF-8-safe dungeon, activity, delve, and difficulty matching for localized clients.
+- Fixed localized short labels used by compact footer and difficulty controls.
+- Expanded non-English locale coverage, localized browser age suffixes, and deferred Oak applicant refreshes to reduce Blizzard applicant-list taint risk.
+- Special thanks to Lowpitch on Discord for Korean localization and help with other missing localization.
+- Updated the Patreon supporter list from the June 26 active paid patron export, sorted by supporter start date.
+
 ## v4.0.21
 
 - Updated TOC interface compatibility for World of Warcraft 12.0.7.
