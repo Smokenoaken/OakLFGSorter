@@ -1,3 +1,7 @@
+## v4.0.23
+
+- Fixed locale fallback so unsupported clients use English instead of Korean.
+
 ## v4.0.22
 
 - Added Korean locale support and broader localized UI coverage.
