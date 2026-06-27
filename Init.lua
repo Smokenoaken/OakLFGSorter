@@ -19,7 +19,7 @@ function addonTable.NewLocale(localeName, isDefault)
         addonTable.Locales[localeName] = localeTable
     end
 
-    if isDefault then
+    if isDefault and localeName == "enUS" then
         addonTable.DefaultLocale = localeTable
     end
 

@@ -1,5 +1,5 @@
 local _, addonTable = ...
-local L = addonTable.NewLocale("koKR", true)
+local L = addonTable.NewLocale("koKR")
 if not L then
     return
 end
