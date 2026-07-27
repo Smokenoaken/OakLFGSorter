@@ -1,3 +1,8 @@
+## v4.0.24
+
+- Added CJK-capable OakFont for Chinese, Japanese, and Korean text while preserving existing UI metrics.
+- Updated Interface metadata for WoW 12.1.0.
+
 ## v4.0.23
 
 - Fixed locale fallback so unsupported clients use English instead of Korean.
