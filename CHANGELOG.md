@@ -1,3 +1,8 @@
+## v4.0.25
+
+- Improved browser filter performance by avoiding repeated result API and lockout lookups
+- Updated OakUI Font for broader language and glyph support
+
 ## v4.0.24
 
 - Added CJK-capable OakFont for Chinese, Japanese, and Korean text while preserving existing UI metrics.
