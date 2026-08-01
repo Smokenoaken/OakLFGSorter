@@ -276,6 +276,17 @@ function addonTable.GetPartyUtilityCoverage()
     return hasLust, hasBrez
 end
 
+local function IsSelectedActivityKey(selectedActivities, filterKey, normalizeLabel)
+    if type(filterKey) ~= "string" or filterKey == "" then
+        return false
+    end
+    if selectedActivities[filterKey] == true then
+        return true
+    end
+    local normalizedKey = normalizeLabel and normalizeLabel(filterKey) or nil
+    return normalizedKey and normalizedKey ~= filterKey and selectedActivities[normalizedKey] == true or false
+end
+
 local function ResultMatchesSelectedActivities(result, filters, runtime)
     if not BrowserModeUsesActivityFilter(result.mode or GetBrowserMode()) then
         return true
@@ -303,19 +314,6 @@ local function ResultMatchesSelectedActivities(result, filters, runtime)
     -- For raid/world-boss results the filterKey is the activity label with the difficulty
     -- prefix stripped (e.g. "Heroic The Voidspire" → "the voidspire").
     local normalizeLabel = addonTable.NormalizeSearchScoreTargetLabel
-    local function IsSelectedActivityKey(filterKey)
-        if type(filterKey) ~= "string" or filterKey == "" then
-            return false
-        end
-        if filters.selectedActivities[filterKey] == true then
-            return true
-        end
-        local normalizedKey = normalizeLabel and normalizeLabel(filterKey) or nil
-        if normalizedKey and normalizedKey ~= filterKey and filters.selectedActivities[normalizedKey] == true then
-            return true
-        end
-        return false
-    end
 
     local isRaidResult = (result.mode == "raid" or result.mode == "legacy_raid" or result.mode == "open_world")
     if isRaidResult and result.raidListing then
@@ -332,9 +330,9 @@ local function ResultMatchesSelectedActivities(result, filters, runtime)
             end
         end
         local filterKey = normalizeLabel and normalizeLabel(label) or strlower(label)
-        return filterKey ~= "" and IsSelectedActivityKey(filterKey)
+        return filterKey ~= "" and IsSelectedActivityKey(filters.selectedActivities, filterKey, normalizeLabel)
     end
-    return IsSelectedActivityKey(result.activityFilterKey)
+    return IsSelectedActivityKey(filters.selectedActivities, result.activityFilterKey, normalizeLabel)
 end
 
 local function ResultMatchesDifficulty(result, difficulty)
@@ -390,8 +388,9 @@ local function ResultMatchesPlaystyle(result, playstyle)
         return true
     end
 
-    local freshInfo = C_LFGList.GetSearchResultInfo and C_LFGList.GetSearchResultInfo(result.id)
-    local rawPS = freshInfo and tonumber(freshInfo.generalPlaystyle) or 0
+    -- ProcessSearchResults already captures this value from the same result
+    -- payload. Avoid another Blizzard API call for every filtered result.
+    local rawPS = tonumber(result.playstyleValue) or 0
     if playstyle == "COMPETITIVE" then return rawPS == 3 end
     if playstyle == "RELAXED" then return rawPS == 2 end
     if playstyle == "LEARNING" then return rawPS == 1 end
@@ -513,7 +512,7 @@ local function ResultMatchesRaidRoleCounts(result, filters)
     return true
 end
 
-local function ResultMatchesRaidLockout(result, filters)
+local function ResultMatchesRaidLockout(result, filters, runtime)
     if not filters.matchMyRaidLockout then
         return true
     end
@@ -544,7 +543,7 @@ local function ResultMatchesRaidLockout(result, filters)
         return false
     end
 
-    local lockouts = BuildSavedRaidLockoutMap()
+    local lockouts = runtime and runtime.raidLockouts or BuildSavedRaidLockoutMap()
     local myLockout = lockouts[instanceKey] and lockouts[instanceKey][difficultyToken]
     if not myLockout then
         return (tonumber(raidListing.bossesKilled) or 0) == 0
@@ -574,6 +573,10 @@ end
 addonTable.ResultMatchesRaidLockout = ResultMatchesRaidLockout
 
 local function GetBrowserFilledRoleCounts(result)
+    if type(result) == "table" and result._oakFilledRoleCounts then
+        return result._oakFilledRoleCounts, result._oakFilledRoleMemberTotal or 0
+    end
+
     local counts = { TANK = 0, HEALER = 0, DAMAGER = 0 }
     if type(result) ~= "table" then
         return counts, 0
@@ -597,6 +600,8 @@ local function GetBrowserFilledRoleCounts(result)
 
     local roleTotal = (counts.TANK or 0) + (counts.HEALER or 0) + (counts.DAMAGER or 0)
     local memberTotal = math.max(tonumber(result.numMembers) or 0, type(players) == "table" and #players or 0, roleTotal)
+    result._oakFilledRoleCounts = counts
+    result._oakFilledRoleMemberTotal = memberTotal
     return counts, memberTotal
 end
 
@@ -840,7 +845,7 @@ function addonTable.ResultPassesBrowserFilters(result, options)
     end
     if not ResultMatchesRaidBossCount(result, filters) then return false end
     if not ResultMatchesRaidRoleCounts(result, filters) then return false end
-    if not ResultMatchesRaidLockout(result, filters) then return false end
+    if not ResultMatchesRaidLockout(result, filters, runtime) then return false end
 
     return true
 end
@@ -1031,7 +1036,8 @@ function addonTable.BuildBrowserRuntimeFilters()
     local runtime = {
         filters = filters,
         hasAnySelectedActivities = false,
-        minRating = nil,
+        minRating = 0,
+        raidLockouts = nil,
         partyRoles = nil,
         partySize = nil,
         partyHasLust = nil,
@@ -1051,8 +1057,12 @@ function addonTable.BuildBrowserRuntimeFilters()
     if not runtime.minRating or runtime.minRating <= 0 then
         local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
         if ok and type(adv) == "table" then
-            runtime.minRating = tonumber(adv.minimumRating)
+            runtime.minRating = tonumber(adv.minimumRating) or 0
         end
+    end
+
+    if filters.matchMyRaidLockout then
+        runtime.raidLockouts = BuildSavedRaidLockoutMap()
     end
 
     if filters.partyFit then

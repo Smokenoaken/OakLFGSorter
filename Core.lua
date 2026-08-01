@@ -1262,6 +1262,26 @@ local function GetSearchResultPlaystyle(resultInfo, activityInfo)
     return playstyleValue, label, shortLabel
 end
 
+local function GetCurrentSearchLanguageFilter(panel)
+    -- C_LFGList.Search expects the saved language-selection table.  The native
+    -- search panel uses GetLanguageSearchFilter() when it searches; its
+    -- languageFilter field is not the authoritative value on every client.
+    -- This matters most on localized clients, where passing nil can fall back
+    -- to the local client language when an activity filter is present.
+    if C_LFGList and C_LFGList.GetLanguageSearchFilter then
+        local ok, languages = pcall(C_LFGList.GetLanguageSearchFilter)
+        if ok and type(languages) == "table" then
+            return languages
+        end
+    end
+
+    if panel and type(panel.languageFilter) == "table" then
+        return panel.languageFilter
+    end
+
+    return nil
+end
+
 local function GetCurrentSearchSelection()
     local panel = LFGListFrame and LFGListFrame.SearchPanel
     if not panel then
@@ -1271,7 +1291,7 @@ local function GetCurrentSearchSelection()
     local categoryID = panel.selectedCategory or panel.categoryID
     local filters = panel.selectedFilters or panel.filters or 0
     local preferredFilters = panel.preferredFilters or 0
-    local languageFilter = panel.languageFilter
+    local languageFilter = GetCurrentSearchLanguageFilter(panel)
     local crossFaction = panel.searchCrossFactionListings
 
     return {
@@ -1301,6 +1321,9 @@ function addonTable.UpdateSearchContext()
         local storedConfig = addonTable.GetBrowserCategoryConfig and addonTable.GetBrowserCategoryConfig(context.selectedCategoryKey)
         if storedConfig then
             local liveMatchesStoredCategory = selection and selection.categoryID and selection.categoryID == storedConfig.categoryID
+            local languageFilter = selection and selection.languageFilter
+                or GetCurrentSearchLanguageFilter(LFGListFrame and LFGListFrame.SearchPanel)
+                or storedConfig.languageFilter
             context.useOakCategorySelection = true
             context.selectedCategoryKey = storedConfig.id
             context.selectedCategoryID = storedConfig.categoryID
@@ -1313,7 +1336,7 @@ function addonTable.UpdateSearchContext()
                 -- clients appear to depend on this matching Blizzard's own request.
                 filters = (liveMatchesStoredCategory and selection.filters) or storedConfig.filters or 0,
                 preferredFilters = (liveMatchesStoredCategory and selection.preferredFilters) or storedConfig.preferredFilters or 0,
-                languageFilter = selection and selection.languageFilter or storedConfig.languageFilter,
+                languageFilter = languageFilter,
                 searchCrossFactionListings = (selection and selection.searchCrossFactionListings) or storedConfig.searchCrossFactionListings or false,
             }
         end
@@ -1467,7 +1490,8 @@ local function FetchSearchResultData()
                     ratingValue = pvpRating
                 end
 
-                if (listingMode ~= "rated_pvp" and listingMode ~= "pvp")
+                if (listingMode ~= "rated_pvp" and listingMode ~= "pvp"
+                    and listingMode ~= "raid" and listingMode ~= "legacy_raid")
                     and resultInfo.leaderName
                     and RaiderIO
                     and RaiderIO.GetProfile
@@ -2361,6 +2385,7 @@ function addonTable.RunBrowserSearch()
     local categoryKey = context and context.selectedCategoryKey or nil
     local advancedFilter = nil
     local panel = LFGListFrame and LFGListFrame.SearchPanel
+    local languageFilter = selection and selection.languageFilter
 
     if not categoryID then
         return false, "No search category selected."
@@ -2377,6 +2402,14 @@ function addonTable.RunBrowserSearch()
             addonTable.SyncBrowserNativeActivities()
         end
         panel = EnsureBlizzardSearchPanelForCategory(categoryID, selection) or panel
+    end
+
+    -- Keep this in the direct-search path as well as in the context snapshot:
+    -- Blizzard's saved language filter is the source of truth, even when the
+    -- search panel was loaded after Oak built its context.
+    local liveLanguageFilter = GetCurrentSearchLanguageFilter(panel)
+    if liveLanguageFilter then
+        languageFilter = liveLanguageFilter
     end
 
     if C_LFGList.GetAdvancedFilter then
@@ -2413,7 +2446,7 @@ function addonTable.RunBrowserSearch()
         categoryID,
         (selection and selection.filters) or 0,
         (selection and selection.preferredFilters) or 0,
-        selection and selection.languageFilter or nil,
+        languageFilter,
         selection and selection.searchCrossFactionListings or false,
         advancedFilter,
         (categoryKey == "DUNGEONS" and BuildSelectedActivityIDFilter()) or nil
@@ -3584,7 +3617,9 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             addonTable.SyncSharedLowLatencyToggles()
         end
         if OAK_LFG:IsShown() and C_LFGList.HasActiveEntryInfo() then
-            addonTable.UpdateDisplay()
+            -- Roster changes can arrive in bursts while applicants are joining
+            -- or leaving. Coalesce them with the normal display refresh queue.
+            ScheduleDisplayRefresh(0)
         end
     end
 end)
