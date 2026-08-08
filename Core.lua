@@ -333,6 +333,13 @@ end
 function addonTable.SetCurrentViewMode(mode)
     if currentViewMode == mode then return end
     currentViewMode = mode
+    if mode == "browser"
+        and OakLFGSorterDB
+        and OakLFGSorterDB.hideNotes
+        and not tonumber(OakLFGSorterDB.windowWidthCollapsed)
+        and addonTable.CollapseBrowserWidth then
+        addonTable.CollapseBrowserWidth(OakLFGSorterDB.windowWidth)
+    end
     -- Hide the filter panel that belongs to the OTHER mode so it doesn't bleed through
     if mode == "applicant" then
         if addonTable.BrowserFilterPanel and addonTable.BrowserFilterPanel:IsShown() then
@@ -1548,6 +1555,9 @@ local function FetchSearchResultData()
                     name = resultInfo.name or "",
                     displayName = displayName,
                     comment = resultInfo.comment or "",
+                    voiceChat = resultInfo.voiceChat or "",
+                    hasVoiceChat = resultInfo.voiceChat == true
+                        or (type(resultInfo.voiceChat) == "string" and resultInfo.voiceChat ~= ""),
                     leaderName = resultInfo.leaderName or "",
                     leaderClass = leaderClass,
                     leaderRole = leaderRole,
@@ -1611,6 +1621,7 @@ local function FetchSearchResultData()
                     tostring(displayName or ""),
                     tostring(resultInfo.name or ""),
                     tostring(resultInfo.comment or ""),
+                    tostring(resultInfo.voiceChat or ""),
                     tostring(resultInfo.leaderName or ""),
                     tostring(keyLevel or 0),
                     tostring(ratingValue or 0),
@@ -3581,7 +3592,9 @@ VarEventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             end
             
             if OakLFGSorterDB.frameSize then 
-                local savedWidth = tonumber(OakLFGSorterDB.frameSize[1]) or 660
+                -- frameSize is captured in any mode, including ones with a locked width,
+                -- so windowWidth stays authoritative and frameSize only seeds it.
+                local savedWidth = tonumber(OakLFGSorterDB.windowWidth) or tonumber(OakLFGSorterDB.frameSize[1]) or 660
                 OakLFGSorterDB.windowWidth = savedWidth
                 local minWidth = addonTable.GetTargetFrameWidth and addonTable.GetTargetFrameWidth() or 660
                 local w = math.max(minWidth, savedWidth)

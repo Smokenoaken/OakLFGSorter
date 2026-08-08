@@ -173,13 +173,18 @@ if ($blockingStatus.Count -gt 0) {
     throw "Git working tree is not clean. Commit or stash your changes before running release-addon.ps1."
 }
 
+& (Join-Path $scriptDir "sync-patreon-supporters.ps1")
+if ($LASTEXITCODE -ne 0) {
+    throw "sync-patreon-supporters.ps1 failed."
+}
+
 Update-Changelog -Version $normalizedVersion -ChangelogPath $changelogPath -ReleaseNotes $releaseNotes
 Update-FileText -Path $tocPath -Pattern '(?m)^## Version:\s*.+$' -Replacement "## Version: $normalizedVersion"
 Update-FileText -Path $headerPath -Pattern '(?m)VersionText:SetText\("\|cff888888v.*?\|r"\)' -Replacement "VersionText:SetText(""|cff888888v$normalizedVersion|r"")"
 Update-FileText -Path $readmePath -Pattern '(?m)^Current repo version:\s*`[^`]+`$' -Replacement "Current repo version: ``$normalizedVersion``"
 Write-Utf8NoBom -Path $nextChangelogPath -Content "# Add one bullet per line for the next release.`r`n# Example:`r`n# Fixed applicant tooltip positioning`r`n# Added a new quick filter preset`r`n"
 
-Invoke-Git -Arguments @("add", "CHANGELOG.md", "NEXT_CHANGELOG.md", "OakLFGSorter.toc", "UI_Header.lua", "README.md")
+Invoke-Git -Arguments @("add", "CHANGELOG.md", "NEXT_CHANGELOG.md", "OakLFGSorter.toc", "UI_Header.lua", "Supporters.lua", "README.md", "sync-patreon-supporters.ps1")
 Invoke-Git -Arguments @("commit", "-m", $CommitMessage)
 Invoke-Git -Arguments @("tag", "-a", $tagName, "-m", $tagName)
 Invoke-Git -Arguments @("push")

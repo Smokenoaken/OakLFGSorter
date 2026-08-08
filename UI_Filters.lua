@@ -803,6 +803,9 @@ function addonTable.ResultPassesBrowserFilters(result, options)
     if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(result) then
         return false
     end
+    if filters.hideVoice and result.hasVoiceChat then
+        return false
+    end
 
     if not ResultMatchesSelectedActivities(result, filters, runtime) then
         return false
@@ -860,6 +863,9 @@ function addonTable.ResultPassesBrowserPreserveFilters(result)
         return false
     end
     if addonTable.ResultMatchesPlayerRegion and not addonTable.ResultMatchesPlayerRegion(result) then
+        return false
+    end
+    if filters.hideVoice and result.hasVoiceChat then
         return false
     end
     if not ResultMatchesSelectedActivities(result, filters, runtime) then
@@ -2312,6 +2318,7 @@ function BrowserFilterState()
     if f.hasLust == nil then f.hasLust = false end
     if f.hasBrez == nil then f.hasBrez = false end
     if f.hideDeclined == nil then f.hideDeclined = false end
+    if f.hideVoice == nil then f.hideVoice = false end
     if f.raidBossesMin == nil then f.raidBossesMin = "ANY" end
     if f.matchMyRaidLockout == nil then f.matchMyRaidLockout = false end
     if f.raidBossKills == nil then f.raidBossKills = "" end
@@ -2743,6 +2750,7 @@ local browserToggleKeys = {
     { key = "needsBrez",   label = L["Need BRez"],    column = 1 },
     { key = "hasBrez",     label = L["Has BRez"],     column = 2 },
     { key = "hideDeclined",label = L["Hide Declined"],column = 2 },
+    { key = "hideVoice",   label = L["No Voice"],      column = 2 },
     { key = "matchMyRaidLockout", label = L["Match My Lockout"], column = 1, span = 2, raidOnly = true },
 }
 local browserToggleTooltips = {
@@ -2765,6 +2773,11 @@ local browserToggleTooltips = {
         title = L["Hide Declined"],
         body = L["Hides groups that have declined your application."],
         detail = L["When this is off, declined groups can remain visible so the browser list does not jump around as much."],
+    },
+    hideVoice = {
+        title = L["No Voice"],
+        body = L["Hides groups that advertise a voice channel."],
+        detail = L["This is useful for filtering out groups that appear to be selling carries or boosts through voice chat."],
     },
 }
 
@@ -2914,6 +2927,7 @@ local function AttachBrowserNativeSearchBox()
         frameLevel    = searchBox:GetFrameLevel(),
         onEnterPressed = searchBox:GetScript("OnEnterPressed"),
         onEscapePressed = searchBox:GetScript("OnEscapePressed"),
+        onClearClick = searchBox.clearButton and searchBox.clearButton:GetScript("OnClick"),
     }
 
     -- Reparent the autocomplete dropdown too
@@ -2944,7 +2958,8 @@ local function AttachBrowserNativeSearchBox()
     if LFGListFrame.SearchPanel.AutoCompleteFrame then
         browserQueryBoxFrame.AutoCompleteFrame = LFGListFrame.SearchPanel.AutoCompleteFrame
     end
-    searchBox:SetScript("OnEnterPressed", function(self)
+    local function RunBrowserSearchFromBox(box)
+        box:ClearFocus()
         SyncBrowserNativeActivities()
         if addonTable.RunBrowserSearch then
             addonTable.RunBrowserSearch()
@@ -2955,16 +2970,31 @@ local function AttachBrowserNativeSearchBox()
                 if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
             end)
         end
-        self:ClearFocus()
-    end)
+    end
+
+    searchBox:SetScript("OnEnterPressed", RunBrowserSearchFromBox)
     searchBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    -- Blizzard's clear button searches its own panel, which has no category while the box lives here.
+    if searchBox.clearButton then
+        searchBox.clearButton:SetScript("OnClick", function()
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+            if C_LFGList.ClearSearchTextFields then
+                C_LFGList.ClearSearchTextFields()
+            end
+            RunBrowserSearchFromBox(searchBox)
+        end)
+    end
     searchBox:Show()
 end
 
 local function RestoreBrowserNativeSearchBox()
     if not browserNativeSearchOriginalState then return end
     local searchBox = LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel.SearchBox
-    if not searchBox then browserNativeSearchOriginalState = nil; return end
+    if not searchBox then
+        browserNativeSearchOriginalState = nil
+        browserNativeAutoCompleteOriginalState = nil
+        return
+    end
 
     -- Restore autocomplete frame
     if browserNativeAutoCompleteOriginalState and LFGListFrame.SearchPanel.AutoCompleteFrame then
@@ -3003,6 +3033,9 @@ local function RestoreBrowserNativeSearchBox()
     if browserNativeSearchOriginalState.frameLevel  then searchBox:SetFrameLevel(browserNativeSearchOriginalState.frameLevel) end
     if browserNativeSearchOriginalState.onEnterPressed  then searchBox:SetScript("OnEnterPressed",  browserNativeSearchOriginalState.onEnterPressed) end
     if browserNativeSearchOriginalState.onEscapePressed then searchBox:SetScript("OnEscapePressed", browserNativeSearchOriginalState.onEscapePressed) end
+    if searchBox.clearButton then
+        searchBox.clearButton:SetScript("OnClick", browserNativeSearchOriginalState.onClearClick)
+    end
     -- Clear the SearchBox/AutoCompleteFrame references we set on the host frame
     browserQueryBoxFrame.SearchBox = nil
     browserQueryBoxFrame.AutoCompleteFrame = nil
@@ -3116,6 +3149,7 @@ browserResetBtn:SetScript("OnClick", function()
     filters.partyFit = false; filters.lustMatch = false; filters.needsLust = false
     filters.needsBrez = false; filters.hasLust = false
     filters.hasBrez = false
+    filters.hideVoice = false
     filters.raidBossesMin = "ANY"; filters.matchMyRaidLockout = false; filters.bountifulOnly = false
     filters.raidBossKills = ""; filters.raidTanks = ""
     filters.raidHealers = ""; filters.raidDps = ""
@@ -3624,6 +3658,7 @@ function addonTable.UpdateBrowserFilterPanel()
         MeasureRightLabel(browserToggleRows["lustMatch"].label)
         MeasureLeftLabel(browserToggleRows["needsBrez"].label)
         MeasureRightLabel(browserToggleRows["matchMyRaidLockout"].label)
+        MeasureLeftLabel(browserToggleRows["hideVoice"].label)
     elseif usesDungeonRoleFilters then
         MeasureLeftLabel(browserToggleRows["needsTank"].label)
         MeasureRightLabel(browserToggleRows["hasTank"].label)
@@ -3637,6 +3672,7 @@ function addonTable.UpdateBrowserFilterPanel()
         MeasureLeftLabel(browserToggleRows["needsBrez"].label)
         MeasureRightLabel(browserToggleRows["hasBrez"].label)
         MeasureLeftLabel(browserToggleRows["lustMatch"].label)
+        MeasureRightLabel(browserToggleRows["hideVoice"].label)
         if isDelveMode then
             MeasureLeftLabel(browserToggleRows["hideDeclined"].label)
             MeasureRightLabel(L["Bountiful Only"])
@@ -3644,6 +3680,7 @@ function addonTable.UpdateBrowserFilterPanel()
     else
         MeasureLeftLabel(browserMinRatingLabel:GetText() or "")
         MeasureLeftLabel(browserToggleRows["hideDeclined"].label)
+        MeasureRightLabel(browserToggleRows["hideVoice"].label)
         if isDelveMode then
             MeasureRightLabel(L["Bountiful Only"])
         end
@@ -3735,6 +3772,7 @@ function addonTable.UpdateBrowserFilterPanel()
         browserNoClassBox:Hide(); browserNoClassText:Hide()
         browserMinRatingLabel:Hide(); browserMinRatingBox:Hide()
         browserToggleRows["hideDeclined"].box:Hide(); browserToggleRows["hideDeclined"].text:Hide()
+        browserToggleRows["hideVoice"].box:Hide(); browserToggleRows["hideVoice"].text:Hide()
 
         -- ── 1. Difficulty dropdown (full width) ──────────────────────────────
         if showDifficulty then
@@ -3829,6 +3867,14 @@ function addonTable.UpdateBrowserFilterPanel()
 
             r2.box:ClearAllPoints(); r2.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y)
             r2.box:SetState(filters.matchMyRaidLockout == true); r2.text:SetText(r2.label); r2.box:Show(); r2.text:Show()
+            y = y - ROW_H
+        end
+
+        -- ── 7. No Voice ───────────────────────────────────────────────────────
+        do
+            local r1 = browserToggleRows["hideVoice"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(filters.hideVoice == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
             y = y - ROW_H
         end
 
@@ -4071,6 +4117,14 @@ function addonTable.UpdateBrowserFilterPanel()
         else
             browserToggleRows["matchMyRaidLockout"].box:Hide()
             browserToggleRows["matchMyRaidLockout"].text:Hide()
+        end
+
+        -- No Voice is available in every non-raid browser mode.
+        do
+            local r1 = browserToggleRows["hideVoice"]
+            r1.box:ClearAllPoints(); r1.box:SetPoint("TOPLEFT", browserContent, "TOPLEFT", 0, y)
+            r1.box:SetState(filters.hideVoice == true); r1.text:SetText(r1.label); r1.box:Show(); r1.text:Show()
+            y = y - ROW_H
         end
 
         -- Compact region filters: 3 columns x 2 rows for the current visible regions.

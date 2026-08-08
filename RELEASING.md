@@ -4,6 +4,17 @@ This repo now includes a root [`.pkgmeta`](.pkgmeta) so CurseForge can package t
 It also uses [CHANGELOG.md](CHANGELOG.md) as the manual CurseForge changelog source.
 Upcoming notes can live in [NEXT_CHANGELOG.md](NEXT_CHANGELOG.md), which the release script consumes automatically.
 
+## Patreon Supporter Sync
+
+The release helper refreshes [Supporters.lua](Supporters.lua) from Patreon before creating the release commit. It reads these Windows user environment variables:
+
+```text
+OAKUI_PATREON_ACCESS_TOKEN
+OAKUI_PATREON_CAMPAIGN_ID
+```
+
+The sync includes only members with `patron_status = active_patron` and a positive `currently_entitled_amount_cents`, then sorts them by `pledge_relationship_start` from oldest to newest. The sync helper is [sync-patreon-supporters.ps1](sync-patreon-supporters.ps1) and is kept out of the addon zip.
+
 ## One-Time CurseForge Setup
 
 1. Generate a CurseForge API token:

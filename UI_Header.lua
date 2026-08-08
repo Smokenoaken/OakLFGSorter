@@ -641,7 +641,11 @@ OAK_LFG:HookScript("OnSizeChanged", function(self)
         addonTable.ClampFrameToScreen(self, OakLFGSorterDB, "framePos")
     end
     if OakLFGSorterDB then
-        OakLFGSorterDB.windowWidth = math.floor((self:GetWidth() or 0) + 0.5)
+        if addonTable.PersistFrameWidth then
+            addonTable.PersistFrameWidth(self:GetWidth())
+        else
+            OakLFGSorterDB.windowWidth = math.floor((self:GetWidth() or 0) + 0.5)
+        end
         OakLFGSorterDB.windowHeight = math.floor((self:GetHeight() or 0) + 0.5)
     end
 end)

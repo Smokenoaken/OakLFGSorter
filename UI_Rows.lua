@@ -188,6 +188,23 @@ local function IsBrowserMode()
     return addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser"
 end
 
+addonTable.PersistFrameWidth = function(width)
+    if not (OakLFGSorterDB and width and width > 0) then
+        return
+    end
+
+    local savedWidth = math.floor(width + 0.5)
+    if IsBrowserMode() then
+        if OakLFGSorterDB.hideNotes then
+            OakLFGSorterDB.windowWidthCollapsed = savedWidth
+        else
+            OakLFGSorterDB.windowWidth = savedWidth
+        end
+    elseif not OakLFGSorterDB.hideNotes then
+        OakLFGSorterDB.windowWidth = savedWidth
+    end
+end
+
 local function IsCustomCategoryBrowserMode()
     if not IsBrowserMode() then
         return false
@@ -411,6 +428,10 @@ local function GetTargetFrameWidth()
     local savedWidth = OakLFGSorterDB and tonumber(OakLFGSorterDB.windowWidth)
     if IsBrowserMode() then
         if OakLFGSorterDB and OakLFGSorterDB.hideNotes then
+            local collapsedWidth = tonumber(OakLFGSorterDB.windowWidthCollapsed)
+            if collapsedWidth and collapsedWidth > BROWSER_COLLAPSED_WIDTH then
+                return math.min(MAX_FRAME_WIDTH, collapsedWidth)
+            end
             return BROWSER_COLLAPSED_WIDTH
         end
         local minWidth = FULL_FRAME_WIDTH
@@ -433,9 +454,7 @@ addonTable.GetTargetFrameWidth = GetTargetFrameWidth
 
 OAK_LFG:SetScript("OnSizeChanged", function(self, width, height)
     scrollChild:SetWidth(scrollFrame:GetWidth())
-    if OakLFGSorterDB and width and width > 0 and (IsBrowserMode() or not OakLFGSorterDB.hideNotes) then
-        OakLFGSorterDB.windowWidth = math.floor(width + 0.5)
-    end
+    addonTable.PersistFrameWidth(width)
 
     if IsBrowserMode() then
         if self.isOakResizing then
@@ -4038,12 +4057,31 @@ function addonTable.GetRIOBestRunLineData(rioProfile, listingDungeonName, activi
     return overallText, bestForDungeonText
 end
 
+-- Hiding the notes removes the note column's share of the current width while
+-- preserving the width allocated to the other browser columns.
+function addonTable.CollapseBrowserWidth(widthOverride)
+    if not IsBrowserMode() then
+        return
+    end
+
+    local width = tonumber(widthOverride) or tonumber(OAK_LFG:GetWidth()) or FULL_FRAME_WIDTH
+    local extra = math.max(0, width - FULL_FRAME_WIDTH)
+    local dungeonGrow = math.min(extra, math.max(0, MeasureDungeonColumnWidth() - B_DUNGEON.w))
+    local titleShare = (IsRaidBrowserMode() or IsPvpBrowserMode()) and 0.45 or 0.4
+    local keep = dungeonGrow + (extra - dungeonGrow) * titleShare
+    OakLFGSorterDB.windowWidthCollapsed = math.floor(BROWSER_COLLAPSED_WIDTH + keep + 0.5)
+end
+
 notesToggleBtn:SetScript("OnClick", function()
     OakLFGSorterDB.hideNotes = not OakLFGSorterDB.hideNotes
+    if OakLFGSorterDB.hideNotes then
+        addonTable.CollapseBrowserWidth()
+    end
     addonTable.ApplyHideNotesLayout(true)
 end)
 noteVisibilityBtn:SetScript("OnClick", function()
     OakLFGSorterDB.hideNotes = true
+    addonTable.CollapseBrowserWidth()
     addonTable.ApplyHideNotesLayout(true)
 end)
 
