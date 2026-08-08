@@ -51,6 +51,7 @@ $excludeFiles = @(
     "NEXT_CHANGELOG.md",
     "package-release.ps1",
     "release-addon.ps1",
+    "sync-patreon-supporters.ps1",
     "addon_summary_onepager.html",
     "OakLFGSorter_Summary.pdf"
 )
