@@ -1,3 +1,9 @@
+## v4.0.26
+
+- Added an optional No Voice browser filter to hide listings that advertise voice chat.
+- Fixed the browser search field clear button so it clears and refreshes Oak safely.
+- Fixed browser width persistence when the notes column is hidden and restored.
+
 ## v4.0.25
 
 - Improved browser filter performance by avoiding repeated result API and lockout lookups
