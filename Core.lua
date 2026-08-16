@@ -1407,7 +1407,11 @@ local function FetchSearchResultData()
         return changed
     end
 
-    local firstReturn, secondReturn = C_LFGList.GetSearchResults()
+    -- Match Blizzard's SearchPanel, which consumes the native filtered result
+    -- list. Fall back to the raw result API on clients that do not expose the
+    -- filtered variant.
+    local getSearchResults = C_LFGList.GetFilteredSearchResults or C_LFGList.GetSearchResults
+    local firstReturn, secondReturn = getSearchResults()
     local resultIDs = nil
     if type(firstReturn) == "table" then
         resultIDs = firstReturn
@@ -2363,6 +2367,23 @@ local function EnsureBlizzardSearchPanelForCategory(categoryID, selection)
 
     local filters = (selection and selection.filters) or 0
     local preferredFilters = (selection and selection.preferredFilters) or 0
+
+    -- Blizzard's search routine checks CategorySelection.selectedCategory to
+    -- decide whether dungeon advanced filters should be included. Oak can
+    -- initialize the hidden SearchPanel without ever showing CategorySelection,
+    -- leaving that state unset and causing the first search to omit the native
+    -- needsTank/needsHealer/hasTank/hasHealer filters.
+    local categorySelection = LFGListFrame and LFGListFrame.CategorySelection
+    if categorySelection then
+        if type(categorySelection.SelectCategory) == "function" then
+            pcall(categorySelection.SelectCategory, categorySelection, categoryID, filters)
+        end
+        if type(LFGListCategorySelection_SelectCategory) == "function" then
+            pcall(LFGListCategorySelection_SelectCategory, categorySelection, categoryID, filters)
+        end
+        categorySelection.selectedCategory = categoryID
+        categorySelection.selectedFilters = filters
+    end
 
     panel.selectedCategory = categoryID
     panel.categoryID = categoryID
