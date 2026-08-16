@@ -1,3 +1,8 @@
+## v4.0.27
+
+- Fixed the initial Blizzard dungeon role-filter synchronization
+- Matched Oak's browser results to Blizzard's native filtered result set.
+
 ## v4.0.26
 
 - Added an optional No Voice browser filter to hide listings that advertise voice chat.

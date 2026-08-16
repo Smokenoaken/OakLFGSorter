@@ -684,7 +684,7 @@ addonTable.ModernCloseButton = modernCloseBtn
 local VersionText = titleHeader:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 addonTable.VersionText = VersionText
 VersionText:SetPoint("RIGHT", titleHeader, "RIGHT", -8, 0)
-VersionText:SetText("|cff888888v4.0.26|r")
+VersionText:SetText("|cff888888v4.0.27|r")
 
 addonTable.RegisterThemeRefresh("ui_header_theme", function()
     local isClassic = addonTable.IsClassicTheme and addonTable.IsClassicTheme()
