@@ -11,17 +11,6 @@ local VALID_FRAME_STRATA = {
     FULLSCREEN_DIALOG = true,
     TOOLTIP = true,
 }
-local FRAME_STRATA_ORDER = {
-    "BACKGROUND",
-    "LOW",
-    "MEDIUM",
-    "HIGH",
-    "DIALOG",
-    "FULLSCREEN",
-    "FULLSCREEN_DIALOG",
-    "TOOLTIP",
-}
-
 local function NormalizeOakFrameStrata(strata)
     local normalized = tostring(strata or ""):upper()
     if VALID_FRAME_STRATA[normalized] then
@@ -30,22 +19,19 @@ local function NormalizeOakFrameStrata(strata)
     return "DIALOG"
 end
 
-local function GetNextOakFrameStrata(strata)
-    local resolved = NormalizeOakFrameStrata(strata)
-    for index, value in ipairs(FRAME_STRATA_ORDER) do
-        if value == resolved then
-            return FRAME_STRATA_ORDER[math.min(index + 1, #FRAME_STRATA_ORDER)]
-        end
-    end
-    return "FULLSCREEN_DIALOG"
-end
-
-local OAK_LFG = CreateFrame("Frame", "SorterClassicFrame", UIParent, "ButtonFrameTemplate")
+local OAK_LFG = CreateFrame("Frame", "SorterClassicFrame", UIParent, "PortraitFrameTemplate")
 addonTable.OAK_LFG = OAK_LFG 
 OAK_LFG:SetSize(660, 444) 
 OAK_LFG:SetPoint("CENTER")
 OAK_LFG:SetMovable(true)
 OAK_LFG:SetResizable(true)
+OAK_LFG:SetToplevel(true)
+OAK_LFG:HookScript("OnMouseDown", function(self)
+    self:Raise()
+end)
+if OAK_LFG.SetClipsChildren then
+    OAK_LFG:SetClipsChildren(false)
+end
 OAK_LFG:SetResizeBounds(460, 444, 1100, 800) 
 OAK_LFG:EnableMouse(true)
 OAK_LFG:RegisterForDrag("LeftButton")
@@ -66,8 +52,8 @@ OAK_LFG:SetFrameStrata(NormalizeOakFrameStrata(OakLFGSorterDB and OakLFGSorterDB
 OAK_LFG:SetClampedToScreen(false)
 OAK_LFG:Hide()
 
-if ButtonFrameTemplate_HidePortrait then
-    ButtonFrameTemplate_HidePortrait(OAK_LFG)
+if OAK_LFG.PortraitContainer and OAK_LFG.PortraitContainer.portrait then
+    OAK_LFG.PortraitContainer.portrait:SetTexture("Interface\\AddOns\\OakLFGSorter\\Media\\Logo.tga")
 end
 if OAK_LFG.Bg then
     OAK_LFG.Bg:SetAlpha(1.0)
@@ -113,7 +99,6 @@ end
 
 function addonTable.ApplyFrameStrata(strata)
     local resolved = NormalizeOakFrameStrata(strata or (OakLFGSorterDB and OakLFGSorterDB.frameStrata))
-    local logoStrata = GetNextOakFrameStrata(resolved)
     if OakLFGSorterDB then
         OakLFGSorterDB.frameStrata = resolved
     end
@@ -136,9 +121,6 @@ function addonTable.ApplyFrameStrata(strata)
         if frame and frame.SetFrameStrata then
             frame:SetFrameStrata(resolved)
         end
-    end
-    if addonTable.HeaderLogo and addonTable.HeaderLogo.SetFrameStrata then
-        addonTable.HeaderLogo:SetFrameStrata(logoStrata)
     end
 end
 
@@ -230,24 +212,9 @@ addonTable.CompactTitleText = "OAK LFG"
 OAK_LFG.title:SetTextColor(1.0, 0.82, 0.0)
 OAK_LFG.title:Hide()
 
-local headerLogo = CreateFrame("Frame", nil, OAK_LFG)
-headerLogo:SetSize(72, 72)
-headerLogo:SetPoint("TOPLEFT", OAK_LFG, "TOPLEFT", -14, 8)
-headerLogo:EnableMouse(false)
-headerLogo:SetFrameStrata("FULLSCREEN_DIALOG")
-headerLogo:SetFrameLevel((OAK_LFG:GetFrameLevel() or 1) + 20)
-headerLogo.tex = headerLogo:CreateTexture(nil, "ARTWORK")
-headerLogo.tex:SetPoint("TOPLEFT", headerLogo, "TOPLEFT", 8, -8)
-headerLogo.tex:SetPoint("BOTTOMRIGHT", headerLogo, "BOTTOMRIGHT", -8, 8)
-headerLogo.tex:SetTexture("Interface\\AddOns\\OakLFGSorter\\Media\\Logo.tga")
-headerLogo.tex:SetTexCoord(0, 1, 0, 1)
-headerLogo.ring = headerLogo:CreateTexture(nil, "OVERLAY")
-headerLogo.ring:SetAtlas("auctionhouse-itemicon-border-artifact", true)
-headerLogo.ring:SetSize(88, 88)
-headerLogo.ring:SetPoint("CENTER", headerLogo, "CENTER", 0, 0)
-addonTable.HeaderLogo = headerLogo
-if addonTable.ApplyFrameStrata then
-    addonTable.ApplyFrameStrata()
+local headerLogo = OAK_LFG.PortraitContainer
+if headerLogo then
+    addonTable.HeaderLogo = headerLogo
 end
 
 local controlsRow = CreateFrame("Frame", nil, OAK_LFG)
@@ -619,6 +586,8 @@ function addonTable.CheckRIOHook()
 end
 
 OAK_LFG:HookScript("OnShow", function()
+    OAK_LFG:SetToplevel(true)
+    OAK_LFG:Raise()
     if RaiderIO_ProfileTooltip then
         RaiderIO_ProfileTooltip._oakPinned = false
         RaiderIO_ProfileTooltip._oakPinnedName = nil
@@ -735,12 +704,6 @@ addonTable.RegisterThemeRefresh("ui_header_theme", function()
         if titleHeader then
             titleHeader:Show()
         end
-        if addonTable.HeaderLogo then
-            addonTable.HeaderLogo:Show()
-            if addonTable.HeaderLogo.ring then
-                addonTable.HeaderLogo.ring:SetVertexColor(1, 1, 1, 1)
-            end
-        end
         titleHeader:SetHeight(22)
         thBg:SetColorTexture(0.08, 0.08, 0.08, 0.0)
         thTop:SetColorTexture(0.42, 0.42, 0.42, 0.65)
@@ -792,12 +755,6 @@ addonTable.RegisterThemeRefresh("ui_header_theme", function()
         thTop:SetColorTexture(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 0.35)
         thBottom:SetColorTexture(0, 0, 0, 1)
         OAK_LFG.title:Show()
-        if addonTable.HeaderLogo then
-            addonTable.HeaderLogo:Show()
-            if addonTable.HeaderLogo.ring then
-                addonTable.HeaderLogo.ring:SetVertexColor(addonTable.ClassColor.r, addonTable.ClassColor.g, addonTable.ClassColor.b, 1)
-            end
-        end
         scaleSlider:Show()
         scaleEdit:Show()
         scaleLabel:Show()
