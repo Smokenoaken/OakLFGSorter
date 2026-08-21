@@ -1,3 +1,7 @@
+## v4.0.28
+
+- Reworked the window logo to use Blizzard's native portrait frame with clean spacing and reliable visibility.
+
 ## v4.0.27
 
 - Fixed the initial Blizzard dungeon role-filter synchronization
