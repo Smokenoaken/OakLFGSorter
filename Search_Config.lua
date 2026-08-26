@@ -34,6 +34,8 @@ local defaultSeasonDelves_enUS = {
     "Shadowguard Point",
     "Sunkiller Sanctum",
     "Torment's Rise",
+    "Gnarldor Isle",
+    "The Ring of Glory",
 }
 
 local localizedSeasonDelves = {
@@ -63,6 +65,7 @@ addonTable.SearchConfig.DelveZoneMapIDs = {
     2437,
     2443,
     2424,
+    2512, -- The Coiled Isle: Gnarldor Isle and The Ring of Glory
 }
 
 addonTable.SearchConfig.DelveLabelLookup = addonTable.SearchConfig.DelveLabelLookup or {}
@@ -195,3 +198,4 @@ addonTable.SearchConfig.DifficultyOptionsByMode = {
         { value = "MYTHIC", label = L["Mythic"] },
     },
 }
+addonTable.SearchConfig.DifficultyOptionsByMode.legacy_raid = addonTable.SearchConfig.DifficultyOptionsByMode.raid

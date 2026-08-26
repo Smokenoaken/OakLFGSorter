@@ -95,12 +95,14 @@ local function GetListingMode(activityInfo)
     local delveLookup = {
         ["atal'aman"] = true,
         ["collegiate calamity"] = true,
+        ["gnarldor isle"] = true,
         ["parhelion plaza"] = true,
         ["shadowguard point"] = true,
         ["sunkiller sanctum"] = true,
         ["the darkway"] = true,
         ["the grudge pit"] = true,
         ["the gulf of memory"] = true,
+        ["the ring of glory"] = true,
         ["the shadow enclave"] = true,
         ["torment's rise"] = true,
         ["twilight crypts"] = true,
@@ -169,12 +171,12 @@ local function GetPveFilterMask()
     return Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvE or 0
 end
 
-local function GetCurrentExpansionFilterMask()
-    return Enum and Enum.LFGListFilter and Enum.LFGListFilter.CurrentExpansion or 0
+local function GetRecommendedFilterMask()
+    return Enum and Enum.LFGListFilter and Enum.LFGListFilter.Recommended or 0
 end
 
-local function GetNotCurrentExpansionFilterMask()
-    return Enum and Enum.LFGListFilter and Enum.LFGListFilter.NotCurrentExpansion or 0
+local function GetNotRecommendedFilterMask()
+    return Enum and Enum.LFGListFilter and Enum.LFGListFilter.NotRecommended or 0
 end
 
 local function GetCurrentSeasonFilterMask()
@@ -186,15 +188,17 @@ local function GetCurrentSeasonFilterMask()
 end
 
 addonTable.BrowserCategoryOptions = {
-    { id = "DUNGEONS", label = L["Dungeons"], categoryID = CATEGORY_ID.DUNGEON, filters = bit.bor(GetCurrentSeasonFilterMask(), GetPveFilterMask()), mode = "mythic_plus" },
-    { id = "RAIDS_MIDNIGHT", label = L["Raids - Current"], categoryID = CATEGORY_ID.RAID, filters = bit.bor(GetCurrentExpansionFilterMask(), GetPveFilterMask()), mode = "raid" },
-    { id = "RAIDS_LEGACY", label = L["Raids - Legacy"], categoryID = CATEGORY_ID.CLASSIC_RAID, filters = 0, mode = "legacy_raid" },
-    { id = "DELVES", label = L["Delves"], categoryID = CATEGORY_ID.DELVES, filters = 0, mode = "delve" },
-    { id = "QUESTING", label = L["Questing"], categoryID = CATEGORY_ID.QUESTING, filters = 0, mode = "open_world" },
-    { id = "CUSTOM", label = L["Custom"], categoryID = CATEGORY_ID.CUSTOM, filters = 0, mode = "generic" },
+    { id = "DUNGEONS", label = L["Dungeons"], categoryID = CATEGORY_ID.DUNGEON, filters = bit.bor(GetCurrentSeasonFilterMask(), GetPveFilterMask()), preferredFilters = GetPveFilterMask(), mode = "mythic_plus" },
+    -- Blizzard exposes current and legacy raids as the same Raid category.
+    -- Recommended vs NotRecommended is the state that distinguishes the two.
+    { id = "RAIDS_MIDNIGHT", label = L["Raids - Current"], categoryID = CATEGORY_ID.RAID, filters = GetRecommendedFilterMask(), preferredFilters = GetPveFilterMask(), mode = "raid" },
+    { id = "RAIDS_LEGACY", label = L["Raids - Legacy"], categoryID = CATEGORY_ID.RAID, filters = GetNotRecommendedFilterMask(), preferredFilters = GetPveFilterMask(), mode = "legacy_raid" },
+    { id = "DELVES", label = L["Delves"], categoryID = CATEGORY_ID.DELVES, filters = 0, preferredFilters = GetPveFilterMask(), mode = "delve" },
+    { id = "QUESTING", label = L["Questing"], categoryID = CATEGORY_ID.QUESTING, filters = 0, preferredFilters = GetPveFilterMask(), mode = "open_world" },
+    { id = "CUSTOM", label = L["Custom"], categoryID = CATEGORY_ID.CUSTOM, filters = 0, preferredFilters = GetPveFilterMask(), mode = "generic" },
     { id = "__PVP_SEPARATOR__", label = L["PvP"], separator = true },
-    { id = "RBG", label = L["RBG"], categoryID = CATEGORY_ID.RATED_BATTLEGROUND, filters = 0, mode = "rated_pvp" },
-    { id = "ARENA", label = L["Arena"], categoryID = CATEGORY_ID.ARENA, filters = 0, mode = "pvp" },
+    { id = "RBG", label = L["RBG"], categoryID = CATEGORY_ID.RATED_BATTLEGROUND, filters = 0, preferredFilters = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvP or 0, mode = "rated_pvp" },
+    { id = "ARENA", label = L["Arena"], categoryID = CATEGORY_ID.ARENA, filters = 0, preferredFilters = Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvP or 0, mode = "pvp" },
 }
 
 function addonTable.GetBrowserCategoryConfig(categoryKey)
@@ -216,6 +220,10 @@ function addonTable.GetBrowserCategoryConfig(categoryKey)
                 for key, value in pairs(override) do
                     merged[key] = value
                 end
+                -- The category family is part of Oak's category definition, not
+                -- learnable state. In particular, Blizzard reuses Custom under
+                -- both PvE and PvP, so an old observed override must not swap it.
+                merged.preferredFilters = option.preferredFilters
                 return merged
             end
             return option
@@ -230,6 +238,15 @@ local function GetBrowserCategoryConfigForSelection(selection)
         return nil
     end
 
+    local selectionFilters = tonumber(selection.filters) or 0
+    if categoryID == CATEGORY_ID.RAID then
+        if bit.band(selectionFilters, GetNotRecommendedFilterMask()) ~= 0 then
+            return addonTable.GetBrowserCategoryConfig("RAIDS_LEGACY")
+        elseif bit.band(selectionFilters, GetRecommendedFilterMask()) ~= 0 then
+            return addonTable.GetBrowserCategoryConfig("RAIDS_MIDNIGHT")
+        end
+    end
+
     for _, option in ipairs(addonTable.BrowserCategoryOptions or {}) do
         if not option.separator and tonumber(option.categoryID) == categoryID then
             return option
@@ -237,6 +254,33 @@ local function GetBrowserCategoryConfigForSelection(selection)
     end
 
     return nil
+end
+
+local function SearchSelectionMatchesConfig(selection, config)
+    if not (selection and config)
+        or tonumber(selection.categoryID) ~= tonumber(config.categoryID)
+    then
+        return false
+    end
+
+    local familyMask = bit.bor(
+        GetPveFilterMask(),
+        Enum and Enum.LFGListFilter and Enum.LFGListFilter.PvP or 0
+    )
+    local configFamily = bit.band(tonumber(config.preferredFilters) or 0, familyMask)
+    if configFamily ~= 0
+        and bit.band(tonumber(selection.preferredFilters) or 0, familyMask) ~= configFamily
+    then
+        return false
+    end
+
+    if tonumber(config.categoryID) ~= CATEGORY_ID.RAID then
+        return true
+    end
+
+    local raidFilterMask = bit.bor(GetRecommendedFilterMask(), GetNotRecommendedFilterMask())
+    return bit.band(tonumber(selection.filters) or 0, raidFilterMask)
+        == bit.band(tonumber(config.filters) or 0, raidFilterMask)
 end
 
 function addonTable.GetCurrentListingCategoryKey()
@@ -1295,8 +1339,14 @@ local function GetCurrentSearchSelection()
         return nil
     end
 
-    local categoryID = panel.selectedCategory or panel.categoryID
-    local filters = panel.selectedFilters or panel.filters or 0
+    -- SearchPanel's native fields are categoryID/filters. The selected* fields
+    -- are compatibility shadows Oak may seed and must not override a later
+    -- category change made through Blizzard's own UI.
+    local categoryID = panel.categoryID or panel.selectedCategory
+    local filters = panel.filters
+    if filters == nil then
+        filters = panel.selectedFilters or 0
+    end
     local preferredFilters = panel.preferredFilters or 0
     local languageFilter = GetCurrentSearchLanguageFilter(panel)
     local crossFaction = panel.searchCrossFactionListings
@@ -1314,8 +1364,10 @@ function addonTable.UpdateSearchContext()
     local context = addonTable.CurrentSearchContext or {}
     local selection = GetCurrentSearchSelection()
     local preferOakSelection = context.useOakCategorySelection == true and context.selectedCategoryKey ~= nil
+    local storedConfig = addonTable.GetBrowserCategoryConfig and addonTable.GetBrowserCategoryConfig(context.selectedCategoryKey)
+    local liveMatchesStoredCategory = SearchSelectionMatchesConfig(selection, storedConfig)
 
-    if selection and selection.categoryID and (not preferOakSelection or selection.categoryID == context.selectedCategoryID) then
+    if selection and selection.categoryID and (not preferOakSelection or liveMatchesStoredCategory) then
         local observedConfig = GetBrowserCategoryConfigForSelection(selection)
         context.selectedCategoryID = selection.categoryID
         context.categoryID = selection.categoryID
@@ -1325,9 +1377,7 @@ function addonTable.UpdateSearchContext()
         end
         context.searchSelection = selection
     else
-        local storedConfig = addonTable.GetBrowserCategoryConfig and addonTable.GetBrowserCategoryConfig(context.selectedCategoryKey)
         if storedConfig then
-            local liveMatchesStoredCategory = selection and selection.categoryID and selection.categoryID == storedConfig.categoryID
             local languageFilter = selection and selection.languageFilter
                 or GetCurrentSearchLanguageFilter(LFGListFrame and LFGListFrame.SearchPanel)
                 or storedConfig.languageFilter
@@ -1380,10 +1430,8 @@ local function FetchSearchResultData()
     local panel = LFGListFrame and LFGListFrame.SearchPanel
     local categoryLabel = panel and panel.CategoryName and panel.CategoryName.GetText and panel.CategoryName:GetText() or ""
     local loweredCategoryLabel = strlower(tostring(categoryLabel or ""))
-    local blizzardLegacyActive = (liveSelection
-        and liveSelection.categoryID
-        and currentContext.selectedCategoryID
-        and liveSelection.categoryID == currentContext.selectedCategoryID)
+    local liveCategoryConfig = GetBrowserCategoryConfigForSelection(liveSelection)
+    local blizzardLegacyActive = (liveCategoryConfig and liveCategoryConfig.id == "RAIDS_LEGACY")
         or loweredCategoryLabel:find("legacy", 1, true) ~= nil
 
     if currentContext.selectedCategoryKey == "RAIDS_LEGACY"
@@ -1768,8 +1816,15 @@ local function FetchSearchResultData()
         searchContext.activityID = firstContextResult.activityID
         searchContext.activityInfo = activityInfo
 
-        searchContext.mode = firstContextResult.mode or "generic"
-        searchContext.categoryID = activityInfo and activityInfo.categoryID or searchContext.selectedCategoryID
+        local selectedConfig = addonTable.GetBrowserCategoryConfig and addonTable.GetBrowserCategoryConfig(searchContext.selectedCategoryKey)
+        if selectedConfig and selectedConfig.id ~= "DUNGEONS" then
+            searchContext.mode = selectedConfig.mode or "generic"
+        else
+            searchContext.mode = firstContextResult.mode or "generic"
+        end
+        searchContext.categoryID = searchContext.selectedCategoryID
+            or (searchContext.searchSelection and searchContext.searchSelection.categoryID)
+            or (activityInfo and activityInfo.categoryID)
         searchContext.groupID = (addonTable.ResolveActivityGroupID and addonTable.ResolveActivityGroupID(activityInfo)) or searchContext.groupID
 
         if searchContext.searchSelection then
@@ -2094,16 +2149,20 @@ function addonTable.GetAvailableBrowserActivities()
     if mode == "delve" then
         local configuredDelves = addonTable.SearchConfig and addonTable.SearchConfig.DefaultSeasonDelves or {}
         local resultInfoByLabel = {}
+        local resultDelves = {}
 
         for _, result in ipairs(addonTable.SearchResults or {}) do
             if result.mode == "delve" then
                 local rawLabel = result.activityFilterLabel or result.activityName or ""
                 local normalizedKey = NormalizeSearchScoreTargetLabel(rawLabel)
                 if normalizedKey ~= "" and not resultInfoByLabel[normalizedKey] then
-                    resultInfoByLabel[normalizedKey] = {
+                    local resultDelve = {
                         activityID = result.activityID,
                         activityInfo = result.activityInfo,
+                        label = rawLabel,
                     }
+                    resultInfoByLabel[normalizedKey] = resultDelve
+                    table.insert(resultDelves, resultDelve)
                 end
             end
         end
@@ -2121,6 +2180,24 @@ function addonTable.GetAvailableBrowserActivities()
                     filterKey = filterKey,
                     activityInfo = resultMatch.activityInfo,
                     scoreTarget = scoreTargets[normalizedKey] or nil,
+                })
+            end
+        end
+
+        -- Blizzard occasionally adds Delves between addon releases. Merge any
+        -- live result not present in the configured season list so it is always
+        -- filterable immediately (for example, Venomfall Deeps).
+        for _, resultDelve in ipairs(resultDelves) do
+            local label = resultDelve.label or ""
+            local filterKeyBuilder = addonTable.GetPendingNativeActivityKey
+            local filterKey = filterKeyBuilder and filterKeyBuilder(label) or NormalizeSearchScoreTargetLabel(label)
+            if label ~= "" and filterKey ~= "" and not seen[filterKey] then
+                seen[filterKey] = true
+                table.insert(activityEntries, {
+                    activityID = resultDelve.activityID,
+                    label = label,
+                    filterKey = filterKey,
+                    activityInfo = resultDelve.activityInfo,
                 })
             end
         end
@@ -2152,42 +2229,6 @@ function addonTable.GetAvailableBrowserActivities()
         return rawLabel
     end
 
-    local resultInfoByFilterKey = {}
-    local shouldPrepopulateFullRaidList = (selectedCategoryKey == "RAIDS_LEGACY")
-    if isRaidContext and shouldPrepopulateFullRaidList and C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetActivityInfoTable then
-        local categoryID = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryID
-        if categoryID then
-            for _, actID in ipairs(C_LFGList.GetAvailableActivities(categoryID) or {}) do
-                local actInfo = C_LFGList.GetActivityInfoTable(actID)
-                if actInfo then
-                    local actMode = GetListingMode(actInfo)
-                    if actMode == "raid" or actMode == "legacy_raid" or actMode == "open_world" then
-                        local rawLabel = CleanActivityLabel(actInfo.fullName or actInfo.shortName or "")
-                        local label = rawLabel
-                        if actMode ~= "open_world" then
-                            local inferredDiff = actInfo.shortName or ""
-                            label = StripRaidDifficultyPrefix(rawLabel, inferredDiff)
-                        end
-                        local filterKey = NormalizeSearchScoreTargetLabel(label)
-                        if label ~= "" and filterKey ~= "" and not seen[filterKey] then
-                            seen[filterKey] = true
-                            resultInfoByFilterKey[filterKey] = {
-                                activityID = actID,
-                                activityInfo = actInfo,
-                            }
-                            table.insert(activityEntries, {
-                                activityID = actID,
-                                label = label,
-                                filterKey = filterKey,
-                                activityInfo = actInfo,
-                            })
-                        end
-                    end
-                end
-            end
-        end
-    end
-
     for _, result in ipairs(addonTable.SearchResults or {}) do
         -- For raid context: include raid/legacy_raid AND open_world (world bosses),
         -- but skip everything else (prevents M+ dungeon names from leaking in).
@@ -2217,16 +2258,13 @@ function addonTable.GetAvailableBrowserActivities()
                     activityInfo = result.activityInfo,
                     scoreTarget  = scoreTargets[normalizedKey] or nil,
                 })
-            elseif isRaidContext and resultInfoByFilterKey[filterKey] and not resultInfoByFilterKey[filterKey].activityInfo then
-                resultInfoByFilterKey[filterKey] = {
-                    activityID = result.activityID,
-                    activityInfo = result.activityInfo,
-                }
             end
         end
     end
 
-    if isRaidContext and not shouldPrepopulateFullRaidList and C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetActivityInfoTable then
+    -- Current Raids also exposes Blizzard's world-boss activities. Legacy Raids
+    -- intentionally stays result-driven so its filter list remains compact.
+    if isRaidContext and selectedCategoryKey ~= "RAIDS_LEGACY" and C_LFGList and C_LFGList.GetAvailableActivities and C_LFGList.GetActivityInfoTable then
         local categoryID = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryID
         if categoryID then
             for _, actID in ipairs(C_LFGList.GetAvailableActivities(categoryID) or {}) do
@@ -2423,16 +2461,21 @@ function addonTable.RunBrowserSearch()
         return false, "No search category selected."
     end
 
-    if categoryKey == "RAIDS_LEGACY" then
-        return false, "Legacy raid searches must be loaded through Blizzard's panel."
-    end
-
     if categoryKey == "DUNGEONS" then
         if addonTable.SyncBrowserNativeAdvancedFilters then
             addonTable.SyncBrowserNativeAdvancedFilters()
         elseif addonTable.SyncBrowserNativeActivities then
             addonTable.SyncBrowserNativeActivities()
         end
+    end
+
+    -- Keep Blizzard's SearchPanel and CategorySelection in the same state as
+    -- Oak before using the native search path. This is essential for raids,
+    -- where category 3 is split by Recommended/NotRecommended rather than by ID.
+    if categoryKey == "DUNGEONS"
+        or categoryKey == "RAIDS_MIDNIGHT"
+        or categoryKey == "RAIDS_LEGACY"
+    then
         panel = EnsureBlizzardSearchPanelForCategory(categoryID, selection) or panel
     end
 
@@ -2444,7 +2487,9 @@ function addonTable.RunBrowserSearch()
         languageFilter = liveLanguageFilter
     end
 
-    if C_LFGList.GetAdvancedFilter then
+    -- Blizzard only attaches the advanced-filter payload to Dungeon searches.
+    -- Reusing it elsewhere leaks stale dungeon constraints into every category.
+    if categoryKey == "DUNGEONS" and C_LFGList.GetAdvancedFilter then
         local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
         if ok and type(adv) == "table" then
             advancedFilter = adv
@@ -2465,7 +2510,13 @@ function addonTable.RunBrowserSearch()
 
     -- For other categories, prefer Blizzard's own search routine when Blizzard is
     -- already on the same category. This preserves internal state Oak does not own.
-    if categoryKey ~= "DUNGEONS" and panel and (panel.selectedCategory or panel.categoryID) == categoryID and type(LFGListSearchPanel_DoSearch) == "function" then
+    local nativeSelection = GetCurrentSearchSelection()
+    local selectedConfig = addonTable.GetBrowserCategoryConfig and addonTable.GetBrowserCategoryConfig(categoryKey)
+    if categoryKey ~= "DUNGEONS"
+        and panel
+        and SearchSelectionMatchesConfig(nativeSelection, selectedConfig)
+        and type(LFGListSearchPanel_DoSearch) == "function"
+    then
         local ok, err = pcall(LFGListSearchPanel_DoSearch, panel)
         if ok then
             return true

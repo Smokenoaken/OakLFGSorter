@@ -55,7 +55,16 @@ local autoHideRolesBox
 local mutePingBox
 
 local function GetBrowserMode()
-    local mode = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode
+    local context = addonTable.CurrentSearchContext
+    local categoryKey = context and context.selectedCategoryKey
+    if categoryKey and categoryKey ~= "DUNGEONS" and addonTable.GetBrowserCategoryConfig then
+        local config = addonTable.GetBrowserCategoryConfig(categoryKey)
+        if config then
+            return config.mode or "generic"
+        end
+    end
+
+    local mode = context and context.mode
     if not mode or mode == "generic" then
         -- Context hasn't been resolved yet (e.g. first open before results load).
         -- Try to infer mode from the first available search result.
@@ -288,7 +297,7 @@ local function IsSelectedActivityKey(selectedActivities, filterKey, normalizeLab
 end
 
 local function ResultMatchesSelectedActivities(result, filters, runtime)
-    if not BrowserModeUsesActivityFilter(result.mode or GetBrowserMode()) then
+    if not BrowserModeUsesActivityFilter(GetBrowserMode()) then
         return true
     end
 
@@ -336,7 +345,7 @@ local function ResultMatchesSelectedActivities(result, filters, runtime)
 end
 
 local function ResultMatchesDifficulty(result, difficulty)
-    if not BrowserModeUsesDifficulty(result.mode or GetBrowserMode()) then
+    if not BrowserModeUsesDifficulty(GetBrowserMode()) then
         return true
     end
 
@@ -496,14 +505,14 @@ local function ParseNumericRangeFilter(filterStr, value)
 end
 
 local function ResultMatchesRaidBossCount(result, filters)
-    local listingMode = result.mode or GetBrowserMode()
+    local listingMode = GetBrowserMode()
     if listingMode ~= "raid" and listingMode ~= "legacy_raid" then return true end
     local bossesKilled = tonumber(result.raidListing and result.raidListing.bossesKilled) or 0
     return ParseNumericRangeFilter(filters.raidBossKills or "", bossesKilled)
 end
 
 local function ResultMatchesRaidRoleCounts(result, filters)
-    local listingMode = result.mode or GetBrowserMode()
+    local listingMode = GetBrowserMode()
     if listingMode ~= "raid" and listingMode ~= "legacy_raid" then return true end
     local rc = result.roleCounts or {}
     if not ParseNumericRangeFilter(filters.raidTanks   or "", tonumber(rc.TANK)    or 0) then return false end
@@ -517,7 +526,7 @@ local function ResultMatchesRaidLockout(result, filters, runtime)
         return true
     end
 
-    local listingMode = result.mode or GetBrowserMode()
+    local listingMode = GetBrowserMode()
     if listingMode ~= "raid" and listingMode ~= "legacy_raid" then
         return true
     end
@@ -752,12 +761,16 @@ end
 
 local function ResultMatchesMinimumRating(result)
     local minRating = nil
+    local mode = GetBrowserMode()
+    if mode == "raid" or mode == "legacy_raid" then
+        return true
+    end
     if addonTable._browserRuntimeFilters then
         minRating = addonTable._browserRuntimeFilters.minRating
     end
     if minRating == nil then
         minRating = browserMinRatingBox and tonumber(browserMinRatingBox:GetText() or "")
-        if not minRating or minRating <= 0 then
+        if (mode == "mythic_plus" or mode == "dungeon") and (not minRating or minRating <= 0) then
             local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
             if ok and type(adv) == "table" then
                 minRating = tonumber(adv.minimumRating)
@@ -769,7 +782,6 @@ local function ResultMatchesMinimumRating(result)
         return true
     end
 
-    local mode = result.mode or GetBrowserMode()
     local ratingValue
     if mode == "rated_pvp" or mode == "pvp" then
         ratingValue = tonumber(result.pvpRating) or tonumber(result.rating) or 0
@@ -1059,8 +1071,15 @@ function addonTable.BuildBrowserRuntimeFilters()
         end
     end
 
-    runtime.minRating = browserMinRatingBox and tonumber(browserMinRatingBox:GetText() or "")
-    if not runtime.minRating or runtime.minRating <= 0 then
+    local mode = GetBrowserMode()
+    if mode == "raid" or mode == "legacy_raid" then
+        runtime.minRating = 0
+    elseif mode == "mythic_plus" or mode == "dungeon" then
+        runtime.minRating = browserMinRatingBox and tonumber(browserMinRatingBox:GetText() or "")
+    else
+        runtime.minRating = tonumber(filters.minRating) or 0
+    end
+    if (mode == "mythic_plus" or mode == "dungeon") and (not runtime.minRating or runtime.minRating <= 0) then
         local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
         if ok and type(adv) == "table" then
             runtime.minRating = tonumber(adv.minimumRating) or 0
@@ -1621,6 +1640,7 @@ local function ResetOakBrowserCategoryFilters()
     filters.playstyle = "ANY"
     filters.keyMin = ""
     filters.keyMax = ""
+    filters.minRating = ""
     filters.partyFit = false
     filters.lustMatch = false
     filters.needsLust = false
@@ -1694,8 +1714,12 @@ categoryDropdownButton, categoryDropdownList = addonTable.CreateSimpleDropdown(
     end,
     function(id, option)
         if option and not option.separator and addonTable.SetBrowserCategory then
+            local previousKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
             ResetOakBrowserCategoryFilters()
             ResetNativeBrowserAdvancedFilters()
+            if previousKey and previousKey ~= id and C_LFGList and C_LFGList.ClearSearchTextFields then
+                pcall(C_LFGList.ClearSearchTextFields)
+            end
             addonTable.SetBrowserCategory(id)
             if addonTable.GetCurrentViewMode and addonTable.GetCurrentViewMode() == "browser" then
                 if addonTable.RefreshSearchOptionsPanel then
@@ -1707,19 +1731,14 @@ categoryDropdownButton, categoryDropdownList = addonTable.CreateSimpleDropdown(
                 if addonTable.UpdateDisplay then
                     addonTable.UpdateDisplay()
                 end
-                if addonTable.RunBrowserSearch and id ~= "RAIDS_LEGACY" then
+                if addonTable.RunBrowserSearch then
                     addonTable._manualBrowserRefreshInProgress = true
                     local ok = select(1, addonTable.RunBrowserSearch())
                     if not ok then
                         addonTable._manualBrowserRefreshInProgress = nil
                     end
-                elseif id == "RAIDS_LEGACY" and addonTable.SearchResults then
-                    wipe(addonTable.SearchResults)
-                    if addonTable.UpdateDisplay then
-                        addonTable.UpdateDisplay()
-                    end
                 end
-                if id ~= "RAIDS_LEGACY" and addonTable.FetchSearchResultData then
+                if addonTable.FetchSearchResultData then
                     C_Timer.After(0.2, function()
                         addonTable.FetchSearchResultData()
                         if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
@@ -2605,7 +2624,7 @@ local function GetBrowserDifficultyOptions()
             { value = "MYTHIC", label = L["Mythic"] },
             { value = "MYTHIC_PLUS", label = L["Mythic+"] },
         }
-    elseif mode == "raid" then
+    elseif mode == "raid" or mode == "legacy_raid" then
         return {
             { value = "ANY", label = L["Any Difficulty"] },
             { value = "NORMAL", label = L["Normal"] },
@@ -2671,6 +2690,14 @@ local function GetSearchQueryLabel(mode)
         return L["Examples: 10-11, 15, 15-20"]
     elseif mode == "raid" or mode == "legacy_raid" then
         return L["Search raid groups..."]
+    elseif mode == "delve" then
+        return L["Search delve groups..."]
+    elseif mode == "open_world" then
+        return L["Search questing groups..."]
+    elseif mode == "rated_pvp" or mode == "pvp" then
+        return L["Search PvP groups..."]
+    elseif mode == "generic" then
+        return L["Search custom groups..."]
     end
     return ""
 end
@@ -2868,14 +2895,18 @@ browserMinRatingBox:SetBackdrop({ bgFile = addonTable.FLAT_TEX, edgeFile = addon
 browserMinRatingBox:SetBackdropColor(unpack(addonTable.OAK_COLOR_PANE))
 browserMinRatingBox:SetBackdropBorderColor(unpack(addonTable.OAK_COLOR_BORDER))
 local function CommitMinRating()
-    -- Write directly to Blizzard's native advanced filter (no taint)
-    local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
-    if not ok or type(adv) ~= "table" then adv = {} end
     local text = browserMinRatingBox:GetText() or ""
     BrowserFilterState().minRating = text
-    local minR = tonumber(text)
-    adv.minimumRating = (minR and minR > 0) and minR or nil
-    pcall(C_LFGList.SaveAdvancedFilter, adv)
+    local mode = GetBrowserMode()
+    if mode == "mythic_plus" or mode == "dungeon" then
+        -- Blizzard's advanced rating filter is Dungeon-only. Other category
+        -- rating filters remain local so they cannot contaminate Dungeon state.
+        local ok, adv = pcall(C_LFGList.GetAdvancedFilter)
+        if not ok or type(adv) ~= "table" then adv = {} end
+        local minR = tonumber(text)
+        adv.minimumRating = (minR and minR > 0) and minR or nil
+        pcall(C_LFGList.SaveAdvancedFilter, adv)
+    end
     RefreshBrowserFilters()
 end
 browserMinRatingBox:SetScript("OnEnterPressed", function(self) CommitMinRating(); self:ClearFocus() end)
@@ -2908,9 +2939,24 @@ local browserNativeSearchOriginalState    = nil
 local browserNativeAutoCompleteOriginalState = nil
 
 local function AttachBrowserNativeSearchBox()
-    local searchBox = LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel.SearchBox
+    local searchPanel = LFGListFrame and LFGListFrame.SearchPanel
+    local searchBox = searchPanel and searchPanel.SearchBox
     if not (searchBox and browserQueryBoxFrame) then return end
     if not browserFilterPanel:IsShown() then return end
+
+    -- The native edit-box scripts use GetParent() to find category/filter state.
+    -- Mirror the active Oak context onto this host while the box is reparented.
+    local context = addonTable.CurrentSearchContext or {}
+    local selection = context.searchSelection or {}
+    if context.useOakCategorySelection == true then
+        browserQueryBoxFrame.categoryID = context.categoryID or context.selectedCategoryID or searchPanel.categoryID
+        browserQueryBoxFrame.filters = selection.filters or searchPanel.filters or 0
+        browserQueryBoxFrame.preferredFilters = selection.preferredFilters or searchPanel.preferredFilters or 0
+    else
+        browserQueryBoxFrame.categoryID = searchPanel.categoryID or context.categoryID or context.selectedCategoryID
+        browserQueryBoxFrame.filters = searchPanel.filters or selection.filters or 0
+        browserQueryBoxFrame.preferredFilters = searchPanel.preferredFilters or selection.preferredFilters or 0
+    end
     if browserNativeSearchOriginalState then return end  -- already attached
 
     local point, relativeTo, relativePoint, xOfs, yOfs = searchBox:GetPoint(1)
@@ -2927,6 +2973,7 @@ local function AttachBrowserNativeSearchBox()
         frameLevel    = searchBox:GetFrameLevel(),
         onEnterPressed = searchBox:GetScript("OnEnterPressed"),
         onEscapePressed = searchBox:GetScript("OnEscapePressed"),
+        onTextChanged = searchBox:GetScript("OnTextChanged"),
         onClearClick = searchBox.clearButton and searchBox.clearButton:GetScript("OnClick"),
     }
 
@@ -2938,6 +2985,7 @@ local function AttachBrowserNativeSearchBox()
             parent = acf:GetParent(), point = p, relativeTo = rt,
             relativePoint = rp, xOfs = x, yOfs = y2,
             frameStrata = acf:GetFrameStrata(), frameLevel = acf:GetFrameLevel(),
+            buttonOnClicks = {},
         }
         acf:SetParent(browserFilterPanel)
         acf:ClearAllPoints()
@@ -2972,8 +3020,32 @@ local function AttachBrowserNativeSearchBox()
         end
     end
 
+    local function PatchBrowserAutocompleteButtons()
+        local state = browserNativeAutoCompleteOriginalState
+        local acf = LFGListFrame and LFGListFrame.SearchPanel and LFGListFrame.SearchPanel.AutoCompleteFrame
+        if not (state and acf and type(acf.Results) == "table") then return end
+        for _, button in ipairs(acf.Results) do
+            if state.buttonOnClicks[button] == nil then
+                state.buttonOnClicks[button] = button:GetScript("OnClick") or false
+            end
+            button:SetScript("OnClick", function(self)
+                if not self.activityID then return end
+                PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+                C_LFGList.SetSearchToActivity(self.activityID)
+                RunBrowserSearchFromBox(searchBox)
+            end)
+        end
+    end
+
     searchBox:SetScript("OnEnterPressed", RunBrowserSearchFromBox)
     searchBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    searchBox:SetScript("OnTextChanged", function(self, ...)
+        local original = browserNativeSearchOriginalState and browserNativeSearchOriginalState.onTextChanged
+        if original then
+            original(self, ...)
+        end
+        PatchBrowserAutocompleteButtons()
+    end)
     -- Blizzard's clear button searches its own panel, which has no category while the box lives here.
     if searchBox.clearButton then
         searchBox.clearButton:SetScript("OnClick", function()
@@ -2999,6 +3071,9 @@ local function RestoreBrowserNativeSearchBox()
     -- Restore autocomplete frame
     if browserNativeAutoCompleteOriginalState and LFGListFrame.SearchPanel.AutoCompleteFrame then
         local acf = LFGListFrame.SearchPanel.AutoCompleteFrame
+        for button, original in pairs(browserNativeAutoCompleteOriginalState.buttonOnClicks or {}) do
+            button:SetScript("OnClick", original ~= false and original or nil)
+        end
         acf:SetParent(browserNativeAutoCompleteOriginalState.parent)
         acf:ClearAllPoints()
         if browserNativeAutoCompleteOriginalState.point and browserNativeAutoCompleteOriginalState.relativeTo then
@@ -3033,12 +3108,16 @@ local function RestoreBrowserNativeSearchBox()
     if browserNativeSearchOriginalState.frameLevel  then searchBox:SetFrameLevel(browserNativeSearchOriginalState.frameLevel) end
     if browserNativeSearchOriginalState.onEnterPressed  then searchBox:SetScript("OnEnterPressed",  browserNativeSearchOriginalState.onEnterPressed) end
     if browserNativeSearchOriginalState.onEscapePressed then searchBox:SetScript("OnEscapePressed", browserNativeSearchOriginalState.onEscapePressed) end
+    searchBox:SetScript("OnTextChanged", browserNativeSearchOriginalState.onTextChanged)
     if searchBox.clearButton then
         searchBox.clearButton:SetScript("OnClick", browserNativeSearchOriginalState.onClearClick)
     end
     -- Clear the SearchBox/AutoCompleteFrame references we set on the host frame
     browserQueryBoxFrame.SearchBox = nil
     browserQueryBoxFrame.AutoCompleteFrame = nil
+    browserQueryBoxFrame.categoryID = nil
+    browserQueryBoxFrame.filters = nil
+    browserQueryBoxFrame.preferredFilters = nil
     searchBox:Show()
     browserNativeSearchOriginalState = nil
 end
@@ -4066,7 +4145,12 @@ function addonTable.UpdateBrowserFilterPanel()
             browserMinRatingBox:ClearAllPoints()
             browserMinRatingBox:SetPoint("TOPLEFT", browserContent, "TOPLEFT", COL2_X, y - 2)
             if not browserMinRatingBox:HasFocus() then
-                local minR = tonumber(adv.minimumRating)
+                local minR
+                if mode == "mythic_plus" or mode == "dungeon" then
+                    minR = tonumber(adv.minimumRating)
+                else
+                    minR = tonumber(filters.minRating)
+                end
                 browserMinRatingBox:SetText(minR and tostring(math.floor(minR)) or "")
             end
             browserMinRatingBox:Show()

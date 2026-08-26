@@ -82,6 +82,13 @@ local function IsRatedBattlegroundBrowserMode()
         return false
     end
 
+    local categoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
+    if categoryKey == "RBG" then
+        return true
+    elseif categoryKey == "ARENA" then
+        return false
+    end
+
     local firstResult = addonTable.SearchResults and addonTable.SearchResults[1]
     if IsRatedBattlegroundResult(firstResult) then
         return true
@@ -114,14 +121,8 @@ local function GetHeaderTooltipData(sortKey)
             elseif listingMode == "delve" then
                 return L["Delve"], L["Sort by delve name."]
             elseif listingMode == "generic" then
-                local ctxInfo = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.activityInfo
-                local firstResult = addonTable.SearchResults and addonTable.SearchResults[1]
-                local hint = strlower(
-                    (ctxInfo and (ctxInfo.fullName or ctxInfo.shortName or ""))
-                    or (firstResult and (firstResult.activityName or firstResult.dungeonName or ""))
-                    or ""
-                )
-                if hint:find("custom", 1, true) then
+                local categoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
+                if categoryKey == "CUSTOM" then
                     return L["Activity"], L["Sort by activity type."]
                 end
                 return L["Zone"], L["Sort by zone name."]
@@ -216,7 +217,7 @@ end
 
 IsRaidBrowserMode = function()
     if not IsBrowserMode() then return false end
-    local m = (addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.mode) or "generic"
+    local m = GetListingMode()
     return m == "raid" or m == "legacy_raid"
 end
 
@@ -1496,16 +1497,9 @@ function addonTable.UpdateHeaderVisuals()
             elseif GetListingMode() == "delve" then
                 header.text:SetText(L["Delve"])
             elseif GetListingMode() == "generic" then
-                -- Generic covers Custom Groups (shows Custom PvE/PvP activity types)
-                -- and Questing (shows zone names). Distinguish by examining the first result.
-                local ctxInfo = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.activityInfo
-                local firstResult = addonTable.SearchResults and addonTable.SearchResults[1]
-                local hint = strlower(
-                    (ctxInfo and (ctxInfo.fullName or ctxInfo.shortName or ""))
-                    or (firstResult and (firstResult.activityName or firstResult.dungeonName or ""))
-                    or ""
-                )
-                if hint:find("custom", 1, true) then
+                -- The selected category is authoritative even before results arrive.
+                local categoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
+                if categoryKey == "CUSTOM" then
                     header.text:SetText(L["Activity"])
                 else
                     header.text:SetText(L["Zone"])
@@ -4584,11 +4578,6 @@ function addonTable.UpdateDisplay()
             QueueBrowserRowRender(normalResults, 1, browserRenderGeneration)
         end
 
-        local categoryKey = addonTable.CurrentSearchContext and addonTable.CurrentSearchContext.selectedCategoryKey
-        if #activeResults == 0 and categoryKey == "RAIDS_LEGACY" then
-            emptyStateText:SetText(L["Legacy raid results must be loaded from Blizzard's Premade Groups panel first.\n\nOpen Blizzard's Group Finder, select Legacy Raids there, then Oak will display those results here."])
-            emptyStateText:Show()
-        end
         addonTable._browserRuntimeFilters = nil
         return
     else
