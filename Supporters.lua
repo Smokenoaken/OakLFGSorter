@@ -39,6 +39,7 @@ addonTable.Patreons = {
     "michael arguedas",
     "Devron Lee",
     "Tenelle Mallard",
+    "Iury Sampaio",
     "coot",
     "Edwin Cridland",
     "Robert D Jones",
@@ -63,6 +64,7 @@ addonTable.Patreons = {
     "Symisch",
     "Alexander Hartwich",
     "Antonio Saez",
+    "Frank franz",
     "Blake Stover",
     "Loonie74",
     "PhoenixLD",
@@ -93,4 +95,5 @@ addonTable.Patreons = {
     "JimmyJam",
     "Mack",
     "Jennifer Carlson",
+    "Gianluca Berian",
 }

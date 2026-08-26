@@ -1,3 +1,10 @@
+## v4.0.29
+
+- Fixed Legacy Raid searches so Oak matches Blizzard results and keeps the selected raid category while searching.
+- Corrected browser category state so Dungeon filters and PvE/PvP search settings no longer leak into other categories.
+- Condensed Legacy Raid filters to raids present in the current search results.
+- Added Gnarldor Isle and The Ring of Glory Delve filters, Coiled Isle bountiful detection, and automatic support for newly returned Delves.
+
 ## v4.0.28
 
 - Reworked the window logo to use Blizzard's native portrait frame with clean spacing and reliable visibility.
