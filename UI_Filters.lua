@@ -1494,8 +1494,8 @@ local function ShowLowLatencyToggleTooltip(owner)
     GameTooltip:Show()
 end
 
-local function ToggleSharedRegionSetting()
-    OakLFGSorterDB.showRegions = not (OakLFGSorterDB and OakLFGSorterDB.showRegions == true)
+function addonTable.SetShowRegions(enabled)
+    OakLFGSorterDB.showRegions = enabled == true
     SyncSharedRegionToggleBoxes()
     if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH.UpdateDisplay then
         addonTable.OAK_SEARCH:UpdateDisplay()
@@ -1503,6 +1503,10 @@ local function ToggleSharedRegionSetting()
     if addonTable.UpdateDisplay then
         addonTable.UpdateDisplay()
     end
+end
+
+local function ToggleSharedRegionSetting()
+    addonTable.SetShowRegions(not (OakLFGSorterDB and OakLFGSorterDB.showRegions == true))
 end
 
 local function SyncSharedLowLatencySetting()
@@ -1683,11 +1687,14 @@ ResetSharedRegionFilters = function()
 end
 
 function addonTable.ToggleSharedRegionFlagsSetting()
-    if not (addonTable.CanShowRegionFlags and addonTable.CanShowRegionFlags()) then
-        OakLFGSorterDB.showRegionFlags = false
-    else
-        OakLFGSorterDB.showRegionFlags = not (OakLFGSorterDB and OakLFGSorterDB.showRegionFlags == true)
-    end
+    addonTable.SetShowRegionFlags(not (OakLFGSorterDB and OakLFGSorterDB.showRegionFlags == true))
+end
+
+function addonTable.SetShowRegionFlags(enabled)
+    OakLFGSorterDB.showRegionFlags = enabled == true
+        and addonTable.CanShowRegionFlags
+        and addonTable.CanShowRegionFlags()
+        or false
 
     if addonTable.RefreshOptionsPanel then
         addonTable.RefreshOptionsPanel()
@@ -4499,13 +4506,7 @@ local optionsMythicSideButton, optionsMythicSideList = addonTable.CreateSimpleDr
         }
     end,
     function(id)
-        OakLFGSorterDB.mythicPlusPanelSide = id == "LEFT" and "LEFT" or "RIGHT"
-        if addonTable.PositionMythicPlusPanel then
-            addonTable.PositionMythicPlusPanel()
-        end
-        if addonTable.UpdateAuxPanelAnchors then
-            addonTable.UpdateAuxPanelAnchors()
-        end
+        addonTable.SetMythicPlusPanelSide(id)
     end
 )
 optionsMythicSideButton:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 15, -216)
@@ -4646,7 +4647,7 @@ do
         if InCombatLockdown and InCombatLockdown() then
             optionsKeybindValue:SetText(L["Cannot change bindings in combat."])
             StopBrowserBindingCapture()
-            return
+            return false
         end
 
         local old1, old2 = GetBindingKey(BROWSER_BINDING_COMMAND)
@@ -4661,6 +4662,7 @@ do
         if addonTable.RefreshOptionsPanel then
             addonTable.RefreshOptionsPanel()
         end
+        return true
     end
 
     local function BuildCapturedBinding(key)
@@ -4753,6 +4755,8 @@ do
     end)
 
     addonTable.FormatOakBindingText = FormatOakBindingText
+    addonTable.SetOakBrowserBinding = SaveBrowserBinding
+    addonTable.BuildOakBrowserBinding = BuildCapturedBinding
     addonTable.IsBrowserBindingCaptureActive = function()
         return browserBindingCaptureActive
     end
@@ -4773,12 +4777,57 @@ end
 local ApplySpecToggleVisual = ApplyNeutralOptionsToggleVisual
 local ApplyMinimapToggleVisual = ApplyNeutralOptionsToggleVisual
 
-optionsSpecBox:SetScript("OnClick", function()
-    OakLFGSorterDB.showSpecIcons = not OakLFGSorterDB.showSpecIcons
+function addonTable.SetShowSpecIcons(enabled)
+    OakLFGSorterDB.showSpecIcons = enabled == true
     if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
     if addonTable.OAK_SEARCH and addonTable.OAK_SEARCH.UpdateDisplay then addonTable.OAK_SEARCH:UpdateDisplay() end
     if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
     if addonTable.RefreshSearchOptionsPanel then addonTable.RefreshSearchOptionsPanel() end
+end
+
+function addonTable.SetShowMinimapButton(enabled)
+    OakLFGSorterDB.hideMinimapButton = enabled ~= true
+    if addonTable.UpdateMinimapButtonVisibility then
+        addonTable.UpdateMinimapButtonVisibility()
+    end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end
+
+function addonTable.SetShowPartyKeys(enabled)
+    OakLFGSorterDB.showPartyKeys = enabled == true
+    if addonTable.UpdatePartyKeysPanel then addonTable.UpdatePartyKeysPanel() end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end
+
+function addonTable.SetBrowserTooltipOnCursor(enabled)
+    OakLFGSorterDB.attachBrowserTooltipToCursor = enabled == true
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end
+
+function addonTable.SetKeepUnavailableResults(enabled)
+    local filters = BrowserFilterState()
+    filters.keepUnavailable = enabled == true
+    if C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()
+            and addonTable.FetchApplicantData then
+        addonTable.FetchApplicantData()
+    end
+    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end
+
+function addonTable.SetMythicPlusPanelSide(side)
+    OakLFGSorterDB.mythicPlusPanelSide = side == "LEFT" and "LEFT" or "RIGHT"
+    if addonTable.PositionMythicPlusPanel then
+        addonTable.PositionMythicPlusPanel()
+    end
+    if addonTable.UpdateAuxPanelAnchors then
+        addonTable.UpdateAuxPanelAnchors()
+    end
+    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+end
+
+optionsSpecBox:SetScript("OnClick", function()
+    addonTable.SetShowSpecIcons(not (OakLFGSorterDB.showSpecIcons == true))
 end)
 optionsSpecBox:SetScript("OnEnter", function(self)
     ApplySpecToggleVisual(self, optionsSpecLabel, OakLFGSorterDB.showSpecIcons == true)
@@ -4805,11 +4854,7 @@ addonTable.OptionsRegionFlagsBox:SetScript("OnLeave", function()
 end)
 
 optionsMinimapBox:SetScript("OnClick", function()
-    OakLFGSorterDB.hideMinimapButton = not OakLFGSorterDB.hideMinimapButton
-    if addonTable.UpdateMinimapButtonVisibility then
-        addonTable.UpdateMinimapButtonVisibility()
-    end
-    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+    addonTable.SetShowMinimapButton(OakLFGSorterDB.hideMinimapButton == true)
 end)
 optionsMinimapBox:SetScript("OnEnter", function(self)
     ApplyMinimapToggleVisual(self, optionsMinimapLabel, not (OakLFGSorterDB and OakLFGSorterDB.hideMinimapButton == true))
@@ -4824,9 +4869,7 @@ optionsMinimapBox:SetScript("OnLeave", function()
 end)
 
 optionsPartyKeysBox:SetScript("OnClick", function()
-    OakLFGSorterDB.showPartyKeys = not (OakLFGSorterDB.showPartyKeys == true)
-    if addonTable.UpdatePartyKeysPanel then addonTable.UpdatePartyKeysPanel() end
-    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+    addonTable.SetShowPartyKeys(not (OakLFGSorterDB.showPartyKeys == true))
 end)
 optionsPartyKeysBox:SetScript("OnEnter", function(self)
     ApplyMinimapToggleVisual(self, optionsPartyKeysLabel, OakLFGSorterDB.showPartyKeys == true)
@@ -4841,8 +4884,7 @@ optionsPartyKeysBox:SetScript("OnLeave", function()
 end)
 
 optionsBrowserTooltipBox:SetScript("OnClick", function()
-    OakLFGSorterDB.attachBrowserTooltipToCursor = not (OakLFGSorterDB.attachBrowserTooltipToCursor == true)
-    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
+    addonTable.SetBrowserTooltipOnCursor(not (OakLFGSorterDB.attachBrowserTooltipToCursor == true))
 end)
 optionsBrowserTooltipBox:SetScript("OnEnter", function(self)
     ApplyMinimapToggleVisual(self, optionsBrowserTooltipLabel, OakLFGSorterDB.attachBrowserTooltipToCursor == true)
@@ -4858,14 +4900,9 @@ end)
 
 optionsKeepGoneBox:SetScript("OnClick", function()
     local filters = BrowserFilterState()
-    filters.keepUnavailable = not (filters.keepUnavailable == true)
+    addonTable.SetKeepUnavailableResults(not (filters.keepUnavailable == true))
+    filters = BrowserFilterState()
     ApplyNeutralOptionsToggleVisual(optionsKeepGoneBox, optionsKeepGoneLabel, filters.keepUnavailable == true)
-    if C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.HasActiveEntryInfo()
-            and addonTable.FetchApplicantData then
-        addonTable.FetchApplicantData()
-    end
-    if addonTable.UpdateDisplay then addonTable.UpdateDisplay() end
-    if addonTable.RefreshOptionsPanel then addonTable.RefreshOptionsPanel() end
 end)
 optionsKeepGoneBox:SetScript("OnEnter", function(self)
     local filters = BrowserFilterState()
@@ -5400,49 +5437,6 @@ function addonTable.ToggleOptionsPanel()
     end
     if addonTable.AnchorRIOPanelToOak then
         addonTable.AnchorRIOPanelToOak(addonTable.OAK_LFG)
-    end
-end
-
-local function OpenOakOptionsFromBlizzard()
-    if SettingsPanel and SettingsPanel:IsShown() then
-        HideUIPanel(SettingsPanel)
-    elseif InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then
-        HideUIPanel(InterfaceOptionsFrame)
-    end
-
-    if addonTable.OpenOakOptions then
-        addonTable.OpenOakOptions()
-    elseif addonTable.OpenOakBrowser then
-        addonTable.OpenOakBrowser()
-        if addonTable.ToggleOptionsPanel and not (addonTable.OptionsPanel and addonTable.OptionsPanel:IsShown()) then
-            addonTable.ToggleOptionsPanel()
-        end
-    end
-end
-
-do
-    local settingsFrame = CreateFrame("Frame", "SorterClassicBlizzardOptionsPanel")
-    settingsFrame.name = "OAK LFG Sorter"
-
-    local title = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
-    title:SetPoint("TOPLEFT", 16, -16)
-    title:SetText(L["OAK LFG Sorter"])
-
-    local description = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    description:SetText(L["Open Oak's in-window options panel."])
-
-    local openButton = CreateFrame("Button", nil, settingsFrame, "UIPanelButtonTemplate")
-    openButton:SetSize(180, 24)
-    openButton:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -14)
-    openButton:SetText(L["Open Oak Options"])
-    openButton:SetScript("OnClick", OpenOakOptionsFromBlizzard)
-
-    if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
-        local category = Settings.RegisterCanvasLayoutCategory(settingsFrame, settingsFrame.name, settingsFrame.name)
-        Settings.RegisterAddOnCategory(category)
-    elseif InterfaceOptions_AddCategory then
-        InterfaceOptions_AddCategory(settingsFrame)
     end
 end
 

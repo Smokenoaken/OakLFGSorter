@@ -432,6 +432,21 @@ local function ApplyScalePreservingTopLeft(scale, fixedPoint, fixedRelativeTo, f
 end
 addonTable.ApplyScalePreservingTopLeft = ApplyScalePreservingTopLeft
 
+function addonTable.SetScalePreference(value)
+    local scale = math.max(0.5, math.min(1.5, tonumber(value) or 1.0))
+    scale = math.floor(scale * 100 + 0.5) / 100
+    ApplyScalePreservingTopLeft(scale)
+    if OakLFGSorterDB then
+        OakLFGSorterDB.scale = scale
+    end
+    scaleSlider:SetValue(scale)
+    scaleEdit:SetText(string.format("%.2f", scale))
+    if addonTable.RefreshOptionsPanel then
+        addonTable.RefreshOptionsPanel()
+    end
+    return scale
+end
+
 scaleSlider:SetScript("OnMouseDown", function(self)
     self.isDragging = true
     self.anchorPoint, self.anchorRelativeTo, self.anchorRelativePoint, self.anchorX, self.anchorY = CaptureFrameAnchor()

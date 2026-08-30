@@ -54,25 +54,9 @@ local function NormalizeSignupNoteText(noteText)
     return normalized
 end
 
-local function GetSavedSignupNoteText()
-    return NormalizeSignupNoteText(GetSearchSignupCharacterDB().signupNoteText or "")
-end
-
-local function SetSavedSignupNoteText(noteText)
-    GetSearchSignupCharacterDB().signupNoteText = NormalizeSignupNoteText(noteText)
-end
-
-local function SaveBlockedSignupNoteText(noteText)
-    local value = tostring(noteText or "")
-    if value == "" then
-        return
-    end
-    GetSearchSignupCharacterDB().blockedSignupNoteText = value
-end
-
 local function NotifySignupNoteBlocked()
     if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
-        DEFAULT_CHAT_FRAME:AddMessage("|cff9CD6DEOak|r cleared your signup note for this application because Blizzard disabled the Sign Up button while note text was present.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cff9CD6DEOak|r Blizzard disabled the Sign Up button while note text was present. Clear the note manually to continue.")
     end
 end
 
@@ -119,24 +103,11 @@ local quickSignupState = {
     persistPatchActive = false,
     queueButtonsHooked = false,
     originalDialogShow = nil,
-    suppressNoteFallback = false,
     noteFallbackWarnedForDialog = false,
     applicationTimes = {},
 }
 local EnsureQueueRoleSelectorHooks
 local GetSignupNoteEditBox
-local RestoreSavedSignupNote
-
-local function TrySetSignupNoteText(editBox, noteText)
-    if not (editBox and type(editBox.SetText) == "function") then
-        return false
-    end
-
-    quickSignupState.suppressNoteFallback = true
-    local ok = pcall(editBox.SetText, editBox, noteText or "")
-    quickSignupState.suppressNoteFallback = false
-    return ok == true
-end
 
 local SIGNUP_COOLDOWN_DURATION = 1.5  -- Blizzard server-side throttle estimate (seconds)
 local lastDirectSignupTime = 0
@@ -723,24 +694,7 @@ GetSignupNoteEditBox = function()
     return nil
 end
 
-RestoreSavedSignupNote = function(editBox)
-    return
-end
-
-local function SaveSignupNoteFromEditBox(editBox)
-    editBox = editBox or GetSignupNoteEditBox()
-    if not editBox then
-        return
-    end
-
-    SetSavedSignupNoteText(editBox:GetText())
-end
-
 local function EvaluateSignupNoteFallback(editBox, expectedText)
-    if quickSignupState.suppressNoteFallback then
-        return
-    end
-
     if not IsPersistSignupNoteEnabled() then
         return
     end
@@ -763,9 +717,6 @@ local function EvaluateSignupNoteFallback(editBox, expectedText)
         return
     end
 
-    SaveBlockedSignupNoteText(currentText)
-    TrySetSignupNoteText(editBox, "")
-
     if not quickSignupState.noteFallbackWarnedForDialog then
         quickSignupState.noteFallbackWarnedForDialog = true
         NotifySignupNoteBlocked()
@@ -778,14 +729,15 @@ local function HookSignupNoteFallback()
         return
     end
 
-    editBox:HookScript("OnTextChanged", function(self)
-        if quickSignupState.suppressNoteFallback then
+    editBox:HookScript("OnTextChanged", function(self, userInput)
+        -- Only player-entered text should trigger Oak's disabled-button check.
+        -- Blizzard also changes this secure edit box programmatically.
+        if not userInput then
             return
         end
 
         local rawText = tostring(self:GetText() or "")
         local noteText = NormalizeSignupNoteText(rawText)
-        SetSavedSignupNoteText(noteText)
 
         if noteText == "" then
             return
@@ -939,7 +891,7 @@ cancelOldestLabel:SetText(L["Cancel Oldest"])
 cancelOldestLabel:SetTextColor(1, 0.82, 0)
 local persistNoteToggleLabel = quickSignupBar:CreateFontString(nil, "OVERLAY", "SorterClassic_FontSmall")
 persistNoteToggleLabel:SetPoint("RIGHT", quickSignupBar, "RIGHT", -12, 0)
-persistNoteToggleLabel:SetText(L["Persist Note"])
+persistNoteToggleLabel:SetText(L["Keep Note This Session"])
 persistNoteToggleLabel:SetTextColor(0.85, 0.85, 0.85)
 
 local persistNoteToggleBox = CreateQuickSignupToggle(quickSignupBar)
@@ -952,8 +904,8 @@ persistNoteTooltipRegion:EnableMouse(true)
 
 local function ShowPersistNoteTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText(L["Persist Note"], 1, 1, 1)
-    GameTooltip:AddLine(L["Oak can preserve Blizzard's last sign-up note between applications."], 1, 1, 1, true)
+    GameTooltip:SetText(L["Keep Note This Session"], 1, 1, 1)
+    GameTooltip:AddLine(L["Keeps Blizzard's sign-up note when switching between groups until you reload or log out."], 1, 1, 1, true)
     GameTooltip:AddLine(L["To set or change that note, open the normal Blizzard sign-up popup, type your note there, and sign up once."], 0.9, 0.9, 0.9, true)
     GameTooltip:AddLine(L["Tip: disable Quick Sign Up or hold Shift while clicking Apply to open the popup."], 0.8, 0.8, 0.8, true)
     GameTooltip:Show()
@@ -1229,9 +1181,8 @@ quickSignupToggleBox:SetScript("OnLeave", function()
 end)
 
 persistNoteToggleBox:SetScript("OnClick", function(self)
-    SetPersistSignupNoteEnabled(not IsPersistSignupNoteEnabled())
+    addonTable.SetPersistSignupNoteEnabled(not IsPersistSignupNoteEnabled())
     self:SetState(IsPersistSignupNoteEnabled())
-    UpdatePersistentNotePatch()
 end)
 
 for _, roleKey in ipairs(quickSignupState.roleOrder) do
@@ -1307,10 +1258,6 @@ function addonTable.EnsureSearchSignupHooks()
         quickSignupState.pending = false
     end)
 
-    LFGListApplicationDialog:HookScript("OnHide", function()
-        SaveSignupNoteFromEditBox(GetSignupNoteEditBox())
-    end)
-
     LFGListApplicationDialog.OakQuickSignupHooked = true
 
     if LFGListFrame and LFGListFrame.ApplicationViewer and not LFGListFrame.ApplicationViewer.OakRaiseAboveHooked then
@@ -1377,6 +1324,19 @@ function addonTable.BeginSearchSignup(searchResultID)
         end)
     else
         FallbackShowSignupDialog(searchResultID)
+    end
+end
+
+function addonTable.GetPersistSignupNoteEnabled()
+    return IsPersistSignupNoteEnabled()
+end
+
+function addonTable.SetPersistSignupNoteEnabled(enabled)
+    SetPersistSignupNoteEnabled(enabled)
+    UpdatePersistentNotePatch()
+    persistNoteToggleBox:SetState(IsPersistSignupNoteEnabled())
+    if addonTable.RefreshBlizzardSettingsPanel then
+        addonTable.RefreshBlizzardSettingsPanel()
     end
 end
 

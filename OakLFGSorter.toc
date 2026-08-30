@@ -31,4 +31,5 @@ MythicPlus_Panel.lua
 MinimapButton.lua
 DataBroker.lua
 Search_Signup.lua
+Blizzard_Settings.lua
 Search_Integration.lua
