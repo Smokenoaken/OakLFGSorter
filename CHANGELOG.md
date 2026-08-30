@@ -1,3 +1,8 @@
+## v4.0.30
+
+- Added a complete OAK LFG Sorter settings page under Blizzard AddOns options.
+- Clarified that signup-note retention lasts for the current UI session because Blizzard blocks addon restoration after reload or logout.
+
 ## v4.0.29
 
 - Fixed Legacy Raid searches so Oak matches Blizzard results and keeps the selected raid category while searching.
