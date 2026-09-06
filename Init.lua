@@ -42,6 +42,57 @@ addonTable.L = setmetatable({}, {
     end,
 })
 
+-- Midnight can return secret values from otherwise familiar APIs while the
+-- player is in an encounter, challenge mode, PvP match, or restricted map.
+-- These helpers keep secret values out of normal Lua operations while
+-- remaining no-ops on older clients that do not expose the access checks.
+function addonTable.CanAccessValue(value)
+    if value == nil then
+        return true
+    end
+    if issecretvalue and issecretvalue(value) then
+        return false
+    end
+    if canaccessvalue and not canaccessvalue(value) then
+        return false
+    end
+    return true
+end
+
+function addonTable.CanAccessTable(value)
+    if type(value) ~= "table" then
+        return false
+    end
+    if issecretvalue and issecretvalue(value) then
+        return false
+    end
+    if issecrettable and issecrettable(value) then
+        return false
+    end
+    if canaccesstable and not canaccesstable(value) then
+        return false
+    end
+    return true
+end
+
+function addonTable.GetFirstAccessibleTable(value)
+    if not addonTable.CanAccessTable(value) then
+        return nil
+    end
+
+    local firstValue = value[1]
+    if not addonTable.CanAccessValue(firstValue) then
+        return nil
+    end
+    if firstValue == nil then
+        return value
+    end
+    if addonTable.CanAccessTable(firstValue) then
+        return firstValue
+    end
+    return nil
+end
+
 BINDING_HEADER_OAKLFGSORTER = "OAK LFG Sorter"
 BINDING_NAME_OAKLFGSORTER_TOGGLEBROWSER = "Toggle Browser Window"
 

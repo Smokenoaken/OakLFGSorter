@@ -2211,25 +2211,35 @@ local function OpenBlizzardSearchResultContextMenu(searchResultID, owner)
             if not searchResultInfo then
                 return
             end
+            if addonTable.CanAccessTable and not addonTable.CanAccessTable(searchResultInfo) then
+                return
+            end
 
-            rootDescription:CreateTitle(searchResultInfo.name or "")
+            local resultName = searchResultInfo.name
+            local leaderName = searchResultInfo.leaderName
+            if (addonTable.CanAccessValue and not addonTable.CanAccessValue(resultName))
+                    or (addonTable.CanAccessValue and not addonTable.CanAccessValue(leaderName)) then
+                return
+            end
+
+            rootDescription:CreateTitle(resultName or "")
 
             local whisperButton = rootDescription:CreateButton(WHISPER_LEADER or WHISPER or "Whisper Leader", function()
-                if searchResultInfo.leaderName then
+                if leaderName then
                     if ChatFrameUtil and ChatFrameUtil.SendTell then
-                        ChatFrameUtil.SendTell(searchResultInfo.leaderName)
+                        ChatFrameUtil.SendTell(leaderName)
                     elseif ChatFrame_SendTell then
-                        ChatFrame_SendTell(searchResultInfo.leaderName)
+                        ChatFrame_SendTell(leaderName)
                     end
                 end
             end)
-            if not searchResultInfo.leaderName and whisperButton and whisperButton.SetEnabled then
+            if not leaderName and whisperButton and whisperButton.SetEnabled then
                 whisperButton:SetEnabled(false)
             end
 
             rootDescription:CreateButton(LFG_LIST_REPORT_GROUP_FOR or "Report Group", function()
                 if LFGList_ReportListing then
-                    LFGList_ReportListing(searchResultID, searchResultInfo.leaderName)
+                    LFGList_ReportListing(searchResultID, leaderName)
                 end
             end)
 
@@ -3024,8 +3034,12 @@ function addonTable.BuildBrowserGroupTooltip(result)
     -- ── PVP: re-fetch rating fresh (may have been nil when result was first processed) ─
     if (listingMode == "rated_pvp" or listingMode == "pvp") and result.id and C_LFGList.GetSearchResultInfo then
         local fresh = C_LFGList.GetSearchResultInfo(result.id)
-        if fresh and type(fresh.leaderPvpRatingInfo) == "table" then
-            local entry = fresh.leaderPvpRatingInfo[1] or fresh.leaderPvpRatingInfo
+        local pvpInfo = nil
+        if fresh and (not addonTable.CanAccessTable or addonTable.CanAccessTable(fresh)) then
+            pvpInfo = fresh.leaderPvpRatingInfo
+        end
+        if addonTable.CanAccessTable and addonTable.CanAccessTable(pvpInfo) then
+            local entry = addonTable.GetFirstAccessibleTable(pvpInfo)
             if type(entry) == "table" then
                 local freshRating = tonumber(entry.rating or entry.pvpRating or entry.currentRating or entry.value) or 0
                 if freshRating > 0 then
@@ -4236,9 +4250,13 @@ PopulateBrowserRow = function(row, result, isAltColor)
         -- For PVP mode: re-fetch pvp rating fresh from the API (may have been nil at initial processing time)
         if isPvpMode and result.id and C_LFGList.GetSearchResultInfo then
             local fresh = C_LFGList.GetSearchResultInfo(result.id)
-            if fresh and type(fresh.leaderPvpRatingInfo) == "table" then
+            local pvpInfo = nil
+            if fresh and (not addonTable.CanAccessTable or addonTable.CanAccessTable(fresh)) then
+                pvpInfo = fresh.leaderPvpRatingInfo
+            end
+            if addonTable.CanAccessTable and addonTable.CanAccessTable(pvpInfo) then
                 -- TWW wraps pvp info in an array; unwrap to get the actual entry
-                local entry = fresh.leaderPvpRatingInfo[1] or fresh.leaderPvpRatingInfo
+                local entry = addonTable.GetFirstAccessibleTable(pvpInfo)
                 if type(entry) == "table" then
                     local freshRating = tonumber(entry.rating or entry.pvpRating or entry.currentRating or entry.value) or 0
                     if freshRating > 0 then

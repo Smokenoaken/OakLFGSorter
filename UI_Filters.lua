@@ -2980,6 +2980,8 @@ local function AttachBrowserNativeSearchBox()
         frameLevel    = searchBox:GetFrameLevel(),
         onEnterPressed = searchBox:GetScript("OnEnterPressed"),
         onEscapePressed = searchBox:GetScript("OnEscapePressed"),
+        onTabPressed = searchBox:GetScript("OnTabPressed"),
+        onArrowPressed = searchBox:GetScript("OnArrowPressed"),
         onTextChanged = searchBox:GetScript("OnTextChanged"),
         onClearClick = searchBox.clearButton and searchBox.clearButton:GetScript("OnClick"),
     }
@@ -3046,6 +3048,24 @@ local function AttachBrowserNativeSearchBox()
 
     searchBox:SetScript("OnEnterPressed", RunBrowserSearchFromBox)
     searchBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    local function RunNativeAutocompleteNavigation(self, handler, ...)
+        local acf = browserQueryBoxFrame.AutoCompleteFrame
+        local firstResult = acf and type(acf.Results) == "table" and acf.Results[1]
+        if not (acf and acf:IsShown() and firstResult and firstResult:IsShown() and firstResult.activityID) then
+            return
+        end
+        if handler then
+            handler(self, ...)
+        end
+    end
+    searchBox:SetScript("OnTabPressed", function(self, ...)
+        local original = browserNativeSearchOriginalState and browserNativeSearchOriginalState.onTabPressed
+        RunNativeAutocompleteNavigation(self, original, ...)
+    end)
+    searchBox:SetScript("OnArrowPressed", function(self, ...)
+        local original = browserNativeSearchOriginalState and browserNativeSearchOriginalState.onArrowPressed
+        RunNativeAutocompleteNavigation(self, original, ...)
+    end)
     searchBox:SetScript("OnTextChanged", function(self, ...)
         local original = browserNativeSearchOriginalState and browserNativeSearchOriginalState.onTextChanged
         if original then
@@ -3115,6 +3135,8 @@ local function RestoreBrowserNativeSearchBox()
     if browserNativeSearchOriginalState.frameLevel  then searchBox:SetFrameLevel(browserNativeSearchOriginalState.frameLevel) end
     if browserNativeSearchOriginalState.onEnterPressed  then searchBox:SetScript("OnEnterPressed",  browserNativeSearchOriginalState.onEnterPressed) end
     if browserNativeSearchOriginalState.onEscapePressed then searchBox:SetScript("OnEscapePressed", browserNativeSearchOriginalState.onEscapePressed) end
+    searchBox:SetScript("OnTabPressed", browserNativeSearchOriginalState.onTabPressed)
+    searchBox:SetScript("OnArrowPressed", browserNativeSearchOriginalState.onArrowPressed)
     searchBox:SetScript("OnTextChanged", browserNativeSearchOriginalState.onTextChanged)
     if searchBox.clearButton then
         searchBox.clearButton:SetScript("OnClick", browserNativeSearchOriginalState.onClearClick)

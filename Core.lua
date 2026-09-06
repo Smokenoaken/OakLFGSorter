@@ -807,27 +807,42 @@ local function GetSearchResultActivityID(resultInfo, searchResultID)
         return nil
     end
 
-    local activityID = tonumber(resultInfo.activityID)
+    if addonTable.CanAccessTable and not addonTable.CanAccessTable(resultInfo) then
+        return nil, true
+    end
+
+    local rawActivityID = resultInfo.activityID
+    if addonTable.CanAccessValue and not addonTable.CanAccessValue(rawActivityID) then
+        return nil, true
+    end
+
+    local activityID = tonumber(rawActivityID)
     if not activityID then
         local ids = resultInfo.activityIDs
-        if type(ids) == "table" then
-            activityID = tonumber(ids[1])
+        if addonTable.CanAccessValue and not addonTable.CanAccessValue(ids) then
+            return nil, true
         end
-    end
-    if not activityID and searchResultID and securecallfunction and C_LFGList and C_LFGList.GetSearchResultInfo then
-        activityID = securecallfunction(function(resultID)
-            local secureResultInfo = C_LFGList.GetSearchResultInfo(resultID)
-            local ids = secureResultInfo and secureResultInfo.activityIDs
-            local firstID = type(ids) == "table" and ids[1] or nil
-            return tonumber(firstID)
-        end, searchResultID)
+        if ids ~= nil then
+            if addonTable.CanAccessTable and not addonTable.CanAccessTable(ids) then
+                return nil, true
+            end
+
+            if type(ids) == "table" then
+                local firstID = ids[1]
+                if addonTable.CanAccessValue and not addonTable.CanAccessValue(firstID) then
+                    return nil, true
+                end
+                activityID = tonumber(firstID)
+            end
+        end
     end
     if activityID == 0 then
         activityID = nil
     end
 
-    return activityID
+    return activityID, false
 end
+addonTable.GetSearchResultActivityID = GetSearchResultActivityID
 
 local function ParseResultKeyLevel(resultInfo, activityInfo)
     local combined = table.concat({
@@ -1078,13 +1093,19 @@ local function GetApplicationStatusForResult(searchResultID, resultInfo)
     end
 
     status = NormalizeApplicationStatus(status or addonTable.SearchApplications[searchResultID] or "none")
+    local partyGUID = nil
+    if resultInfo and (not addonTable.CanAccessTable or addonTable.CanAccessTable(resultInfo)) then
+        partyGUID = resultInfo.partyGUID
+    end
+    if addonTable.CanAccessValue and not addonTable.CanAccessValue(partyGUID) then
+        partyGUID = nil
+    end
     if not IsDeclinedStatus(status)
             and LFGListFrame
             and type(LFGListFrame.declines) == "table"
-            and resultInfo
-            and resultInfo.partyGUID
-            and LFGListFrame.declines[resultInfo.partyGUID] then
-        status = NormalizeApplicationStatus(LFGListFrame.declines[resultInfo.partyGUID])
+            and partyGUID
+            and LFGListFrame.declines[partyGUID] then
+        status = NormalizeApplicationStatus(LFGListFrame.declines[partyGUID])
     end
 
     return status
@@ -1415,7 +1436,6 @@ local function FetchSearchResultData()
             previousResultsByID[result.id] = result
         end
     end
-    wipe(addonTable.SearchResults)
     BuildSearchApplicationState()
     local signatureParts = {}
 
@@ -1437,6 +1457,7 @@ local function FetchSearchResultData()
     if currentContext.selectedCategoryKey == "RAIDS_LEGACY"
         and currentContext.useOakCategorySelection == true
         and not blizzardLegacyActive then
+        wipe(addonTable.SearchResults)
         currentContext.activityID = nil
         currentContext.activityInfo = nil
         currentContext.mode = "legacy_raid"
@@ -1449,6 +1470,7 @@ local function FetchSearchResultData()
     end
 
     if not (C_LFGList and C_LFGList.GetSearchResults) then
+        wipe(addonTable.SearchResults)
         local nextSignature = table.concat(signatureParts, "|")
         local changed = addonTable._lastSearchResultsSignature ~= nextSignature
         addonTable._lastSearchResultsSignature = nextSignature
@@ -1467,6 +1489,7 @@ local function FetchSearchResultData()
         resultIDs = secondReturn
     end
     if type(resultIDs) ~= "table" then
+        wipe(addonTable.SearchResults)
         addonTable.CurrentSearchContext = addonTable.CurrentSearchContext or { mode = "generic" }
         local nextSignature = table.concat(signatureParts, "|")
         local changed = addonTable._lastSearchResultsSignature ~= nextSignature
@@ -1485,10 +1508,15 @@ local function FetchSearchResultData()
         or browserFilters.hasLust == true
         or browserFilters.hasBrez == true
     local showSpecIcons = OakLFGSorterDB and OakLFGSorterDB.showSpecIcons == true
+    local restrictedResultData = false
     for _, searchResultID in ipairs(resultIDs) do
         local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
         if resultInfo then
-            local activityID = GetSearchResultActivityID(resultInfo, searchResultID)
+            local activityID, isRestricted = GetSearchResultActivityID(resultInfo, searchResultID)
+            if isRestricted then
+                restrictedResultData = true
+                break
+            end
             local activityInfo = activityID and C_LFGList.GetActivityInfoTable(activityID) or nil
 
             if activityInfo then
@@ -1531,9 +1559,9 @@ local function FetchSearchResultData()
 
                 if listingMode == "rated_pvp" or listingMode == "pvp" then
                     local pvpInfo = resultInfo.leaderPvpRatingInfo
-                    if type(pvpInfo) == "table" then
+                    if addonTable.CanAccessTable and addonTable.CanAccessTable(pvpInfo) then
                         -- TWW returns leaderPvpRatingInfo as an array; actual data is in [1]
-                        local entry = pvpInfo[1] or pvpInfo
+                        local entry = addonTable.GetFirstAccessibleTable(pvpInfo)
                         if type(entry) == "table" then
                             pvpRating = tonumber(entry.rating
                                 or entry.pvpRating
@@ -1698,6 +1726,20 @@ local function FetchSearchResultData()
             end
         end
     end
+
+    -- Blizzard intentionally protects search-result fields in encounters,
+    -- challenge modes, PvP, and communication-restricted maps. Keep Oak's
+    -- last fully readable snapshot instead of crashing or replacing it with
+    -- a false empty result set. The next unrestricted refresh resumes the
+    -- normal live-data path without changing any filters or cached rows.
+    if restrictedResultData then
+        addonTable._manualBrowserRefreshInProgress = nil
+        addonTable._lastBrowserFetchWasManual = isManualBrowserRefresh
+        addonTable._browserLiveUpdatePending = nil
+        return false
+    end
+
+    wipe(addonTable.SearchResults)
 
     local filters = addonTable.GetCharacterBrowserFilters and addonTable.GetCharacterBrowserFilters() or {}
     addonTable._manualBrowserRefreshInProgress = nil
@@ -3507,9 +3549,15 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
             local rememberedDecline = false
             for _, result in ipairs(addonTable.SearchResults or {}) do
                 if result.id == searchResultID then
-                    if resultInfo then
-                        result.partyGUID = resultInfo.partyGUID or result.partyGUID
-                        result.leaderName = resultInfo.leaderName or result.leaderName
+                    if resultInfo and (not addonTable.CanAccessTable or addonTable.CanAccessTable(resultInfo)) then
+                        local partyGUID = resultInfo.partyGUID
+                        if not addonTable.CanAccessValue or addonTable.CanAccessValue(partyGUID) then
+                            result.partyGUID = partyGUID or result.partyGUID
+                        end
+                        local leaderName = resultInfo.leaderName
+                        if not addonTable.CanAccessValue or addonTable.CanAccessValue(leaderName) then
+                            result.leaderName = leaderName or result.leaderName
+                        end
                         result.activityID = GetSearchResultActivityID(resultInfo, searchResultID) or result.activityID
                     end
                     local wasApplied = IsAppliedStatus(result.applicationStatus) or result.hasSelf == true
@@ -3535,13 +3583,24 @@ OAK_LFG:SetScript("OnEvent", function(self, event, ...)
                     break
                 end
             end
-            if IsDeclinedStatus(normalized) and not rememberedDecline and resultInfo and addonTable.RememberDeclinedSearchResult then
-                addonTable.RememberDeclinedSearchResult({
-                    id = searchResultID,
-                    partyGUID = resultInfo.partyGUID,
-                    activityID = GetSearchResultActivityID(resultInfo, searchResultID) or 0,
-                    leaderName = resultInfo.leaderName,
-                })
+            if IsDeclinedStatus(normalized)
+                    and not rememberedDecline
+                    and resultInfo
+                    and (not addonTable.CanAccessTable or addonTable.CanAccessTable(resultInfo))
+                    and addonTable.RememberDeclinedSearchResult then
+                local partyGUID = resultInfo.partyGUID
+                local leaderName = resultInfo.leaderName
+                local activityID, isRestricted = GetSearchResultActivityID(resultInfo, searchResultID)
+                local canAccessPartyGUID = not addonTable.CanAccessValue or addonTable.CanAccessValue(partyGUID)
+                local canAccessLeaderName = not addonTable.CanAccessValue or addonTable.CanAccessValue(leaderName)
+                if not isRestricted and canAccessPartyGUID and canAccessLeaderName then
+                    addonTable.RememberDeclinedSearchResult({
+                        id = searchResultID,
+                        partyGUID = partyGUID,
+                        activityID = activityID or 0,
+                        leaderName = leaderName,
+                    })
+                end
             end
         end
         if isShown then
@@ -3836,10 +3895,14 @@ SlashCmdList["SORTERPVPDEBUG"] = function()
             local info = C_LFGList.GetSearchResultInfo and C_LFGList.GetSearchResultInfo(r.id)
             if not info then
                 print("  GetSearchResultInfo returned nil")
+            elseif addonTable.CanAccessTable and not addonTable.CanAccessTable(info) then
+                print("  GetSearchResultInfo is protected in the current map or encounter")
             else
                 local pvpInfo = info.leaderPvpRatingInfo
                 if pvpInfo == nil then
                     print("  leaderPvpRatingInfo = nil")
+                elseif addonTable.CanAccessTable and not addonTable.CanAccessTable(pvpInfo) then
+                    print("  leaderPvpRatingInfo is protected in the current map or encounter")
                 else
                     print("  leaderPvpRatingInfo type = " .. type(pvpInfo))
                     if type(pvpInfo) == "table" then

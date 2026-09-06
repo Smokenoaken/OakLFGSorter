@@ -668,8 +668,19 @@ local function UpdatePersistentNotePatch()
         LFGListApplicationDialog_Show = function(self, resultID)
             if resultID then
                 local searchResultInfo = C_LFGList.GetSearchResultInfo(resultID)
+                local activityID, isRestricted = addonTable.GetSearchResultActivityID(searchResultInfo, resultID)
+                if isRestricted and quickSignupState.originalDialogShow then
+                    -- Blizzard's original handler is allowed to consume its
+                    -- protected search data. Preserve signup functionality in
+                    -- restricted maps even though addons cannot retain the
+                    -- note for that protected dialog transition.
+                    if securecallfunction then
+                        return securecallfunction(quickSignupState.originalDialogShow, self, resultID)
+                    end
+                    return quickSignupState.originalDialogShow(self, resultID)
+                end
                 self.resultID = resultID
-                self.activityID = searchResultInfo and ((searchResultInfo.activityIDs and searchResultInfo.activityIDs[1]) or 0) or 0
+                self.activityID = activityID or 0
             end
 
             if LFGListApplicationDialog_UpdateRoles then
