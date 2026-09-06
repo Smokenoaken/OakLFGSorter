@@ -1,3 +1,8 @@
+## v4.0.31
+
+- Prevented protected LFG search-result data from causing errors in restricted maps while preserving the last readable browser state.
+- Fixed Blizzard autocomplete navigation errors when the browser search field has no matching activities.
+
 ## v4.0.30
 
 - Added a complete OAK LFG Sorter settings page under Blizzard AddOns options.
