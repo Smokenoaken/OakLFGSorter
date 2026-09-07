@@ -1,3 +1,11 @@
+## v4.0.32
+
+- Fixed the sorter window jumping upward when dragging begins
+- while preserving saved positioning
+- scaling
+- resizing
+- and screen-edge clamping.
+
 ## v4.0.31
 
 - Prevented protected LFG search-result data from causing errors in restricted maps while preserving the last readable browser state.

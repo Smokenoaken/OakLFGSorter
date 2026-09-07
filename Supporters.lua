@@ -37,7 +37,6 @@ addonTable.Patreons = {
     "Doc_waffle",
     "Jon Jordan",
     "michael arguedas",
-    "Devron Lee",
     "Tenelle Mallard",
     "Iury Sampaio",
     "coot",
