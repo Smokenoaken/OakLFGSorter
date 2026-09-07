@@ -42,7 +42,6 @@ OAK_LFG:SetScript("OnDragStart", function(self)
 
     OakLFGSorterDB = OakLFGSorterDB or {}
     OakLFGSorterDB.frameUserPlaced = true
-    NormalizeFrameAnchorForMovement(self)
     self.isOakDragging = true
     self:StartMoving()
 end)
