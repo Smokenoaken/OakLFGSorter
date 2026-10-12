@@ -1,3 +1,7 @@
+## v4.0.33
+
+- Updated TOC compatibility for World of Warcraft 12.1.5.
+
 ## v4.0.32
 
 - Fixed the sorter window jumping upward when dragging begins
