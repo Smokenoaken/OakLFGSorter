@@ -1,4 +1,4 @@
-## Interface: 120000, 120001, 120005, 120007, 120100
+## Interface: 120000, 120001, 120005, 120007, 120100, 120105
 ## Title: |cFFF48CBAOAK|r LFG Sorter
 ## Notes: Unified OAK LFG Sorter with Classic and Modern themes.
 ## Author: OAK
