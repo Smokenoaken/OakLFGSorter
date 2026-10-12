@@ -38,6 +38,7 @@ if (Test-Path -LiteralPath $zipPath) {
 
 $excludeNames = @(
     ".git",
+    ".github",
     ".chrome-profile",
     ".edge-profile",
     "dist"
